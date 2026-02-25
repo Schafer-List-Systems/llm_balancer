@@ -50,6 +50,16 @@ npm start
 curl http://localhost:3001/health
 ```
 
+### Get backend statistics
+
+```bash
+# Get detailed statistics for all backends
+curl http://localhost:3001/backends
+
+# Get complete system statistics
+curl http://localhost:3001/stats
+```
+
 ## API Routes
 
 | Route | Description | Example |
@@ -58,6 +68,8 @@ curl http://localhost:3001/health
 | `/api/*` | Ollama API routes | `GET /api/generate`, `POST /api/chat` |
 | `/models*` | Model list endpoint | `GET /models` |
 | `/health` | Health check | `GET /health` |
+| `/backends` | Backend statistics (per-backend info) | `GET /backends` |
+| `/stats` | Complete system statistics | `GET /stats` |
 | `/` | Service info | `GET /` |
 
 ## Example Usage
@@ -99,6 +111,43 @@ curl -X POST http://localhost:3001/api/chat \
 
 ```bash
 curl http://localhost:3001/api/tags
+```
+
+### Get Backend Statistics
+
+```bash
+curl http://localhost:3001/backends
+```
+
+Returns per-backend statistics including:
+- URL and health status
+- Request count
+- Error count
+- Failure count
+- Available models
+
+Example response:
+```json
+{
+  "backends": [
+    {
+      "url": "http://host1:11434",
+      "healthy": true,
+      "failCount": 0,
+      "requestCount": 42,
+      "errorCount": 1,
+      "models": ["llama2", "mistral"]
+    },
+    {
+      "url": "http://host2:11434",
+      "healthy": true,
+      "failCount": 0,
+      "requestCount": 38,
+      "errorCount": 0,
+      "models": ["llama2", "gemma"]
+    }
+  ]
+}
 ```
 
 ## Environment Variables

@@ -22,11 +22,15 @@ function loadConfig() {
   const maxPayloadSize = parseInt(process.env.MAX_PAYLOAD_SIZE) || 50 * 1024 * 1024;
   const maxPayloadSizeMB = Math.round(maxPayloadSize / (1024 * 1024));
 
-  // Create backend objects with health status
+  // Create backend objects with health status and statistics
   const backends = backendArray.map(url => ({
     url: url,
     healthy: true,
-    failCount: 0
+    failCount: 0,
+    requestCount: 0,
+    errorCount: 0,
+    busy: false,  // Track if backend is handling a request
+    models: []
   }));
 
   return {

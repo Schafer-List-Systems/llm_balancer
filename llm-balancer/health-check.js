@@ -70,6 +70,24 @@ class HealthChecker {
     };
 
     const req = http.request(options, (res) => {
+      // Parse response body to get models
+      let body = '';
+      res.on('data', chunk => {
+        body += chunk.toString();
+      });
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (data.models && Array.isArray(data.models)) {
+            backend.models = data.models.map(m => m.name || m);
+          } else {
+            backend.models = [];
+          }
+        } catch (e) {
+          backend.models = [];
+        }
+      });
+
       // Check for successful response (2xx status)
       if (res.statusCode >= 200 && res.statusCode < 300) {
         if (!healthy) {

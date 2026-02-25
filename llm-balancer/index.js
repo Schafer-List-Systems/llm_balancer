@@ -48,6 +48,14 @@ function getRequestBody(req) {
  * Reuses patterns from original gateway with modifications for load balancer
  */
 function forwardRequest(req, res, backend) {
+  // Mark backend as busy
+  backend.busy = true;
+
+  // Set timeout to clear busy state if request takes too long
+  const requestTimeout = setTimeout(() => {
+    backend.busy = false;
+  }, 30000); // 30 seconds default
+
   const targetUrl = new URL(req.url, backend.url);
 
   // Copy request headers
@@ -108,6 +116,7 @@ function forwardRequest(req, res, backend) {
     });
 
     proxyReq.on('error', (err) => {
+      clearTimeout(requestTimeout);
       console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
       balancer.markFailed(backend.url);
       res.status(502).json({
@@ -115,6 +124,12 @@ function forwardRequest(req, res, backend) {
         message: 'Backend unavailable',
         backend: backend.url
       });
+    });
+
+    proxyReq.on('end', () => {
+      clearTimeout(requestTimeout);
+      // Mark backend as idle when request completes
+      backend.busy = false;
     });
 
     const body = getRequestBody(req);
@@ -155,6 +170,7 @@ function forwardRequest(req, res, backend) {
       });
     })
     .on('error', (err) => {
+      clearTimeout(requestTimeout);
       console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
       balancer.markFailed(backend.url);
       res.status(502).json({
@@ -162,6 +178,11 @@ function forwardRequest(req, res, backend) {
         message: 'Backend unavailable',
         backend: backend.url
       });
+    })
+    .on('end', () => {
+      clearTimeout(requestTimeout);
+      // Mark backend as idle when request completes
+      backend.busy = false;
     })
     .end(getRequestBody(req));
   }
@@ -251,6 +272,8 @@ app.get('/', (req, res) => {
     backends: stats.totalBackends,
     healthy: stats.healthyBackends,
     unhealthy: stats.unhealthyBackends,
+    busyBackends: config.backends.filter(b => b.busy).length,
+    idleBackends: config.backends.filter(b => !b.busy).length,
     backendUrls: config.backends.map(b => b.url),
     healthCheckInterval: config.healthCheckInterval,
     routes: {
@@ -282,7 +305,10 @@ app.get('/health', (req, res) => {
     healthyBackends: stats.healthyBackends,
     totalBackends: stats.totalBackends,
     backends: stats.backends,
-    hasAvailableBackends: balancer.hasAvailableBackends()
+    hasAvailableBackends: balancer.hasAvailableBackends(),
+    // Add: Busy state information
+    busyBackends: config.backends.filter(b => b.busy).length,
+    idleBackends: config.backends.filter(b => !b.busy).length
   });
 });
 
@@ -290,8 +316,10 @@ app.get('/health', (req, res) => {
  * Route: Detailed statistics
  */
 app.get('/stats', (req, res) => {
+  const stats = balancer.getStats();
+
   res.json({
-    balancer: balancer.getStats(),
+    balancer: stats,
     healthCheck: healthChecker.getStats(),
     config: {
       healthCheckInterval: config.healthCheckInterval,
@@ -299,7 +327,32 @@ app.get('/stats', (req, res) => {
       maxRetries: config.maxRetries,
       maxPayloadSize: config.maxPayloadSize,
       maxPayloadSizeMB: config.maxPayloadSizeMB
-    }
+    },
+    // Add: Backend busy counts
+    busyBackends: config.backends.filter(b => b.busy).length,
+    idleBackends: config.backends.filter(b => !b.busy).length,
+    backendDetails: config.backends.map(b => ({
+      url: b.url,
+      healthy: b.healthy,
+      busy: b.busy,
+      requestCount: b.requestCount,
+      errorCount: b.errorCount
+    }))
+  });
+});
+
+/**
+ * Route: Backend statistics
+ */
+app.get('/backends', (req, res) => {
+  res.json({
+    backends: config.backends.map(b => ({
+      url: b.url,
+      healthy: b.healthy,
+      busy: b.busy,
+      requestCount: b.requestCount,
+      errorCount: b.errorCount
+    }))
   });
 });
 

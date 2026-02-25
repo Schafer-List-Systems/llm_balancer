@@ -12,7 +12,7 @@ class Balancer {
   }
 
   /**
-   * Get the next backend using round-robin, skipping failed ones
+   * Get the next backend, prioritizing idle backends
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {
@@ -21,32 +21,37 @@ class Balancer {
       return null;
     }
 
+    // Priority 1: Find an idle, healthy backend
+    const idleBackend = this.backends.find(b => b.healthy && !b.busy);
+    if (idleBackend) {
+      idleBackend.requestCount = (idleBackend.requestCount || 0) + 1;
+      this.requestCount.set(idleBackend.url,
+        (this.requestCount.get(idleBackend.url) || 0) + 1
+      );
+      return idleBackend;
+    }
+
+    // Priority 2: Fallback to round-robin across all healthy backends
     let attempts = 0;
     let backend;
 
-    // Try to find a healthy backend, up to max attempts
     while (attempts < totalBackends) {
       backend = this.backends[this.currentIndex];
 
-      // Check if backend is healthy
       if (backend && backend.healthy) {
-        // Update request count for this backend
+        backend.requestCount = (backend.requestCount || 0) + 1;
         this.requestCount.set(backend.url,
           (this.requestCount.get(backend.url) || 0) + 1
         );
 
-        // Move to next index for round-robin
         this.currentIndex = (this.currentIndex + 1) % totalBackends;
-
         return backend;
       }
 
-      // Skip this backend and move to next
       this.currentIndex = (this.currentIndex + 1) % totalBackends;
       attempts++;
     }
 
-    // All backends are unhealthy
     return null;
   }
 
@@ -59,6 +64,7 @@ class Balancer {
     if (backend) {
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
+      backend.errorCount = (backend.errorCount || 0) + 1;
       this.healthCheckCount.set(backendUrl, (this.healthCheckCount.get(backendUrl) || 0) + 1);
       console.error(`[Balancer] Backend marked as unhealthy: ${backendUrl}`);
     }
@@ -100,7 +106,10 @@ class Balancer {
       backends: this.backends.map(b => ({
         url: b.url,
         healthy: b.healthy,
-        failCount: b.failCount || 0
+        failCount: b.failCount || 0,
+        requestCount: b.requestCount || 0,
+        errorCount: b.errorCount || 0,
+        models: b.models || []
       })),
       requestCounts: Object.fromEntries(this.requestCount)
     };
