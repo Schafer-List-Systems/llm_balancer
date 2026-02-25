@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Target Ollama server
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://10.0.0.1:11434';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 
 // Middleware to parse JSON bodies
 app.use(express.json());

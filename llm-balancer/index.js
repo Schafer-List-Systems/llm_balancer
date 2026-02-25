@@ -13,13 +13,21 @@ const balancer = new Balancer(config.backends);
 const healthChecker = new HealthChecker(config.backends, config);
 
 // Middleware to parse JSON bodies
-app.use(express.json());
+app.use(express.json({
+  limit: `${config.maxPayloadSize}`
+}));
 
 // Middleware to parse URL-encoded bodies
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({
+  extended: true,
+  limit: `${config.maxPayloadSize}`
+}));
 
 // Middleware to parse raw bodies for streaming
-app.use(express.raw({ type: '*/*', limit: '50mb' }));
+app.use(express.raw({
+  type: '*/*',
+  limit: `${config.maxPayloadSize}`
+}));
 
 /**
  * Helper function to get body as buffer/string
@@ -269,6 +277,8 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     port: config.port,
+    maxPayloadSize: config.maxPayloadSize,
+    maxPayloadSizeMB: config.maxPayloadSizeMB,
     healthyBackends: stats.healthyBackends,
     totalBackends: stats.totalBackends,
     backends: stats.backends,
@@ -286,7 +296,9 @@ app.get('/stats', (req, res) => {
     config: {
       healthCheckInterval: config.healthCheckInterval,
       healthCheckTimeout: config.healthCheckTimeout,
-      maxRetries: config.maxRetries
+      maxRetries: config.maxRetries,
+      maxPayloadSize: config.maxPayloadSize,
+      maxPayloadSizeMB: config.maxPayloadSizeMB
     }
   });
 });

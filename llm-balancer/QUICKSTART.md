@@ -16,11 +16,17 @@ cp .env.example .env
 
 Example `.env`:
 ```bash
-OLLAMA_BACKENDS=http://10.0.0.1:11434,http://alex:7869
+OLLAMA_BACKENDS=http://host1:11434,http://host2:11434
 LB_PORT=3001
 HEALTH_CHECK_INTERVAL=30000
 HEALTH_CHECK_TIMEOUT=5000
+MAX_PAYLOAD_SIZE=104857600
 ```
+
+Common `MAX_PAYLOAD_SIZE` values:
+- 50MB = 52428800
+- 100MB = 104857600
+- 200MB = 209715200
 
 3. Start the server:
 ```bash
@@ -101,7 +107,7 @@ LB_PORT=3002 npm start
 **Backend not responding?**
 ```bash
 # Check health of specific backend
-curl http://localhost:3001/health/http://10.0.0.1:11434
+curl http://localhost:3001/health/http://host1:11434
 
 # Check detailed stats
 curl http://localhost:3001/stats
@@ -110,11 +116,11 @@ curl http://localhost:3001/stats
 **All backends unhealthy?**
 ```bash
 # Check backend connectivity
-curl http://10.0.0.1:11434/api/tags
-curl http://alex:7869/api/tags
+curl http://host1:11434/api/tags
+curl http://host2:11434/api/tags
 
 # Manually trigger health check
-curl http://localhost:3001/health/http://10.0.0.1:11434
+curl http://localhost:3001/health/http://host1:11434
 ```
 
 ## Notes

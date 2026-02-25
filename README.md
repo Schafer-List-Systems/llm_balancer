@@ -32,14 +32,14 @@ npm install
 Set the Ollama server URL in an environment variable:
 
 ```bash
-# Default: http://10.0.0.1:11434
-export OLLAMA_BASE_URL=http://10.0.0.1:11434
+# Default: http://host1:11434
+export OLLAMA_BASE_URL=http://host1:11434
 ```
 
 Or you can modify the default in `index.js`:
 
 ```javascript
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://10.0.0.1:11434';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://host1:11434';
 ```
 
 ## Usage
@@ -118,12 +118,12 @@ curl http://localhost:3000/api/tags
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3000 | Server port |
-| `OLLAMA_BASE_URL` | `http://10.0.0.1:11434` | Target Ollama server URL |
+| `OLLAMA_BASE_URL` | `http://host1:11434` | Target Ollama server URL |
 
 ## Architecture
 
 ```
-Client → Gateway (localhost:3000) → Ollama Server (10.0.0.1:11434)
+Client → Gateway (localhost:3000) → Ollama Server (host1:11434)
 ```
 
 The gateway routes requests based on the endpoint path:
@@ -142,7 +142,7 @@ ollama serve
 ### Test connectivity
 
 ```bash
-curl http://10.0.0.1:11434/api/tags
+curl http://host1:11434/api/tags
 ```
 
 ### Check logs
@@ -239,7 +239,7 @@ npm install
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3000 | Server port |
-| `OLLAMA_BASE_URL` | `http://10.0.0.1:11434` | Target Ollama server URL |
+| `OLLAMA_BASE_URL` | `http://host1:11434` | Target Ollama server URL |
 
 ### For Load Balancer
 
@@ -251,6 +251,6 @@ See `llm-balancer/.env.example` for all available options.
 
 ```bash
 # Check backend connectivity
-curl http://10.0.0.1:11434/api/tags
-curl http://alex:7869/api/tags
+curl http://host1:11434/api/tags
+curl http://host2:11434/api/tags
 ```

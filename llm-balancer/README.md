@@ -34,7 +34,7 @@ Edit `.env` with your configuration:
 LB_PORT=3001
 
 # Comma-separated list of backend Ollama server URLs
-OLLAMA_BACKENDS=http://10.0.0.1:11434,http://alex:7869
+OLLAMA_BACKENDS=http://host1:11434,http://host2:11434
 
 # Health check interval in milliseconds
 HEALTH_CHECK_INTERVAL=30000
@@ -57,7 +57,7 @@ npm start
 Or with custom configuration:
 
 ```bash
-OLLAMA_BACKENDS="http://10.0.0.1:11434,http://10.0.0.2:11434" LB_PORT=3001 npm start
+OLLAMA_BACKENDS="http://host1:11434,http://host2:11434" LB_PORT=3001 npm start
 ```
 
 ### Check health
@@ -82,7 +82,7 @@ curl http://localhost:3001/stats
 | `/health` | Health check | `GET /health` |
 | `/stats` | Detailed statistics | `GET /stats` |
 | `/backend/current` | Current backend info | `GET /backend/current` |
-| `/health/:backendUrl` | Manual health check | `GET /health/http://10.0.0.1:11434` |
+| `/health/:backendUrl` | Manual health check | `GET /health/http://host1:11434` |
 | `/` | Service info | `GET /` |
 
 ## Example Usage
@@ -115,7 +115,7 @@ curl http://localhost:3001/api/tags
 ### Check health of specific backend
 
 ```bash
-curl http://localhost:3001/health/http://10.0.0.1:11434
+curl http://localhost:3001/health/http://host1:11434
 ```
 
 ## Architecture
@@ -175,10 +175,11 @@ The `/stats` endpoint provides detailed information:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LB_PORT` | 3001 | Server port |
-| `OLLAMA_BACKENDS` | `http://10.0.0.1:11434` | Comma-separated backend URLs |
+| `OLLAMA_BACKENDS` | `http://host1:11434` | Comma-separated backend URLs |
 | `HEALTH_CHECK_INTERVAL` | 30000 | Health check interval in ms |
 | `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout in ms |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
+| `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size in bytes |
 
 ## Troubleshooting
 
@@ -186,8 +187,8 @@ The `/stats` endpoint provides detailed information:
 
 ```bash
 # Check each backend
-curl http://10.0.0.1:11434/api/tags
-curl http://alex:7869/api/tags
+curl http://host1:11434/api/tags
+curl http://host2:11434/api/tags
 ```
 
 ### Check load balancer health
@@ -208,6 +209,20 @@ The load balancer logs health checks and errors to the console. Watch for:
 - Backend health check results
 - Failover events
 - Request errors
+
+### Payload size errors
+
+If you encounter payload size errors, increase the `MAX_PAYLOAD_SIZE` in your `.env` file:
+
+```bash
+# 100MB
+MAX_PAYLOAD_SIZE=104857600
+
+# 200MB
+MAX_PAYLOAD_SIZE=209715200
+```
+
+Restart the server after changing the value.
 
 ### Stop the server gracefully
 

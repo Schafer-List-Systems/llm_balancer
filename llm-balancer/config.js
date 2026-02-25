@@ -5,7 +5,7 @@
 
 function loadConfig() {
   // Parse backend URLs from environment variable
-  const backendUrls = process.env.OLLAMA_BACKENDS || 'http://10.0.0.1:11434';
+  const backendUrls = process.env.OLLAMA_BACKENDS || 'http://localhost:11434';
   const backendArray = backendUrls.split(',').map(url => url.trim()).filter(url => url);
 
   // Parse port configuration
@@ -17,6 +17,10 @@ function loadConfig() {
 
   // Parse retry configuration
   const maxRetries = parseInt(process.env.MAX_RETRIES) || 3;
+
+  // Parse max payload size (in bytes, default: 50MB)
+  const maxPayloadSize = parseInt(process.env.MAX_PAYLOAD_SIZE) || 50 * 1024 * 1024;
+  const maxPayloadSizeMB = Math.round(maxPayloadSize / (1024 * 1024));
 
   // Create backend objects with health status
   const backends = backendArray.map(url => ({
@@ -30,7 +34,9 @@ function loadConfig() {
     backends,
     healthCheckInterval,
     healthCheckTimeout,
-    maxRetries
+    maxRetries,
+    maxPayloadSize,
+    maxPayloadSizeMB
   };
 }
 

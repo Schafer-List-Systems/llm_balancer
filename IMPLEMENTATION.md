@@ -74,6 +74,7 @@ Successfully implemented a load balancer for Ollama API servers with health chec
 | `HEALTH_CHECK_INTERVAL` | 30000ms | Health check interval |
 | `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
+| `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size in bytes |
 
 ## API Endpoints
 
@@ -94,7 +95,7 @@ Successfully implemented a load balancer for Ollama API servers with health chec
 
 ```bash
 # Original simple gateway
-OLLAMA_BASE_URL=http://10.0.0.1:11434 PORT=3000 node index.js
+OLLAMA_BASE_URL=http://host1:11434 PORT=3000 node index.js
 ```
 
 ### Multiple Backends (Load Balancer)
@@ -102,7 +103,7 @@ OLLAMA_BASE_URL=http://10.0.0.1:11434 PORT=3000 node index.js
 ```bash
 # Load balancer
 cd llm-balancer
-OLLAMA_BACKENDS="http://10.0.0.1:11434,http://alex:7869" LB_PORT=3001 npm start
+OLLAMA_BACKENDS="http://host1:11434,http://host2:11434" LB_PORT=3001 npm start
 ```
 
 ### Testing
