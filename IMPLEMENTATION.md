@@ -91,13 +91,6 @@ Successfully implemented a load balancer for Ollama API servers with health chec
 
 ## Usage Examples
 
-### Single Backend (Gateway)
-
-```bash
-# Original simple gateway
-OLLAMA_BASE_URL=http://host1:11434 PORT=3000 node index.js
-```
-
 ### Multiple Backends (Load Balancer)
 
 ```bash
@@ -146,10 +139,6 @@ All components have been tested and verified:
 - `/llm-balancer/README.md` - Comprehensive documentation
 - `/llm-balancer/QUICKSTART.md` - Quick start guide
 - `/llm-balancer/IMPLEMENTATION.md` - This file
-
-### Root Project Updates
-- `/package.json` - Updated with load balancer scripts
-- `/README.md` - Updated to document both services
 
 ## Compatibility
 
