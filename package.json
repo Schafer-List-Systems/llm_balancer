@@ -1,0 +1,21 @@
+{
+  "name": "ollama-api-gateway",
+  "version": "0.1.0",
+  "description": "Simple API gateway forwarding Anthropic and Ollama API requests to an Ollama server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "ollama",
+    "api",
+    "gateway",
+    "proxy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
