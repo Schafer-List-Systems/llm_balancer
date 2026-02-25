@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { URL } = require('url');
@@ -7,6 +8,17 @@ const HealthChecker = require('./health-check');
 
 const app = express();
 const config = configModule.loadConfig();
+
+// Enable CORS for frontend dashboard
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Initialize load balancer and health checker
 const balancer = new Balancer(config.backends);
@@ -350,8 +362,10 @@ app.get('/backends', (req, res) => {
       url: b.url,
       healthy: b.healthy,
       busy: b.busy,
-      requestCount: b.requestCount,
-      errorCount: b.errorCount
+      failCount: b.failCount || 0,
+      requestCount: b.requestCount || 0,
+      errorCount: b.errorCount || 0,
+      models: b.models || []
     }))
   });
 });

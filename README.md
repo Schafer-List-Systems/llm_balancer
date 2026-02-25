@@ -14,6 +14,15 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Detailed statistics and monitoring
 - ✅ Graceful shutdown handling
 
+### Dashboard (v1.0)
+- ✅ Real-time monitoring of all backends
+- ✅ Health status overview (healthy, unhealthy, busy, idle)
+- ✅ Per-backend detailed information
+- ✅ Automatic data refresh every 5 seconds
+- ✅ Manual refresh option
+- ✅ Responsive design for all devices
+- ✅ Statistics dashboard
+
 ## Installation
 
 ```bash
@@ -39,11 +48,46 @@ OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
 
 ## Usage
 
-### Start the server
+### Start the Backend Server
 
 ```bash
+cd llm-balancer
 npm start
 ```
+
+The load balancer will start on port 3001.
+
+### Start the Dashboard
+
+1. Navigate to the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Copy and configure environment variables:
+```bash
+cp .env.example .env
+```
+
+Edit `.env` to configure the dashboard:
+```env
+FRONTEND_PORT=3080
+API_BASE_URL=http://localhost:3001
+REFRESH_INTERVAL=5000
+```
+
+4. Build and start the dashboard:
+```bash
+npm run dev:build
+npm start
+```
+
+The dashboard will be available at http://localhost:3080
 
 ### Check health
 
@@ -207,6 +251,24 @@ ollama serve
 cd /path/to/ollama && ./ollama serve
 ```
 
+### Ensure the backend is running
+
+```bash
+# Check if load balancer is running
+curl http://localhost:3001/health
+
+# Should return something like:
+# {"healthy":true,"healthyBackends":2,"totalBackends":2,...}
+```
+
+### Ensure the dashboard is accessible
+
+1. Check that the backend is running on the configured port (default: 3001)
+2. Check that the frontend is running on the configured port (default: 3080)
+3. Check the browser console for JavaScript errors
+4. Clear browser cache and reload the page
+5. Verify API_BASE_URL in the frontend `.env` matches the backend port
+
 ### Test connectivity
 
 ```bash
@@ -221,13 +283,30 @@ curl http://host2:11434/api/tags
 
 ```
 llm-balancer/
-├── index.js                      # Load balancer server
-├── config.js                     # Configuration loader
-├── balancer.js                   # Round-robin balancer
-├── health-check.js               # Health checker
-├── package.json
-├── .env.example
-└── README.md
+├── llm-balancer/                 # Backend load balancer
+│   ├── index.js                  # Load balancer server
+│   ├── balancer.js               # Round-robin balancer
+│   ├── health-check.js           # Health checker
+│   ├── config.js                 # Configuration loader
+│   ├── package.json
+│   ├── .env.example
+│   └── README.md
+├── frontend/                     # Dashboard frontend
+│   ├── public/
+│   │   ├── css/
+│   │   │   └── styles.css        # Main stylesheet
+│   │   ├── js/
+│   │   │   ├── api.js            # API client service
+│   │   │   └── dashboard.js      # Main dashboard logic
+│   │   └── index.html           # HTML template
+│   ├── config.js                 # Frontend configuration
+│   ├── index.js                  # Express server
+│   ├── package.json              # Dependencies
+│   ├── webpack.config.js         # Webpack configuration
+│   └── README.md                 # Frontend documentation
+├── IMPLEMENTATION.md             # Implementation details
+├── QUICKSTART.md                 # Quick start guide
+└── README.md                     # This file
 ```
 
 ## Installation
