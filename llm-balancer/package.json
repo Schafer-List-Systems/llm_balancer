@@ -1,13 +1,11 @@
 {
   "name": "llm-balancer",
   "version": "0.1.0",
-  "description": "Load balancer for Ollama API servers with health checking and automatic failover",
+  "description": "Load balancer for Ollama backends with health checking and automatic failover",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js",
-    "gateway": "node index.js",
-    "loadbalancer": "cd llm-balancer && node index.js"
+    "dev": "node index.js"
   },
   "keywords": [
     "ollama",
