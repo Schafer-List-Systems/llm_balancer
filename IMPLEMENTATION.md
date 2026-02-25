@@ -52,13 +52,16 @@ Successfully implemented a load balancer for Ollama API servers with health chec
 ## Key Features Implemented
 
 ✅ **Round-robin load balancing** - Distributes requests across multiple backends
+✅ **Smart request routing with idle backend prioritization** - Routes to idle backends first for better load distribution
+✅ **Per-backend busy state tracking** - Each backend tracks if it's handling a request
+✅ **30-second timeout for busy state** - Prevents backends from staying stuck in busy state
 ✅ **Health checking** - Periodic health checks via `/api/tags` endpoint
 ✅ **Automatic failover** - Skips unhealthy backends in round-robin
 ✅ **Backend recovery** - Automatically recovers healthy backends
 ✅ **Streaming support** - Maintains streaming response capability
 ✅ **Multiple API formats** - Supports Anthropic and Ollama API formats
 ✅ **Health endpoints** - `/health` and `/health/:backendUrl`
-✅ **Statistics endpoint** - `/stats` with detailed information
+✅ **Statistics endpoint** - `/stats` with detailed information including busy counts
 ✅ **Current backend info** - `/backend/current` for debugging
 ✅ **Graceful shutdown** - Handles SIGINT and SIGTERM signals
 ✅ **Error handling** - Comprehensive error messages and logging
@@ -75,6 +78,51 @@ Successfully implemented a load balancer for Ollama API servers with health chec
 | `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size in bytes |
+
+## Busy State Tracking
+
+### Overview
+Each backend tracks whether it's actively handling a request. The load balancer prioritizes idle backends to distribute load more evenly across all available servers.
+
+### Implementation Details
+
+1. **Backend Configuration** (`config.js`):
+   - Each backend object includes `busy: false` property
+   - Tracks whether the backend is currently processing a request
+
+2. **Request Routing** (`balancer.js`):
+   - **Priority 1**: Selects an idle, healthy backend (`!b.busy`)
+   - **Priority 2**: Falls back to round-robin across all healthy backends
+   - This ensures better load distribution when backends have varying request loads
+
+3. **Busy State Management** (`index.js`):
+   - Marks backend as busy when a request starts
+   - Sets 30-second timeout to clear busy state if request hangs
+   - Clears timeout and marks backend as idle when request completes
+   - Applies to both streaming and non-streaming request paths
+
+4. **Statistics & Monitoring**:
+   - `/health` endpoint returns `busyBackends` and `idleBackends` counts
+   - `/stats` endpoint provides detailed busy state for each backend
+   - `/backends` endpoint shows busy status per backend
+
+### Example Usage
+
+```bash
+# Check busy state
+curl http://localhost:3001/health
+# Returns: { ..., "busyBackends": 1, "idleBackends": 2, ... }
+
+# View detailed backend status with busy state
+curl http://localhost:3001/backends
+# Returns: { "backends": [{ "url": "...", "healthy": true, "busy": true, ... }] }
+```
+
+### Benefits
+- **Even load distribution**: Prevents overloading individual backends
+- **Automatic recovery**: 30-second timeout prevents stuck busy states
+- **Real-time visibility**: Always know which backends are available
+- **Better performance**: Routes requests to servers that are ready to handle them
 
 ## API Endpoints
 

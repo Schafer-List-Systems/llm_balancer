@@ -8,6 +8,7 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Round-robin load balancing across multiple Ollama backends
 - ✅ Automatic health checking with recovery
 - ✅ Automatic failover when backends become unhealthy
+- ✅ **Smart request routing with idle backend prioritization**
 - ✅ Streaming and non-streaming request support
 - ✅ Health check endpoint with backend status
 - ✅ Detailed statistics and monitoring
@@ -121,6 +122,8 @@ curl http://localhost:3001/backends
 
 Returns per-backend statistics including:
 - URL and health status
+- **Busy state** (whether backend is handling a request)
+- Idle state (available for new requests)
 - Request count
 - Error count
 - Failure count
@@ -133,7 +136,7 @@ Example response:
     {
       "url": "http://host1:11434",
       "healthy": true,
-      "failCount": 0,
+      "busy": true,
       "requestCount": 42,
       "errorCount": 1,
       "models": ["llama2", "mistral"]
@@ -141,13 +144,30 @@ Example response:
     {
       "url": "http://host2:11434",
       "healthy": true,
-      "failCount": 0,
+      "busy": false,
       "requestCount": 38,
       "errorCount": 0,
       "models": ["llama2", "gemma"]
     }
   ]
 }
+```
+
+#### Busy State Information
+
+The load balancer tracks the busy state of each backend:
+- **Busy**: Backend is currently handling a request (30-second timeout applies)
+- **Idle**: Backend is available and ready to handle new requests
+
+When multiple backends are available, the balancer prioritizes **idle backends** to distribute load more evenly and prevent overloading individual servers.
+
+Check total busy and idle backends:
+```bash
+# Via health endpoint
+curl http://localhost:3001/health | grep -E "busyBackends|idleBackends"
+
+# Via stats endpoint
+curl http://localhost:3001/stats | grep -E "busyBackends|idleBackends"
 ```
 
 ## Environment Variables
@@ -169,9 +189,11 @@ Client → Load Balancer (localhost:3001) → Multiple Ollama Servers (host1, ho
 
 The load balancer:
 - Distributes requests across all healthy backends using round-robin
+- **Prioritizes idle backends to distribute load more evenly**
 - Skips unhealthy backends in the round-robin cycle
 - Automatically recovers healthy backends after recovery interval
 - Handles both Anthropic and Ollama API formats
+- Tracks busy state of each backend with 30-second timeout for stuck requests
 
 ## Troubleshooting
 
