@@ -363,6 +363,13 @@ document.addEventListener('DOMContentLoaded', () => {
       updateLastUpdateTime(apiClient.getLastUpdateTime());
 
       loadingContainer.style.display = 'none';
+
+      // Start polling for automatic refresh
+      apiClient.setUpdateCallback((updatedData) => {
+        renderDashboard();
+        updateLastUpdateTime(new Date());
+      });
+      apiClient.startPolling();
     } else {
       showNotification('Failed to load dashboard data', 'error');
     }
