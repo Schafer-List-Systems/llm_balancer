@@ -8,7 +8,10 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Round-robin load balancing across multiple Ollama backends
 - ✅ Automatic health checking with recovery
 - ✅ Automatic failover when backends become unhealthy
-- ✅ **Smart request routing with idle backend prioritization**
+- ✅ **Priority-based load balancing** (prioritizes high-priority backends)
+- ✅ **Round-robin within priority tiers** for fair distribution
+- ✅ **Immediate fallback** to lower priority tiers when higher priority backends are busy
+- ✅ **Idle backend tracking** to prevent overloading
 - ✅ Streaming and non-streaming request support
 - ✅ Health check endpoint with backend status
 - ✅ Detailed statistics and monitoring
@@ -45,6 +48,42 @@ Or use a `.env` file in the `llm-balancer` directory:
 cd llm-balancer
 OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
 ```
+
+### Priority-Based Load Balancing
+
+Configure priority levels for each backend to prioritize specific servers:
+
+**Using index-based priority:**
+
+```bash
+cd llm-balancer
+OLLAMA_BACKENDS="http://high-priority:11434,http://medium-priority:11434,http://low-priority:11434"
+BACKEND_PRIORITY_0=10  # High priority for first backend
+BACKEND_PRIORITY_1=5   # Medium priority for second backend
+BACKEND_PRIORITY_2=0   # Low priority for third backend
+```
+
+**Using URL-based priority:**
+
+```bash
+cd llm-balancer
+OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+BACKEND_PRIORITY_host1:11434=10  # High priority for host1
+BACKEND_PRIORITY_host2:11434=5   # Medium priority for host2
+```
+
+**Priority Levels:**
+- **10**: High-priority (dedicated GPU instances, low latency)
+- **5**: Medium-priority (shared GPU instances, good performance)
+- **0**: Low-priority (CPU-only instances, cost-effective)
+
+The load balancer will:
+1. Always try to use high-priority backends first
+2. Distribute requests evenly among backends with the same priority (round-robin)
+3. Immediately fall back to lower priority tiers when higher priority backends are busy
+4. Skip busy backends and continue selecting from the current priority tier
+
+For more details, see [PRIORITY_BASERED_LOAD_BALANCING.md](PRIORITY_BASERED_LOAD_BALANCING.md)
 
 ## Usage
 
@@ -109,11 +148,11 @@ curl http://localhost:3001/stats
 
 | Route | Description | Example |
 |-------|-------------|---------|
-| `/v1/messages*` | Anthropic API messages endpoint | `POST /v1/messages` |
+| `/v1/messages*` | API messages endpoint (Anthropic-compatible) | `POST /v1/messages` |
 | `/api/*` | Ollama API routes | `GET /api/generate`, `POST /api/chat` |
 | `/models*` | Model list endpoint | `GET /models` |
 | `/health` | Health check | `GET /health` |
-| `/backends` | Backend statistics (per-backend info) | `GET /backends` |
+| `/backends` | Backend statistics (per-backend info with priority) | `GET /backends` |
 | `/stats` | Complete system statistics | `GET /stats` |
 | `/` | Service info | `GET /` |
 
@@ -224,6 +263,10 @@ curl http://localhost:3001/stats | grep -E "busyBackends|idleBackends"
 | `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout (5 seconds) |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size |
+| `BACKEND_PRIORITY_0` | 0 | Priority for first backend (10=high, 5=medium, 0=low) |
+| `BACKEND_PRIORITY_1` | 0 | Priority for second backend |
+| `BACKEND_PRIORITY_2` | 0 | Priority for third backend |
+| `BACKEND_PRIORITY_host1:11434` | 0 | Priority for backend by URL (alternative to index-based) |
 
 ## Architecture
 
@@ -232,8 +275,11 @@ Client → Load Balancer (localhost:3001) → Multiple Ollama Servers (host1, ho
 ```
 
 The load balancer:
-- Distributes requests across all healthy backends using round-robin
-- **Prioritizes idle backends to distribute load more evenly**
+- Distributes requests across all healthy backends using priority-based round-robin
+- **Prioritizes high-priority backends for better performance and cost optimization**
+- **Uses round-robin within priority tiers** to ensure fair distribution
+- **Immediately falls back to lower priority tiers** when higher priority backends are busy
+- Tracks and prioritizes idle backends to distribute load more evenly
 - Skips unhealthy backends in the round-robin cycle
 - Automatically recovers healthy backends after recovery interval
 - Handles both Anthropic and Ollama API formats

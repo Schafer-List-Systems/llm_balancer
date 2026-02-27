@@ -12,7 +12,8 @@ class Balancer {
   }
 
   /**
-   * Get the next backend, prioritizing idle backends
+   * Get the next backend with priority-based selection
+   * Higher priority backends are selected first, with immediate fallback
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {
@@ -21,35 +22,51 @@ class Balancer {
       return null;
     }
 
-    // Priority 1: Find an idle, healthy backend
-    const idleBackend = this.backends.find(b => b.healthy && !b.busy);
-    if (idleBackend) {
-      idleBackend.requestCount = (idleBackend.requestCount || 0) + 1;
-      this.requestCount.set(idleBackend.url,
-        (this.requestCount.get(idleBackend.url) || 0) + 1
-      );
-      return idleBackend;
-    }
+    // Group backends by priority level
+    const priorityTiers = new Map();
 
-    // Priority 2: Fallback to round-robin across all healthy backends
-    let attempts = 0;
-    let backend;
-
-    while (attempts < totalBackends) {
-      backend = this.backends[this.currentIndex];
-
-      if (backend && backend.healthy) {
-        backend.requestCount = (backend.requestCount || 0) + 1;
-        this.requestCount.set(backend.url,
-          (this.requestCount.get(backend.url) || 0) + 1
-        );
-
-        this.currentIndex = (this.currentIndex + 1) % totalBackends;
-        return backend;
+    this.backends.forEach(backend => {
+      if (!backend.healthy) {
+        return;  // Skip unhealthy backends
       }
 
-      this.currentIndex = (this.currentIndex + 1) % totalBackends;
-      attempts++;
+      const priority = backend.priority || 0;
+      if (!priorityTiers.has(priority)) {
+        priorityTiers.set(priority, []);
+      }
+      priorityTiers.get(priority).push(backend);
+    });
+
+    // Sort priority tiers from highest to lowest
+    const sortedPriorities = Array.from(priorityTiers.keys()).sort((a, b) => b - a);
+
+    // Try each priority tier from highest to lowest
+    for (const priority of sortedPriorities) {
+      const tierBackends = priorityTiers.get(priority);
+
+      // Priority 1 within tier: Select using currentIndex (round-robin across idle backends)
+      let attempts = 0;
+      let backend;
+
+      while (attempts < tierBackends.length) {
+        backend = tierBackends[this.currentIndex % tierBackends.length];
+
+        if (!backend.busy) {
+          backend.requestCount = (backend.requestCount || 0) + 1;
+          this.requestCount.set(backend.url,
+            (this.requestCount.get(backend.url) || 0) + 1
+          );
+
+          this.currentIndex = (this.currentIndex + 1) % tierBackends.length;
+          return backend;
+        }
+
+        // Backend is busy, try next
+        this.currentIndex = (this.currentIndex + 1) % tierBackends.length;
+        attempts++;
+      }
+
+      // No available backend in this tier, continue to next tier
     }
 
     return null;

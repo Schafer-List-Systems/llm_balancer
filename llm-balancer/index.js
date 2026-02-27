@@ -345,6 +345,7 @@ app.get('/stats', (req, res) => {
     idleBackends: config.backends.filter(b => !b.busy).length,
     backendDetails: config.backends.map(b => ({
       url: b.url,
+      priority: b.priority || 0,
       healthy: b.healthy,
       busy: b.busy,
       requestCount: b.requestCount,
@@ -360,6 +361,7 @@ app.get('/backends', (req, res) => {
   res.json({
     backends: config.backends.map(b => ({
       url: b.url,
+      priority: b.priority || 0,
       healthy: b.healthy,
       busy: b.busy,
       failCount: b.failCount || 0,

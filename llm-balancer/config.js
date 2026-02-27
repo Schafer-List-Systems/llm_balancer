@@ -23,15 +23,34 @@ function loadConfig() {
   const maxPayloadSizeMB = Math.round(maxPayloadSize / (1024 * 1024));
 
   // Create backend objects with health status and statistics
-  const backends = backendArray.map(url => ({
-    url: url,
-    healthy: true,
-    failCount: 0,
-    requestCount: 0,
-    errorCount: 0,
-    busy: false,  // Track if backend is handling a request
-    models: []
-  }));
+  const backends = backendArray.map((url, index) => {
+    // Try to parse priority from environment variable
+    // Support both BACKEND_PRIORITY_{index} and BACKEND_PRIORITY_{url}
+    let priority = 0;  // Default priority
+
+    // Method 1: Try specific backend index
+    const priorityEnv = process.env[`BACKEND_PRIORITY_${index}`];
+    if (priorityEnv) {
+      priority = parseInt(priorityEnv);
+    }
+
+    // Method 2: Try URL-based priority
+    const urlPriority = process.env[`BACKEND_PRIORITY_${url}`];
+    if (urlPriority !== undefined) {
+      priority = parseInt(urlPriority);
+    }
+
+    return {
+      url: url,
+      priority: priority,  // Priority level (higher = higher priority)
+      healthy: true,
+      failCount: 0,
+      requestCount: 0,
+      errorCount: 0,
+      busy: false,  // Track if backend is handling a request
+      models: []
+    };
+  });
 
   return {
     port,
