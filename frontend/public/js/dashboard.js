@@ -103,6 +103,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Stats will be rendered here -->
           </div>
         </section>
+
+        <section class="backends-section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Configuration</h2>
+              <p class="section-description">API endpoint URL for your applications</p>
+            </div>
+          </div>
+          <div id="configSection" class="config-section">
+            <!-- Configuration will be rendered here -->
+          </div>
+        </section>
       </main>
 
       <footer class="footer">
@@ -255,6 +267,36 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
+  function renderConfig() {
+    const configSection = document.getElementById('configSection');
+
+    const frontendUrl = 'http://localhost:3080';
+    const apiUrl = 'http://localhost:3001';
+
+    configSection.innerHTML = `
+      <div class="config-container">
+        <div class="config-card">
+          <div class="config-label">Frontend URL (for dashboard)</div>
+          <div class="config-value">${frontendUrl}</div>
+        </div>
+
+        <div class="config-card">
+          <div class="config-label">API Base URL (backend)</div>
+          <div class="config-value">${apiUrl}</div>
+        </div>
+
+        <div class="config-card config-card--wide">
+          <div class="config-label">Application Configuration</div>
+          <div class="config-url">${frontendUrl}/api</div>
+          <div class="config-instructions">
+            <p>Configure your applications to use:</p>
+            <code>BASE_URL=${frontendUrl}/api</code>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   // Update last update time
   function updateLastUpdateTime(lastUpdateTime) {
     if (lastUpdateTime) {
@@ -325,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderOverview(data.health);
     renderBackends(data.backends);
     renderStats(data.stats);
+    renderConfig();
     updateLastUpdateTime(apiClient.getLastUpdateTime());
   }
 
