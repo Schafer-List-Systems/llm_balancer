@@ -146,14 +146,19 @@ class Balancer {
 
   /**
    * Notify that a backend is available (called when a backend becomes idle)
-   * This will wake up a queued request if one exists
+   * This will wake up queued requests until queue is empty
    * @param {number} priority - The priority tier that became available
    */
   notifyBackendAvailable(priority) {
     this.initializeQueue(priority); // Ensure queue exists
-    const queuedRequest = this._getFromQueue(priority);
 
-    if (queuedRequest) {
+    // Process all queued requests for this priority tier
+    while (true) {
+      const queuedRequest = this._getFromQueue(priority);
+      if (!queuedRequest) {
+        break; // Queue is empty
+      }
+
       // Clear the queue timeout
       this._clearQueueEntry(queuedRequest);
 
@@ -407,6 +412,7 @@ class Balancer {
     if (backend) {
       backend.healthy = true;
       backend.failCount = 0;
+      backend.busy = false;  // Reset busy state when backend is marked healthy
       console.log(`[Balancer] Backend recovered: ${backendUrl}`);
     }
   }
