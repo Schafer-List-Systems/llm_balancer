@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 });
 
 // Initialize load balancer and health checker
-const balancer = new Balancer(config.backends);
+const balancer = new Balancer(config.backends, config.maxQueueSize, config.queueTimeout);
 const healthChecker = new HealthChecker(config.backends, config);
 
 // Middleware to parse JSON bodies
@@ -63,9 +63,21 @@ function forwardRequest(req, res, backend) {
   // Mark backend as busy
   backend.busy = true;
 
+  // Get the priority tier for this backend
+  const backendPriority = backend.priority || 0;
+
+  // Helper to release backend
+  const releaseBackend = () => {
+    if (backend.busy) {
+      backend.busy = false;
+      // Notify balancer that this backend is now available
+      balancer.notifyBackendAvailable(backendPriority);
+    }
+  };
+
   // Set timeout to clear busy state if request takes too long
   const requestTimeout = setTimeout(() => {
-    backend.busy = false;
+    releaseBackend();
   }, 30000); // 30 seconds default
 
   const targetUrl = new URL(req.url, backend.url);
@@ -140,8 +152,8 @@ function forwardRequest(req, res, backend) {
 
     proxyReq.on('end', () => {
       clearTimeout(requestTimeout);
-      // Mark backend as idle when request completes
-      backend.busy = false;
+      // Release backend
+      releaseBackend();
     });
 
     const body = getRequestBody(req);
@@ -190,21 +202,26 @@ function forwardRequest(req, res, backend) {
         message: 'Backend unavailable',
         backend: backend.url
       });
+      // Release backend even on error
+      releaseBackend();
     })
     .on('end', () => {
       clearTimeout(requestTimeout);
-      // Mark backend as idle when request completes
-      backend.busy = false;
+      // Release backend
+      releaseBackend();
     })
     .end(getRequestBody(req));
   }
 }
 
 /**
- * Route: Anthropic API routes
+ * Route: Anthropic API routes (with queuing support)
  */
-app.all('/v1/messages*', (req, res) => {
-  if (!balancer.hasAvailableBackends()) {
+app.all('/v1/messages*', async (req, res) => {
+  const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
+  const immediate = req.query.immediate === 'true';
+
+  if (immediate && !balancer.hasAvailableBackends()) {
     return res.status(503).json({
       error: 'Service Unavailable',
       message: 'No healthy backends available',
@@ -212,22 +229,36 @@ app.all('/v1/messages*', (req, res) => {
     });
   }
 
-  const backend = balancer.getNextBackend();
-  if (!backend) {
-    return res.status(502).json({
-      error: 'Bad Gateway',
-      message: 'No backend available'
+  try {
+    const backend = await balancer.queueRequest(priority);
+    if (!backend) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'No backends configured or all backends unhealthy',
+        stats: balancer.getStats(),
+        queueStats: balancer.getAllQueueStats()
+      });
+    }
+
+    forwardRequest(req, res, backend);
+  } catch (error) {
+    console.error(`[Gateway] Queue request failed:`, error.message);
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message: error.message,
+      queueStats: balancer.getAllQueueStats()
     });
   }
-
-  forwardRequest(req, res, backend);
 });
 
 /**
- * Route: Ollama API routes
+ * Route: Ollama API routes (with queuing support)
  */
-app.all('/api/*', (req, res) => {
-  if (!balancer.hasAvailableBackends()) {
+app.all('/api/*', async (req, res) => {
+  const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
+  const immediate = req.query.immediate === 'true';
+
+  if (immediate && !balancer.hasAvailableBackends()) {
     return res.status(503).json({
       error: 'Service Unavailable',
       message: 'No healthy backends available',
@@ -235,22 +266,36 @@ app.all('/api/*', (req, res) => {
     });
   }
 
-  const backend = balancer.getNextBackend();
-  if (!backend) {
-    return res.status(502).json({
-      error: 'Bad Gateway',
-      message: 'No backend available'
+  try {
+    const backend = await balancer.queueRequest(priority);
+    if (!backend) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'No backends configured or all backends unhealthy',
+        stats: balancer.getStats(),
+        queueStats: balancer.getAllQueueStats()
+      });
+    }
+
+    forwardRequest(req, res, backend);
+  } catch (error) {
+    console.error(`[Gateway] Queue request failed:`, error.message);
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message: error.message,
+      queueStats: balancer.getAllQueueStats()
     });
   }
-
-  forwardRequest(req, res, backend);
 });
 
 /**
- * Route: Models endpoint
+ * Route: Models endpoint (with queuing support)
  */
-app.all('/models*', (req, res) => {
-  if (!balancer.hasAvailableBackends()) {
+app.all('/models*', async (req, res) => {
+  const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
+  const immediate = req.query.immediate === 'true';
+
+  if (immediate && !balancer.hasAvailableBackends()) {
     return res.status(503).json({
       error: 'Service Unavailable',
       message: 'No healthy backends available',
@@ -258,15 +303,26 @@ app.all('/models*', (req, res) => {
     });
   }
 
-  const backend = balancer.getNextBackend();
-  if (!backend) {
-    return res.status(502).json({
-      error: 'Bad Gateway',
-      message: 'No backend available'
+  try {
+    const backend = await balancer.queueRequest(priority);
+    if (!backend) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'No backends configured or all backends unhealthy',
+        stats: balancer.getStats(),
+        queueStats: balancer.getAllQueueStats()
+      });
+    }
+
+    forwardRequest(req, res, backend);
+  } catch (error) {
+    console.error(`[Gateway] Queue request failed:`, error.message);
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message: error.message,
+      queueStats: balancer.getAllQueueStats()
     });
   }
-
-  forwardRequest(req, res, backend);
 });
 
 /**
@@ -338,7 +394,9 @@ app.get('/stats', (req, res) => {
       healthCheckTimeout: config.healthCheckTimeout,
       maxRetries: config.maxRetries,
       maxPayloadSize: config.maxPayloadSize,
-      maxPayloadSizeMB: config.maxPayloadSizeMB
+      maxPayloadSizeMB: config.maxPayloadSizeMB,
+      maxQueueSize: config.maxQueueSize,
+      queueTimeout: config.queueTimeout
     },
     // Add: Backend busy counts
     busyBackends: config.backends.filter(b => b.busy).length,
@@ -350,7 +408,9 @@ app.get('/stats', (req, res) => {
       busy: b.busy,
       requestCount: b.requestCount,
       errorCount: b.errorCount
-    }))
+    })),
+    // Add: Queue statistics
+    queueStats: balancer.getAllQueueStats()
   });
 });
 
@@ -370,6 +430,51 @@ app.get('/backends', (req, res) => {
       models: b.models || []
     }))
   });
+});
+
+/**
+ * Route: Queue statistics
+ */
+app.get('/queue/stats', (req, res) => {
+  res.json({
+    maxQueueSize: config.maxQueueSize,
+    queueTimeout: config.queueTimeout,
+    queues: balancer.getAllQueueStats()
+  });
+});
+
+/**
+ * Route: Queue status for a specific priority tier
+ */
+app.get('/queue/stats/:priority', (req, res) => {
+  const priority = parseInt(req.params.priority) || 0;
+  const queueStats = balancer.getQueueStats(priority);
+
+  if (!queueStats) {
+    return res.status(404).json({
+      error: 'Not Found',
+      message: `No queue found for priority ${priority}`
+    });
+  }
+
+  res.json(queueStats);
+});
+
+/**
+ * Route: Queue list for a specific priority tier
+ */
+app.get('/queue/list/:priority', (req, res) => {
+  const priority = parseInt(req.params.priority) || 0;
+  const queueInfo = balancer.getQueueList(priority);
+
+  if (!queueInfo) {
+    return res.status(404).json({
+      error: 'Not Found',
+      message: `No queue found for priority ${priority}`
+    });
+  }
+
+  res.json(queueInfo);
 });
 
 /**

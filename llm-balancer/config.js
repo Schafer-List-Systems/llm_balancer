@@ -22,6 +22,10 @@ function loadConfig() {
   const maxPayloadSize = parseInt(process.env.MAX_PAYLOAD_SIZE) || 50 * 1024 * 1024;
   const maxPayloadSizeMB = Math.round(maxPayloadSize / (1024 * 1024));
 
+  // Parse queue configuration
+  const maxQueueSize = parseInt(process.env.MAX_QUEUE_SIZE) || 100;
+  const queueTimeout = parseInt(process.env.QUEUE_TIMEOUT) || 30000;
+
   // Create backend objects with health status and statistics
   const backends = backendArray.map((url, index) => {
     // Try to parse priority from environment variable
@@ -59,7 +63,9 @@ function loadConfig() {
     healthCheckTimeout,
     maxRetries,
     maxPayloadSize,
-    maxPayloadSizeMB
+    maxPayloadSizeMB,
+    maxQueueSize,
+    queueTimeout
   };
 }
 
