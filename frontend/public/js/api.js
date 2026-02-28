@@ -78,6 +78,19 @@ class ApiClient {
   }
 
   /**
+   * Get queue statistics
+   */
+  async getQueueStats() {
+    try {
+      const data = await this.request('/queue/stats');
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Perform manual health check for a specific backend
    */
   async checkBackendHealth(backendUrl) {
@@ -97,16 +110,18 @@ class ApiClient {
 
     const poll = async () => {
       try {
-        const [healthData, statsData, backendsData] = await Promise.all([
+        const [healthData, statsData, backendsData, queueStatsData] = await Promise.all([
           this.getHealth(),
           this.getStats(),
-          this.getBackends()
+          this.getBackends(),
+          this.getQueueStats()
         ]);
 
         this.dataCache = {
           health: healthData.data,
           stats: statsData.data,
-          backends: backendsData.data
+          backends: backendsData.data,
+          queueStats: queueStatsData.data
         };
 
         if (window.updateCallback) {
@@ -139,16 +154,18 @@ class ApiClient {
     this.stopPolling();
 
     try {
-      const [healthData, statsData, backendsData] = await Promise.all([
+      const [healthData, statsData, backendsData, queueStatsData] = await Promise.all([
         this.getHealth(),
         this.getStats(),
-        this.getBackends()
+        this.getBackends(),
+        this.getQueueStats()
       ]);
 
       this.dataCache = {
         health: healthData.data,
         stats: statsData.data,
-        backends: backendsData.data
+        backends: backendsData.data,
+        queueStats: queueStatsData.data
       };
 
       if (window.updateCallback) {

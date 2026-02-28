@@ -356,6 +356,74 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
   document.head.appendChild(style);
 
+  // Render queue statistics
+  function renderQueueStats(queueStats) {
+    const statsSection = document.getElementById('statsSection');
+    const statsGrid = statsSection.querySelector('.stats-grid');
+
+    if (!queueStats || !statsGrid) return;
+
+    // Aggregate queue stats from per-priority queues
+    const pendingRequests = queueStats.queues?.reduce((sum, queue) => sum + (queue.depth || 0), 0) || 0;
+    const processingRequests = queueStats.queues?.reduce((sum, queue) => sum + (queue.processing || 0), 0) || 0;
+    const maxQueueSize = queueStats.maxQueueSize || 0;
+    const queueUtilization = maxQueueSize > 0 ? pendingRequests / maxQueueSize : 0;
+
+    // Check if queue stats already exist, if not create them
+    if (!statsGrid.querySelector('.queue-stats-card')) {
+      const queueStatsCard = document.createElement('div');
+      queueStatsCard.className = 'queue-stats-card';
+      queueStatsCard.style.gridColumn = '1 / -1';
+      queueStatsCard.style.marginTop = '1rem';
+
+      queueStatsCard.innerHTML = `
+        <div class="card-header" style="display: flex; align-items: center; gap: 0.5rem;">
+          <span class="card-title">🚦 Queue Statistics</span>
+        </div>
+        <div class="queue-stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Pending Requests</div>
+            <div class="queue-stat-value">${pendingRequests}</div>
+          </div>
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Processing Requests</div>
+            <div class="queue-stat-value">${processingRequests}</div>
+          </div>
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Max Queue Size</div>
+            <div class="queue-stat-value">${maxQueueSize}</div>
+          </div>
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Queue Utilization</div>
+            <div class="queue-stat-value ${getUtilizationColor(queueUtilization)}">
+              ${(queueUtilization * 100).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+      `;
+
+      statsGrid.appendChild(queueStatsCard);
+    } else {
+      // Update existing queue stats
+      const queueStatsCard = statsGrid.querySelector('.queue-stats-card');
+      if (queueStatsCard) {
+        const values = queueStatsCard.querySelectorAll('.queue-stat-value');
+        values[0].textContent = pendingRequests;
+        values[1].textContent = processingRequests;
+        values[2].textContent = maxQueueSize;
+        const utilizationEl = values[3];
+        utilizationEl.textContent = `${(queueUtilization * 100).toFixed(1)}%`;
+        utilizationEl.className = `queue-stat-value ${getUtilizationColor(queueUtilization)}`;
+      }
+    }
+  }
+
+  function getUtilizationColor(percentage) {
+    if (percentage >= 0.9) return 'text-danger';
+    if (percentage >= 0.7) return 'text-warning';
+    return 'text-success';
+  }
+
   // Render dashboard with data
   function renderDashboard() {
     const data = apiClient.getData();
@@ -367,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderOverview(data.health);
     renderBackends(data.backends);
     renderStats(data.stats);
+    renderQueueStats(data.queueStats);
     renderConfig();
     updateLastUpdateTime(apiClient.getLastUpdateTime());
   }
@@ -387,17 +456,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start polling
 
     // Initial data fetch
-    const [healthData, statsData, backendsData] = await Promise.all([
+    const [healthData, statsData, backendsData, queueStatsData] = await Promise.all([
       apiClient.getHealth(),
       apiClient.getStats(),
-      apiClient.getBackends()
+      apiClient.getBackends(),
+      apiClient.getQueueStats()
     ]);
 
-    if (healthData.success && statsData.success && backendsData.success) {
+    if (healthData.success && statsData.success && backendsData.success && queueStatsData.success) {
       const data = {
         health: healthData.data,
         stats: statsData.data,
-        backends: backendsData.data
+        backends: backendsData.data,
+        queueStats: queueStatsData.data
       };
 
       apiClient.dataCache = data;
