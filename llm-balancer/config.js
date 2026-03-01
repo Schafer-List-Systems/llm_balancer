@@ -45,6 +45,7 @@ function loadConfig() {
     }
 
     return {
+      id: index + 1,  // Backend ID (1-based)
       url: url,
       priority: priority,  // Priority level (higher = higher priority)
       healthy: true,

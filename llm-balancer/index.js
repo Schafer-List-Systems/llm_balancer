@@ -60,22 +60,32 @@ function getRequestBody(req) {
  * Reuses patterns from original gateway with modifications for load balancer
  */
 function forwardRequest(req, res, backend) {
+  // TODO: assert that the backend is not busy
+
   // Mark backend as busy
   backend.busy = true;
+  console.log(`[Balancer] Backend ${backend.id} marked as BUSY (${backend.url})`);
 
   // Get the priority tier for this backend
   const backendPriority = backend.priority || 0;
 
   // Helper to release backend
   const releaseBackend = () => {
+    console.log(`[Balancer] releaseBackend() called for backend ${backend.id}, current busy state: ${backend.busy}`);
     if (backend.busy) {
       backend.busy = false;
+      console.log(`[Balancer] Backend ${backend.id} marked as AVAILABLE (${backend.url})`);
       // Notify balancer that this backend is now available
+      // TODO: - Is this the right strategy? If a backend times out, it should rather be marked as failed or over-busy.
+      //         Alternatively, the priority could be lowered. However, Timing out is not a cause for being available.
       balancer.notifyBackendAvailable(backendPriority);
+    } else {
+      console.log(`[Balancer] Backend ${backend.id} was already not busy, skipping release`);
     }
   };
 
   // Set timeout to clear busy state if request takes too long
+  // TODO: use configured timeout, not the default
   const requestTimeout = setTimeout(() => {
     releaseBackend();
   }, 30000); // 30 seconds default
@@ -151,6 +161,7 @@ function forwardRequest(req, res, backend) {
     });
 
     proxyReq.on('end', () => {
+      console.log(`[Balancer] Proxy request to ${backend.url} ended, releasing backend ${backend.id}`);
       clearTimeout(requestTimeout);
       // Release backend
       releaseBackend();
@@ -185,11 +196,15 @@ function forwardRequest(req, res, backend) {
       });
 
       proxyRes.on('end', () => {
+        console.log(`[Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
         try {
           const parsed = JSON.parse(data);
           res.status(proxyRes.statusCode).json(parsed);
         } catch (e) {
           res.status(proxyRes.statusCode).send(data);
+        } finally {
+          clearTimeout(requestTimeout);
+          releaseBackend();
         }
       });
     })

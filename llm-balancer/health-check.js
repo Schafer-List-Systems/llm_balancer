@@ -18,6 +18,9 @@ class HealthChecker {
    */
   start() {
     if (this.healthCheckIntervalId) {
+      if (process.env.NODE_ENV === 'test') {
+        return;
+      }
       console.warn('[HealthChecker] Health checks already running');
       return;
     }
@@ -30,7 +33,9 @@ class HealthChecker {
       this.checkAll();
     }, this.config.healthCheckInterval);
 
-    console.log(`[HealthChecker] Health checks started, interval: ${this.config.healthCheckInterval}ms`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[HealthChecker] Health checks started, interval: ${this.config.healthCheckInterval}ms`);
+    }
   }
 
   /**
@@ -40,7 +45,9 @@ class HealthChecker {
     if (this.healthCheckIntervalId) {
       clearInterval(this.healthCheckIntervalId);
       this.healthCheckIntervalId = null;
-      console.log('[HealthChecker] Health checks stopped');
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('[HealthChecker] Health checks stopped');
+      }
     }
   }
 
@@ -48,7 +55,9 @@ class HealthChecker {
    * Run health checks on all backends
    */
   checkAll() {
-    console.log('[HealthChecker] Running health checks for all backends...');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('[HealthChecker] Running health checks for all backends...');
+    }
     this.backends.forEach(backend => {
       this.checkBackend(backend);
     });
@@ -91,14 +100,20 @@ class HealthChecker {
       // Check for successful response (2xx status)
       if (res.statusCode >= 200 && res.statusCode < 300) {
         if (!healthy) {
-          console.log(`[HealthChecker] Backend recovered: ${url} (status: ${res.statusCode})`);
+          if (process.env.NODE_ENV !== 'test') {
+            console.log(`[HealthChecker] Backend recovered: ${url} (status: ${res.statusCode})`);
+          }
           backend.healthy = true;
           backend.failCount = 0;
         } else {
-          console.log(`[HealthChecker] Backend healthy: ${url} (status: ${res.statusCode})`);
+          if (process.env.NODE_ENV !== 'test') {
+            console.log(`[HealthChecker] Backend healthy: ${url} (status: ${res.statusCode})`);
+          }
         }
       } else {
-        console.warn(`[HealthChecker] Backend unhealthy: ${url} (status: ${res.statusCode})`);
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(`[HealthChecker] Backend unhealthy: ${url} (status: ${res.statusCode})`);
+        }
         backend.healthy = false;
         backend.failCount = (backend.failCount || 0) + 1;
       }
@@ -107,13 +122,17 @@ class HealthChecker {
     });
 
     req.on('error', (err) => {
-      console.error(`[HealthChecker] Backend error: ${url}`, err.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error(`[HealthChecker] Backend error: ${url}`, err.message);
+      }
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
     });
 
     req.on('timeout', () => {
-      console.error(`[HealthChecker] Backend timeout: ${url}`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error(`[HealthChecker] Backend timeout: ${url}`);
+      }
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
       req.destroy();
