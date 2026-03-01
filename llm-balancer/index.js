@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 });
 
 // Initialize load balancer and health checker
-const balancer = new Balancer(config.backends, config.maxQueueSize, config.queueTimeout);
+const balancer = new Balancer(config.backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
 const healthChecker = new HealthChecker(config.backends, config);
 
 // Middleware to parse JSON bodies
@@ -92,6 +92,15 @@ function forwardRequest(req, res, backend) {
 
   const targetUrl = new URL(req.url, backend.url);
 
+  // Capture request body for debug tracking
+  let requestBody = null;
+  const originalBody = getRequestBody(req);
+  if (originalBody && typeof originalBody === 'string') {
+    requestBody = originalBody;
+  } else if (originalBody && Buffer.isBuffer(originalBody)) {
+    requestBody = originalBody.toString('utf8');
+  }
+
   // Copy request headers
   const headers = { ...req.headers };
 
@@ -139,6 +148,19 @@ function forwardRequest(req, res, backend) {
           }
         });
         proxyRes.on('end', () => {
+          // Track debug request with request/response content
+          balancer.trackDebugRequest(
+            {
+              route: req.path,
+              method: req.method,
+              priority: backend.priority || 0,
+              backendId: backend.id,
+              backendUrl: backend.url
+            },
+            requestBody,
+            { data: data, contentType: proxyRes.headers['content-type'] }
+          );
+
           try {
             const parsed = JSON.parse(data);
             res.json(parsed);
@@ -197,6 +219,20 @@ function forwardRequest(req, res, backend) {
 
       proxyRes.on('end', () => {
         console.log(`[Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
+
+        // Track debug request with request/response content
+        balancer.trackDebugRequest(
+          {
+            route: req.path,
+            method: req.method,
+            priority: backend.priority || 0,
+            backendId: backend.id,
+            backendUrl: backend.url
+          },
+          requestBody,
+          { data: data, contentType: proxyRes.headers['content-type'], statusCode: proxyRes.statusCode }
+        );
+
         try {
           const parsed = JSON.parse(data);
           res.status(proxyRes.statusCode).json(parsed);
@@ -255,6 +291,19 @@ app.all('/v1/messages*', async (req, res) => {
       });
     }
 
+    // Track debug request
+    balancer.trackDebugRequest(
+      {
+        route: req.path,
+        method: req.method,
+        priority: priority,
+        backendId: backend.id,
+        backendUrl: backend.url
+      },
+      null,
+      { data: null, contentType: null, statusCode: null }
+    );
+
     forwardRequest(req, res, backend);
   } catch (error) {
     console.error(`[Gateway] Queue request failed:`, error.message);
@@ -292,6 +341,19 @@ app.all('/api/*', async (req, res) => {
       });
     }
 
+    // Track debug request
+    balancer.trackDebugRequest(
+      {
+        route: req.path,
+        method: req.method,
+        priority: priority,
+        backendId: backend.id,
+        backendUrl: backend.url
+      },
+      null,
+      { data: null, contentType: null, statusCode: null }
+    );
+
     forwardRequest(req, res, backend);
   } catch (error) {
     console.error(`[Gateway] Queue request failed:`, error.message);
@@ -328,6 +390,19 @@ app.all('/models*', async (req, res) => {
         queueStats: balancer.getAllQueueStats()
       });
     }
+
+    // Track debug request
+    balancer.trackDebugRequest(
+      {
+        route: req.path,
+        method: req.method,
+        priority: priority,
+        backendId: backend.id,
+        backendUrl: backend.url
+      },
+      null,
+      { data: null, contentType: null, statusCode: null }
+    );
 
     forwardRequest(req, res, backend);
   } catch (error) {
@@ -501,6 +576,46 @@ app.get('/backend/current', (req, res) => {
     currentBackend: balancer.getNextBackend(),
     stats: balancer.getStats()
   });
+});
+
+/**
+ * Route: Debug statistics
+ */
+app.get('/debug/stats', (req, res) => {
+  res.json(balancer.getDebugStats());
+});
+
+/**
+ * Route: Debug request history
+ */
+app.get('/debug/requests', (req, res) => {
+  res.json(balancer.getDebugRequestHistory());
+});
+
+/**
+ * Route: Get last N requests with content
+ * Query parameter: n (number of requests to return, default: 10)
+ */
+app.get('/debug/requests/recent', (req, res) => {
+  const n = parseInt(req.query.n) || 10;
+  const history = balancer.getDebugRequestHistory();
+
+  // Return the last N requests
+  const recentRequests = history.slice(0, n);
+
+  res.json({
+    count: recentRequests.length,
+    limit: n,
+    requests: recentRequests
+  });
+});
+
+/**
+ * Route: Clear debug request history
+ */
+app.post('/debug/clear', (req, res) => {
+  balancer.clearDebugRequestHistory();
+  res.json({ success: true, message: 'Debug history cleared' });
 });
 
 /**

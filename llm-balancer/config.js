@@ -26,6 +26,10 @@ function loadConfig() {
   const maxQueueSize = parseInt(process.env.MAX_QUEUE_SIZE) || 100;
   const queueTimeout = parseInt(process.env.QUEUE_TIMEOUT) || 30000;
 
+  // Parse debug configuration
+  const debug = process.env.DEBUG === 'true';
+  const debugRequestHistorySize = parseInt(process.env.DEBUG_REQUEST_HISTORY_SIZE) || 100;
+
   // Create backend objects with health status and statistics
   const backends = backendArray.map((url, index) => {
     // Try to parse priority from environment variable
@@ -66,7 +70,9 @@ function loadConfig() {
     maxPayloadSize,
     maxPayloadSizeMB,
     maxQueueSize,
-    queueTimeout
+    queueTimeout,
+    debug,
+    debugRequestHistorySize
   };
 }
 

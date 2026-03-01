@@ -4,7 +4,7 @@
  */
 
 class Balancer {
-  constructor(backends, maxQueueSize = 100, queueTimeout = 30000) {
+  constructor(backends, maxQueueSize = 100, queueTimeout = 30000, debug = false, debugRequestHistorySize = 100) {
     this.backends = backends;
     this.currentIndex = 0;
     this.requestCount = new Map();
@@ -16,6 +16,11 @@ class Balancer {
     this.queues = new Map(); // Single global queue (priority 0)
     this.initializeQueue(0); // Single global queue
     this.currentPriorityIndex = 0; // Track position in priority-sorted backend list
+
+    // Debug configuration
+    this.debug = debug;
+    this.debugRequestHistorySize = debugRequestHistorySize;
+    this.debugRequests = []; // Array to store request metadata including content
   }
 
   /**
@@ -124,6 +129,8 @@ class Balancer {
     // Try to get backend immediately (when at least one backend is available)
     const immediateBackend = this._getHighestPriorityBackend();
     if (immediateBackend) {
+      // Mark as busy immediately to prevent concurrent requests getting same backend
+      immediateBackend.busy = true;
       // Increment request count for this backend
       immediateBackend.requestCount = (immediateBackend.requestCount || 0) + 1;
       this.requestCount.set(immediateBackend.url,
@@ -372,11 +379,64 @@ class Balancer {
   }
 
   /**
-   * Get current index (for debugging/testing)
-   * @returns {number} Current round-robin index
+   * Add a request to debug tracking
+   * @param {Object} metadata - Request metadata
+   * @param {Object} requestData - Request data (optional)
+   * @param {Object} responseData - Response data (optional)
    */
-  getCurrentIndex() {
-    return this.currentIndex;
+  trackDebugRequest(metadata, requestData = null, responseData = null) {
+    if (!this.debug) return;
+
+    const request = {
+      ...metadata,
+      timestamp: Date.now(),
+      id: this.debugRequests.length + 1,
+      requestContent: requestData,
+      responseContent: responseData
+    };
+
+    // Add to front and limit size
+    this.debugRequests.unshift(request);
+    if (this.debugRequests.length > this.debugRequestHistorySize) {
+      this.debugRequests = this.debugRequests.slice(0, this.debugRequestHistorySize);
+    }
+
+    // Log to console if debug is enabled
+    console.log(`[DEBUG] Request tracked:`, metadata);
+  }
+
+  /**
+   * Get debug request history
+   * @returns {Array} Debug request history
+   */
+  getDebugRequestHistory() {
+    if (!this.debug) return [];
+    return [...this.debugRequests];
+  }
+
+  /**
+   * Clear debug request history
+   */
+  clearDebugRequestHistory() {
+    if (!this.debug) return;
+    this.debugRequests = [];
+    console.log('[DEBUG] Request history cleared');
+  }
+
+  /**
+   * Get debug statistics
+   * @returns {Object} Debug statistics
+   */
+  getDebugStats() {
+    if (!this.debug) return { enabled: false };
+
+    return {
+      enabled: true,
+      totalRequests: this.debugRequests.length,
+      queueSize: this.queues.get(0)?.length || 0,
+      currentIndex: this.currentIndex,
+      requestHistorySize: this.debugRequestHistorySize
+    };
   }
 }
 
