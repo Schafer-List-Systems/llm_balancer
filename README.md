@@ -72,18 +72,7 @@ BACKEND_PRIORITY_host1:11434=10  # High priority for host1
 BACKEND_PRIORITY_host2:11434=5   # Medium priority for host2
 ```
 
-**Priority Levels:**
-- **10**: High-priority (dedicated GPU instances, low latency)
-- **5**: Medium-priority (shared GPU instances, good performance)
-- **0**: Low-priority (CPU-only instances, cost-effective)
-
-The load balancer will:
-1. Always try to use high-priority backends first
-2. Distribute requests evenly among backends with the same priority (round-robin)
-3. Immediately fall back to lower priority tiers when higher priority backends are busy
-4. Skip busy backends and continue selecting from the current priority tier
-
-For more details, see [PRIORITY_BASERED_LOAD_BALANCING.md](PRIORITY_BASERED_LOAD_BALANCING.md)
+The load balancer will always try to use high-priority backends first
 
 ## Usage
 
