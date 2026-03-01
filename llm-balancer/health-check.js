@@ -6,6 +6,11 @@
 const http = require('http');
 const { URL } = require('url');
 
+// Helper function to get formatted timestamp
+function getTimestamp() {
+  return new Date().toISOString();
+}
+
 class HealthChecker {
   constructor(backends, config) {
     this.backends = backends;
@@ -21,7 +26,7 @@ class HealthChecker {
       if (process.env.NODE_ENV === 'test') {
         return;
       }
-      console.warn('[HealthChecker] Health checks already running');
+      console.warn(`[${getTimestamp()}] [HealthChecker] Health checks already running`);
       return;
     }
 
@@ -34,7 +39,7 @@ class HealthChecker {
     }, this.config.healthCheckInterval);
 
     if (process.env.NODE_ENV !== 'test') {
-      console.log(`[HealthChecker] Health checks started, interval: ${this.config.healthCheckInterval}ms`);
+      console.log(`[${getTimestamp()}] [HealthChecker] Health checks started, interval: ${this.config.healthCheckInterval}ms`);
     }
   }
 
@@ -46,7 +51,7 @@ class HealthChecker {
       clearInterval(this.healthCheckIntervalId);
       this.healthCheckIntervalId = null;
       if (process.env.NODE_ENV !== 'test') {
-        console.log('[HealthChecker] Health checks stopped');
+        console.log(`[${getTimestamp()}] [HealthChecker] Health checks stopped`);
       }
     }
   }
@@ -56,7 +61,7 @@ class HealthChecker {
    */
   checkAll() {
     if (process.env.NODE_ENV !== 'test') {
-      console.log('[HealthChecker] Running health checks for all backends...');
+      console.log(`[${getTimestamp()}] [HealthChecker] Running health checks for all backends...`);
     }
     this.backends.forEach(backend => {
       this.checkBackend(backend);
@@ -101,18 +106,18 @@ class HealthChecker {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         if (!healthy) {
           if (process.env.NODE_ENV !== 'test') {
-            console.log(`[HealthChecker] Backend recovered: ${url} (status: ${res.statusCode})`);
+            console.log(`[${getTimestamp()}] [HealthChecker] Backend recovered: ${url} (status: ${res.statusCode})`);
           }
           backend.healthy = true;
           backend.failCount = 0;
         } else {
           if (process.env.NODE_ENV !== 'test') {
-            console.log(`[HealthChecker] Backend healthy: ${url} (status: ${res.statusCode})`);
+            console.log(`[${getTimestamp()}] [HealthChecker] Backend healthy: ${url} (status: ${res.statusCode})`);
           }
         }
       } else {
         if (process.env.NODE_ENV !== 'test') {
-          console.warn(`[HealthChecker] Backend unhealthy: ${url} (status: ${res.statusCode})`);
+          console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (status: ${res.statusCode})`);
         }
         backend.healthy = false;
         backend.failCount = (backend.failCount || 0) + 1;
@@ -123,7 +128,7 @@ class HealthChecker {
 
     req.on('error', (err) => {
       if (process.env.NODE_ENV !== 'test') {
-        console.error(`[HealthChecker] Backend error: ${url}`, err.message);
+        console.error(`[${getTimestamp()}] [HealthChecker] Backend error: ${url}`, err.message);
       }
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
@@ -131,7 +136,7 @@ class HealthChecker {
 
     req.on('timeout', () => {
       if (process.env.NODE_ENV !== 'test') {
-        console.error(`[HealthChecker] Backend timeout: ${url}`);
+        console.error(`[${getTimestamp()}] [HealthChecker] Backend timeout: ${url}`);
       }
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
