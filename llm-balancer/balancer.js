@@ -415,6 +415,30 @@ class Balancer {
   }
 
   /**
+   * Get debug requests filtered by backend ID with optional limit
+   * @param {string} backendId - Optional backend ID to filter by
+   * @param {number} limit - Optional limit on number of requests to return
+   * @returns {Array} Filtered debug request history
+   */
+  getDebugRequestsFiltered(backendId, limit) {
+    if (!this.debug) return [];
+
+    let filtered = [...this.debugRequests];
+
+    // Filter by backend ID if specified
+    if (backendId) {
+      filtered = filtered.filter(req => req.backendId === backendId);
+    }
+
+    // Apply limit if specified
+    if (limit) {
+      filtered = filtered.slice(0, limit);
+    }
+
+    return filtered;
+  }
+
+  /**
    * Clear debug request history
    */
   clearDebugRequestHistory() {

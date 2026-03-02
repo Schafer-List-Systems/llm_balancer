@@ -611,6 +611,25 @@ app.get('/debug/requests/recent', (req, res) => {
 });
 
 /**
+ * Route: Get debug requests filtered by backend ID
+ * Query parameters:
+ *   - backendId: (optional) Filter by specific backend ID
+ *   - limit: (optional) Number of requests to return, default: 10
+ */
+app.get('/debug/requests/backend/:backendId', (req, res) => {
+  const backendId = req.params.backendId;
+  const limit = parseInt(req.query.limit) || 10;
+  const history = balancer.getDebugRequestsFiltered(backendId, limit);
+
+  res.json({
+    backendId: backendId,
+    count: history.length,
+    limit: limit,
+    requests: history
+  });
+});
+
+/**
  * Route: Clear debug request history
  */
 app.post('/debug/clear', (req, res) => {

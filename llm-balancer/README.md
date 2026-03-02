@@ -181,6 +181,21 @@ The `/stats` endpoint provides detailed information:
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size in bytes |
 
+## Debug Features
+
+For development and troubleshooting, the load balancer provides debug endpoints:
+
+| Route | Description |
+|-------|-------------|
+| `/debug/stats` | Summary statistics about request tracking |
+| `/debug/requests` | Full debug request history |
+| `/debug/requests/recent?n=10` | Most recent N requests (default: 10) |
+| `/debug/requests/backend/:backendId?limit=10` | Requests filtered by specific backend |
+
+Enable debug mode by setting `DEBUG=true` in your `.env` file.
+
+For detailed documentation of debug endpoints, see [BACKEND_DEBUG_ENDPOINTS.md](BACKEND_DEBUG_ENDPOINTS.md).
+
 ## Troubleshooting
 
 ### Ensure Ollama servers are running
