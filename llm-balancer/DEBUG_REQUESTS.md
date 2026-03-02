@@ -143,33 +143,77 @@ Returns the most recent N requests (default: 10).
 }
 ```
 
-### 4. Debug Request History
+### 4. Backend-Specific Debug Requests
 ```
-GET /debug/requests
+GET /debug/requests/backend/:backendId?limit=10
 ```
 
-Returns the full debug history with all tracked requests as an array.
+Returns debug requests filtered by specific backend ID. Useful for monitoring request distribution, debugging backend-specific issues, and comparing performance between backends.
+
+**URL Parameters:**
+- `backendId` (required): ID of the backend to filter by (e.g., "backend1", "backend2")
+  - Matches the backend ID configured in your `.env` file
+
+**Query Parameters:**
+- `limit` (optional): Number of requests to return. Defaults to 10.
+  - Maximum recommended: 100 (to avoid large responses)
+
+**Example Usage:**
+```bash
+# Get last 5 requests for backend1
+curl http://localhost:3001/debug/requests/backend/backend1?limit=5
+
+# Get all requests for backend2 (default limit 10)
+curl http://localhost:3001/debug/requests/backend/backend2
+
+# Get last 20 requests for backend3
+curl http://localhost:3001/debug/requests/backend/backend3?limit=20
+```
 
 **Example Response:**
 ```json
-[
-  {
-    "route": "/v1/messages",
-    "method": "POST",
-    "priority": 10,
-    "backendId": 1,
-    "backendUrl": "http://localhost:11434",
-    "timestamp": 1634567890123,
-    "id": 1,
-    "requestContent": "{\"model\":\"llama2\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}",
-    "responseContent": {
-      "data": "{\"model\":\"llama2\",\"response\":\"Hello! How can I help you?\"}",
-      "contentType": "application/json",
-      "statusCode": 200
+{
+  "backendId": "backend1",
+  "count": 3,
+  "limit": 5,
+  "requests": [
+    {
+      "id": 201,
+      "timestamp": 1772433937123,
+      "route": "/v1/messages",
+      "method": "POST",
+      "priority": 10,
+      "backendId": "backend1",
+      "backendUrl": "http://localhost:11435",
+      "requestContent": "{\"model\":\"llama2\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}"
     }
-  }
-]
+  ]
+}
 ```
+
+**Response Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `backendId` | string | The backend ID used for filtering |
+| `count` | integer | Number of requests found for this backend |
+| `limit` | integer | The limit parameter used in the request |
+| `requests` | array | Array of request objects matching the filter |
+
+**Use Cases:**
+1. **Monitor Request Distribution**: See how many requests are being sent to each backend
+2. **Debug Backend-Specific Issues**: Isolate issues to a particular backend
+3. **Performance Comparison**: Compare response times and success rates across backends
+4. **Traffic Analysis**: Analyze which backends handle most of the load
+
+**Error Handling:**
+- If no requests found: `{ "backendId": "backend", "count": 0, "limit": 10, "requests": [] }`
+- If backend ID not provided: `{ "error": "Backend ID is required" }`
+
+**Use Cases for Backend-Specific Debug:**
+- Track which backends are handling the majority of requests
+- Isolate performance issues to specific backends
+- Compare success rates across different backend configurations
+- Analyze traffic patterns per backend
 
 ### 5. Clear Debug History
 ```
@@ -197,9 +241,19 @@ Use the debug history to identify why specific requests are failing:
 
 ### Monitoring Backend Performance
 Track which backends are being used and how often:
-1. Filter by `backendId` or `backendUrl` in the debug history
-2. Check `responseContent.statusCode` for success vs failure
-3. Look for patterns in successful vs failed requests per backend
+1. Use `/debug/requests` and filter by `backendId` or `backendUrl`
+2. Use `/debug/requests/backend/:backendId` for backend-specific requests
+3. Check `responseContent.statusCode` for success vs failure
+4. Look for patterns in successful vs failed requests per backend
+
+**Backend-Specific Debug Example:**
+```bash
+# Check which backends are handling requests
+curl http://localhost:3001/debug/requests/recent?n=20 | jq '.requests | group_by(.backendId) | map({backend: .[0].backendId, count: length})'
+
+# Debug specific backend performance
+curl http://localhost:3001/debug/requests/backend/backend1?limit=50 | jq '.requests | group_by(.responseContent.statusCode) | map({status: .[0].responseContent.statusCode, count: length})'
+```
 
 ### Debugging Queue Behavior
 Understand how requests are queued and assigned:
@@ -339,6 +393,42 @@ curl -X POST http://localhost:3001/debug/clear
 }
 ```
 
+### Backend-Specific Debug
+
+Monitor and analyze requests by specific backend:
+
+```bash
+# Get last 10 requests for a specific backend
+curl http://localhost:3001/debug/requests/backend/backend1?limit=10
+```
+
+**Example Output:**
+```json
+{
+  "backendId": "backend1",
+  "count": 5,
+  "limit": 10,
+  "requests": [
+    {
+      "id": 101,
+      "timestamp": 1698765400000,
+      "route": "/v1/messages",
+      "method": "POST",
+      "priority": 10,
+      "backendId": "backend1",
+      "backendUrl": "http://localhost:11435",
+      "requestContent": "{\"model\":\"llama2\",\"messages\":[{\"role\":\"user\",\"content\":\"Test\"}]}"
+    }
+  ]
+}
+```
+
+**Use Cases:**
+- Compare performance across multiple backends
+- Isolate issues to specific backends
+- Track request distribution per backend
+- Analyze which backends are handling most traffic
+
 ### Troubleshooting with Priority Levels
 
 ```bash
@@ -400,3 +490,4 @@ Debug endpoints expose request/response content in the response body. Ensure the
 - Requests to other endpoints (not `/v1/messages*`, `/api/*`, `/models*`) are not tracked
 - Large request/response payloads may be truncated or impact performance
 - Debug history is stored in memory and resets on restart
+- Backend-specific tracking requires that the backend ID is properly assigned to each request

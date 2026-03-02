@@ -194,7 +194,7 @@ For development and troubleshooting, the load balancer provides debug endpoints:
 
 Enable debug mode by setting `DEBUG=true` in your `.env` file.
 
-For detailed documentation of debug endpoints, see [BACKEND_DEBUG_ENDPOINTS.md](BACKEND_DEBUG_ENDPOINTS.md).
+For detailed documentation of debug endpoints, see [DEBUG_REQUESTS.md](DEBUG_REQUESTS.md).
 
 ## Troubleshooting
 
