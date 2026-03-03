@@ -14,8 +14,6 @@ class Balancer {
     this.maxQueueSize = maxQueueSize;
     this.queueTimeout = queueTimeout;
     this.queues = new Map(); // Single global queue (priority 0)
-    this.initializeQueue(0); // Single global queue
-    this.currentPriorityIndex = 0; // Track position in priority-sorted backend list
 
     // Debug configuration
     this.debug = debug;
@@ -24,15 +22,6 @@ class Balancer {
   }
 
   /**
-   * Initialize a queue for a specific priority tier
-   * Note: Now using single global queue for all priorities
-   */
-  initializeQueue(priority) {
-    // Single global queue - always use the same queue
-    if (!this.queues.has(0)) {
-      this.queues.set(0, []);
-    }
-  }
 
   /**
    * Get queue statistics for the single global queue
@@ -67,40 +56,6 @@ class Balancer {
    */
   getAllQueueStats() {
     return [this.getQueueStats()];
-  }
-
-  /**
-   * Add a request to the queue for a specific priority tier
-   */
-  _addToQueue(priority, request) {
-    const queue = this.queues.get(priority);
-    if (queue.length >= this.maxQueueSize) {
-      request.reject(new Error(`Queue overflow for priority ${priority}`));
-      return false;
-    }
-
-    // Add timeout for queue entry
-    const timeoutId = setTimeout(() => {
-      const idx = queue.findIndex(r => r.reject === request.reject);
-      if (idx !== -1) {
-        queue.splice(idx, 1);
-        request.reject(new Error(`Queue timeout for priority ${priority}`));
-      }
-    }, this.queueTimeout);
-    request.timeoutId = timeoutId;
-
-    queue.push(request);
-    return true;
-  }
-
-  /**
-   * Clear a queued request (cancel timeout)
-   * Note: No longer used with single global queue, kept for backward compatibility
-   */
-  _clearQueueEntry(request) {
-    if (request.timeoutId) {
-      clearTimeout(request.timeoutId);
-    }
   }
 
   /**
@@ -156,7 +111,7 @@ class Balancer {
     // Process all pending requests from the single queue
     while (queue.length > 0) {
       const request = queue[0];
-      clearTimeout(request.timeoutId);
+      clearTimeout(request.timeout);
 
       const backendIndex = this.getNextBackendIndex(priority);
       const backend = this.backends[backendIndex];
@@ -222,24 +177,8 @@ class Balancer {
    * @returns {Object|null} Highest priority backend or null if no healthy backends
    */
   _getHighestPriorityBackend() {
-    // Find the highest priority healthy and available backend (not busy)
-    const availableBackends = this.backends.filter(b => b.healthy && !b.busy);
-    if (availableBackends.length === 0) {
-      return null;
-    }
-
-    // Sort by priority (descending) to find highest priority
-    const sorted = [...availableBackends].sort((a, b) => {
-      const priorityA = a.priority || 0;
-      const priorityB = b.priority || 0;
-      if (priorityA !== priorityB) {
-        return priorityB - priorityA;  // Higher priority first
-      }
-      return this.backends.indexOf(a) - this.backends.indexOf(b);
-    });
-
-    // Return the first (highest priority) backend
-    return sorted[0];
+    const backend = this._getSortedAvailableBackends()[0];
+    return backend || null;
   }
 
   /**
@@ -250,24 +189,29 @@ class Balancer {
    * @returns {number|null} Index of highest priority backend or null
    */
   getNextBackendIndex(priority) {
-    // Find the highest priority healthy backend
+    const backend = this._getSortedAvailableBackends()[0];
+    return backend ? this.backends.indexOf(backend) : null;
+  }
+
+  /**
+   * Helper method to get sorted available backends
+   * @returns {Array} Sorted array of available backends (highest priority first)
+   */
+  _getSortedAvailableBackends() {
     const availableBackends = this.backends.filter(b => b.healthy && !b.busy);
     if (availableBackends.length === 0) {
-      return null;
+      return [];
     }
 
     // Sort by priority (descending) to find highest priority
-    const sorted = [...availableBackends].sort((a, b) => {
+    return [...availableBackends].sort((a, b) => {
       const priorityA = a.priority || 0;
       const priorityB = b.priority || 0;
       if (priorityA !== priorityB) {
-        return priorityB - priorityA;
+        return priorityB - priorityA;  // Higher priority first
       }
       return this.backends.indexOf(a) - this.backends.indexOf(b);
     });
-
-    // Return the index of the highest priority backend
-    return this.backends.indexOf(sorted[0]);
   }
 
   /**
