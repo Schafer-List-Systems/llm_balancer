@@ -18,7 +18,7 @@ class Balancer {
     // Queue management
     this.maxQueueSize = maxQueueSize;
     this.queueTimeout = queueTimeout;
-    this.queues = new Map(); // Single global queue (priority 0)
+    this.queues = new Map([[0, []]]); // Single global queue (priority 0)
 
     // Debug configuration
     this.debug = debug;
@@ -274,6 +274,7 @@ class Balancer {
     const backend = this.backends.find(b => b.url === backendUrl);
     if (backend) {
       backend.healthy = false;
+      backend.busy = false; // Also clear busy flag so it can be retried
       backend.failCount = (backend.failCount || 0) + 1;
       backend.errorCount = (backend.errorCount || 0) + 1;
       this.healthCheckCount.set(backendUrl, (this.healthCheckCount.get(backendUrl) || 0) + 1);
@@ -287,10 +288,10 @@ class Balancer {
    */
   markHealthy(backendUrl) {
     const backend = this.backends.find(b => b.url === backendUrl);
-    if (backend) {
+    if (backend && !backend.healthy) {
+      // Only mark as healthy if it wasn't already
       backend.healthy = true;
       backend.failCount = 0;
-      backend.busy = false;  // Reset busy state when backend is marked healthy
       console.log(`[${getTimestamp()}] [Balancer] Backend recovered: ${backendUrl}`);
     }
   }

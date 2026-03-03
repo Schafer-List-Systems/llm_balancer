@@ -91,12 +91,6 @@ function forwardRequest(req, res, backend) {
     }
   };
 
-  // Set timeout to clear busy state if request takes too long
-  // TODO: use configured timeout, not the default
-  const requestTimeout = setTimeout(() => {
-    releaseBackend();
-  }, 30000); // 30 seconds default
-
   const targetUrl = new URL(req.url, backend.url);
 
   // Capture request body for debug tracking
@@ -188,7 +182,6 @@ function forwardRequest(req, res, backend) {
     });
 
     proxyReq.on('error', (err) => {
-      clearTimeout(requestTimeout);
       console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
       balancer.markFailed(backend.url);
       res.status(502).json({
@@ -200,7 +193,6 @@ function forwardRequest(req, res, backend) {
 
     proxyReq.on('end', () => {
       console.log(`[${getTimestamp()}] [Balancer] Proxy request to ${backend.url} ended, releasing backend ${backend.id}`);
-      clearTimeout(requestTimeout);
       // Release backend
       releaseBackend();
     });
@@ -256,13 +248,11 @@ function forwardRequest(req, res, backend) {
         } catch (e) {
           res.status(proxyRes.statusCode).send(data);
         } finally {
-          clearTimeout(requestTimeout);
           releaseBackend();
         }
       });
     })
     .on('error', (err) => {
-      clearTimeout(requestTimeout);
       console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
       balancer.markFailed(backend.url);
       res.status(502).json({
@@ -274,7 +264,6 @@ function forwardRequest(req, res, backend) {
       releaseBackend();
     })
     .on('end', () => {
-      clearTimeout(requestTimeout);
       // Release backend
       releaseBackend();
     })
@@ -318,6 +307,7 @@ app.all('/v1/messages*', async (req, res) => {
         backendId: backend.id,
         backendUrl: backend.url
       },
+      null,
       null,
       { data: null, contentType: null, statusCode: null }
     );
@@ -370,6 +360,7 @@ app.all('/api/*', async (req, res) => {
         backendUrl: backend.url
       },
       null,
+      null,
       { data: null, contentType: null, statusCode: null }
     );
 
@@ -420,6 +411,7 @@ app.all('/models*', async (req, res) => {
         backendId: backend.id,
         backendUrl: backend.url
       },
+      null,
       null,
       { data: null, contentType: null, statusCode: null }
     );
