@@ -182,7 +182,7 @@ function forwardRequest(req, res, backend) {
     });
 
     proxyReq.on('error', (err) => {
-      console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
+      console.error(`[${getTimestamp()}] [Gateway] Request to ${backend.url} failed:`, err.message);
       balancer.markFailed(backend.url);
       res.status(502).json({
         error: 'Bad Gateway',
@@ -253,7 +253,7 @@ function forwardRequest(req, res, backend) {
       });
     })
     .on('error', (err) => {
-      console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
+      console.error(`[${getTimestamp()}] [Gateway] Request to ${backend.url} failed:`, err.message);
       balancer.markFailed(backend.url);
       res.status(502).json({
         error: 'Bad Gateway',
@@ -275,7 +275,6 @@ function forwardRequest(req, res, backend) {
  * Route: Anthropic API routes (with queuing support)
  */
 app.all('/v1/messages*', async (req, res) => {
-  const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
   const immediate = req.query.immediate === 'true';
 
   if (immediate && !balancer.hasAvailableBackends()) {
@@ -287,7 +286,7 @@ app.all('/v1/messages*', async (req, res) => {
   }
 
   try {
-    const backend = await balancer.queueRequest(priority);
+    const backend = await balancer.queueRequest();
     if (!backend) {
       return res.status(503).json({
         error: 'Service Unavailable',
@@ -303,18 +302,15 @@ app.all('/v1/messages*', async (req, res) => {
       {
         route,
         method: req.method,
-        priority: priority,
+        priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url
-      },
-      null,
-      null,
-      { data: null, contentType: null, statusCode: null }
+      }
     );
 
     forwardRequest(req, res, backend);
   } catch (error) {
-    console.error(`[Gateway] Queue request failed:`, error.message);
+    console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
       error: 'Service Unavailable',
       message: error.message,
@@ -339,7 +335,7 @@ app.all('/api/*', async (req, res) => {
   }
 
   try {
-    const backend = await balancer.queueRequest(priority);
+    const backend = await balancer.queueRequest();
     if (!backend) {
       return res.status(503).json({
         error: 'Service Unavailable',
@@ -355,18 +351,15 @@ app.all('/api/*', async (req, res) => {
       {
         route,
         method: req.method,
-        priority: priority,
+        priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url
-      },
-      null,
-      null,
-      { data: null, contentType: null, statusCode: null }
+      }
     );
 
     forwardRequest(req, res, backend);
   } catch (error) {
-    console.error(`[Gateway] Queue request failed:`, error.message);
+    console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
       error: 'Service Unavailable',
       message: error.message,
@@ -391,7 +384,7 @@ app.all('/models*', async (req, res) => {
   }
 
   try {
-    const backend = await balancer.queueRequest(priority);
+    const backend = await balancer.queueRequest();
     if (!backend) {
       return res.status(503).json({
         error: 'Service Unavailable',
@@ -407,18 +400,15 @@ app.all('/models*', async (req, res) => {
       {
         route,
         method: req.method,
-        priority: priority,
+        priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url
-      },
-      null,
-      null,
-      { data: null, contentType: null, statusCode: null }
+      }
     );
 
     forwardRequest(req, res, backend);
   } catch (error) {
-    console.error(`[Gateway] Queue request failed:`, error.message);
+    console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
       error: 'Service Unavailable',
       message: error.message,
@@ -719,7 +709,7 @@ app.use((req, res) => {
  * Error handler
  */
 app.use((err, req, res, next) => {
-  console.error('[Gateway] Error:', err);
+  console.error(`[${getTimestamp()}] [Gateway] Error:`, err);
   res.status(500).json({
     error: 'Internal Server Error',
     message: err.message

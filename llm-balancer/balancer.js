@@ -85,7 +85,7 @@ class Balancer {
    * @param {number} priority - Optional: priority level (used for backend selection only)
    * @returns {Promise<Object|null>} Resolves to backend or null if all backends unhealthy
    */
-  async queueRequest(priority) {
+  async queueRequest() {
     // Try to get backend immediately (when at least one backend is available)
     const immediateBackend = this._getHighestPriorityBackend();
     if (immediateBackend) {
@@ -99,7 +99,7 @@ class Balancer {
     }
 
     // All backends are busy/unhealthy, queue for single global queue
-    return this._queueForPriorityTier(priority);
+    return this._queueForPriorityTier();
   }
 
   /**
@@ -143,7 +143,7 @@ class Balancer {
    * Queue a request for a specific priority tier
    * All requests now go into a single global queue
    */
-  _queueForPriorityTier(priority) {
+  _queueForPriorityTier() {
     // Check if any healthy backends exist before queuing
     if (!this.hasAvailableBackends()) {
       return Promise.reject(new Error('No healthy backends available'));
@@ -161,7 +161,6 @@ class Balancer {
       }
 
       const request = {
-        priority,
         resolve,
         reject,
         timestamp: Date.now(),
