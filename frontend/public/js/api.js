@@ -91,6 +91,58 @@ class ApiClient {
   }
 
   /**
+   * Get debug statistics
+   */
+  async getDebugStats() {
+    try {
+      const data = await this.request('/debug/stats');
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get debug requests
+   */
+  async getDebugRequests(limit = 50) {
+    try {
+      const data = await this.request(`/debug/requests/recent?limit=${limit}`);
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get debug requests for a specific backend
+   */
+  async getDebugRequestsByBackend(backendId, limit = 50) {
+    try {
+      const data = await this.request(`/debug/requests/backend/${encodeURIComponent(backendId)}?limit=${limit}`);
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Clear debug history
+   */
+  async clearDebugHistory() {
+    try {
+      await this.request('/debug/clear', { method: 'POST' });
+      this.lastUpdateTime = new Date();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Perform manual health check for a specific backend
    */
   async checkBackendHealth(backendUrl) {

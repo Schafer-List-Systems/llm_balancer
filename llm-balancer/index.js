@@ -149,9 +149,18 @@ function forwardRequest(req, res, backend) {
         });
         proxyRes.on('end', () => {
           // Track debug request with request/response content
+          const route = req.path || req.originalUrl || '/';
+          if (route === '/') {
+            console.warn(`[DEBUG] Request tracked with undefined path:`, {
+              originalUrl: req.originalUrl,
+              path: req.path,
+              url: req.url
+            });
+          }
+
           balancer.trackDebugRequest(
             {
-              route: req.path,
+              route,
               method: req.method,
               priority: backend.priority || 0,
               backendId: backend.id,
@@ -221,9 +230,10 @@ function forwardRequest(req, res, backend) {
         console.log(`[Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
 
         // Track debug request with request/response content
+        const route = req.path || req.originalUrl || '/';
         balancer.trackDebugRequest(
           {
-            route: req.path,
+            route,
             method: req.method,
             priority: backend.priority || 0,
             backendId: backend.id,
@@ -292,9 +302,10 @@ app.all('/v1/messages*', async (req, res) => {
     }
 
     // Track debug request
+    const route = req.path || req.originalUrl || '/';
     balancer.trackDebugRequest(
       {
-        route: req.path,
+        route,
         method: req.method,
         priority: priority,
         backendId: backend.id,
@@ -342,9 +353,10 @@ app.all('/api/*', async (req, res) => {
     }
 
     // Track debug request
+    const route = req.path || req.originalUrl || '/';
     balancer.trackDebugRequest(
       {
-        route: req.path,
+        route,
         method: req.method,
         priority: priority,
         backendId: backend.id,
@@ -392,9 +404,10 @@ app.all('/models*', async (req, res) => {
     }
 
     // Track debug request
+    const route = req.path || req.originalUrl || '/';
     balancer.trackDebugRequest(
       {
-        route: req.path,
+        route,
         method: req.method,
         priority: priority,
         backendId: backend.id,

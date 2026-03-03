@@ -115,6 +115,58 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Configuration will be rendered here -->
           </div>
         </section>
+
+        <section class="backends-section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Debug</h2>
+              <p class="section-description">Request/response content tracking and debugging</p>
+            </div>
+            <button id="toggleDebug" class="toggle-button">Show Debug</button>
+          </div>
+          <div id="debugSection" class="debug-section" style="display: none;">
+            <div class="debug-stats">
+              <div class="debug-stat-item">
+                <span class="debug-stat-label">Enabled</span>
+                <span class="debug-stat-value" id="debugEnabled">-</span>
+              </div>
+              <div class="debug-stat-item">
+                <span class="debug-stat-label">Total Requests</span>
+                <span class="debug-stat-value" id="debugTotalRequests">-</span>
+              </div>
+            </div>
+
+            <div class="debug-controls">
+              <input type="text" id="backendFilter" placeholder="Filter by backend ID..." class="input-field">
+              <select id="requestLimit" class="select-field">
+                <option value="10">10 requests</option>
+                <option value="25">25 requests</option>
+                <option value="50" selected>50 requests</option>
+                <option value="100">100 requests</option>
+              </select>
+              <button id="expandAll" class="button button-secondary" title="Expand all sections">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M2 4v2h12V4H2z"/>
+                  <path d="M2 8v2h12V8H2z"/>
+                  <path d="M2 12v2h12v-2H2z"/>
+                </svg>
+                Expand All
+              </button>
+              <button id="collapseAll" class="button button-secondary" title="Collapse all sections">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 2h8v12H4z"/>
+                </svg>
+                Collapse All
+              </button>
+              <button id="refreshDebug" class="button button-secondary">Refresh</button>
+              <button id="clearDebug" class="button button-danger">Clear History</button>
+            </div>
+
+            <div id="debugRequestsContainer" class="debug-requests-container">
+              <p class="debug-empty">Loading debug data...</p>
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer class="footer">
@@ -424,6 +476,199 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'text-success';
   }
 
+  // Toggle debug section
+  function toggleDebugSection() {
+    const debugSection = document.getElementById('debugSection');
+    const toggleButton = document.getElementById('toggleDebug');
+
+    if (debugSection.style.display === 'none') {
+      debugSection.style.display = 'block';
+      toggleButton.textContent = 'Hide Debug';
+      toggleButton.classList.add('active');
+      loadDebugData();
+    } else {
+      debugSection.style.display = 'none';
+      toggleButton.textContent = 'Show Debug';
+      toggleButton.classList.remove('active');
+    }
+  }
+
+  // Load debug data
+  async function loadDebugData() {
+    const requestsContainer = document.getElementById('debugRequestsContainer');
+    const backendFilter = document.getElementById('backendFilter').value;
+    const requestLimit = parseInt(document.getElementById('requestLimit').value);
+
+    // Get debug stats
+    const statsResult = await apiClient.getDebugStats();
+
+    if (statsResult.success) {
+      document.getElementById('debugEnabled').textContent = statsResult.data.enabled ? 'Yes' : 'No';
+      document.getElementById('debugEnabled').style.color = statsResult.data.enabled ? 'var(--success-color)' : 'var(--text-secondary)';
+      document.getElementById('debugTotalRequests').textContent = statsResult.data.totalRequests || 0;
+    }
+
+    if (!backendFilter) {
+      // Load all requests
+      const result = await apiClient.getDebugRequests(requestLimit);
+
+      if (result.success) {
+        renderDebugRequests(result.data.requests);
+      } else {
+        requestsContainer.innerHTML = `<p class="debug-empty">Failed to load debug data: ${result.error}</p>`;
+      }
+    } else {
+      // Load requests for specific backend
+      const result = await apiClient.getDebugRequestsByBackend(backendFilter, requestLimit);
+
+      if (result.success) {
+        renderDebugRequests(result.data.requests);
+      } else {
+        requestsContainer.innerHTML = `<p class="debug-empty">Failed to load debug data: ${result.error}</p>`;
+      }
+    }
+  }
+
+  // Render debug requests
+  function renderDebugRequests(requests) {
+    const requestsContainer = document.getElementById('debugRequestsContainer');
+
+    if (!requests || requests.length === 0) {
+      requestsContainer.innerHTML = '<p class="debug-empty">No requests found</p>';
+      return;
+    }
+
+    const methodColors = {
+      GET: { bg: '#dcfce7', color: '#166534' },
+      POST: { bg: '#dbeafe', color: '#1e40af' },
+      PUT: { bg: '#fef3c7', color: '#92400e' },
+      DELETE: { bg: '#fee2e2', color: '#991b1b' }
+    };
+
+    requestsContainer.innerHTML = requests.map(req => {
+      const methodColor = methodColors[req.method] || { bg: '#f1f5f9', color: '#64748b' };
+      const statusColor = req.statusCode >= 200 && req.statusCode < 300 ? 'success' : 'error';
+
+      return `
+        <div class="debug-request-item">
+          <div class="debug-request-header">
+            <span class="debug-request-method" style="background-color: ${methodColor.bg}; color: ${methodColor.color};">
+              ${req.method}
+            </span>
+            <span class="debug-request-status ${statusColor}">
+              ${req.statusCode} ${req.statusText || ''}
+            </span>
+            <span class="debug-request-path">${req.route}</span>
+            <span class="debug-request-time">${new Date(req.timestamp).toLocaleString()}</span>
+          </div>
+          ${req.backendId ? `<div class="debug-request-backend">Backend: ${req.backendId}</div>` : ''}
+          ${req.requestContent ? createCollapsibleSection('Request Body', formatJson(req.requestContent), false) : ''}
+          ${req.responseContent ? createCollapsibleSection('Response', formatJson(extractResponseData(req.responseContent).data), false) : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Extract and parse response data from debug object
+   * Response content is string: '{"data":"{actual content}","contentType":"...","statusCode":200}'
+   */
+  function extractResponseData(responseContent) {
+    try {
+      const parsed = typeof responseContent === 'string'
+        ? JSON.parse(responseContent)
+        : responseContent;
+
+      return {
+        data: parsed.data,
+        contentType: parsed.contentType || 'application/json',
+        statusCode: parsed.statusCode || 200
+      };
+    } catch (error) {
+      console.error('Failed to parse response content:', error);
+      return {
+        data: responseContent,
+        contentType: 'unknown',
+        statusCode: 0
+      };
+    }
+  }
+
+  /**
+   * Pretty-print JSON with syntax highlighting
+   */
+  function formatJson(json, indent = 2) {
+    try {
+      const obj = typeof json === 'string' ? JSON.parse(json) : json;
+      const jsonString = JSON.stringify(obj, null, indent);
+
+      // Simple syntax highlighting with regex
+      return jsonString
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+          let cls = 'json-key';
+          if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+              cls = 'json-key';
+            } else {
+              cls = 'json-string';
+            }
+          } else if (/true|false/.test(match)) {
+            cls = 'json-boolean';
+          } else if (/null/.test(match)) {
+            cls = 'json-null';
+          } else if (/\d/.test(match)) {
+            cls = 'json-number';
+          }
+          return '<span class="' + cls + '">' + match + '</span>';
+        });
+    } catch (error) {
+      return '<span class="json-error">' + json + '</span>';
+    }
+  }
+
+  /**
+   * Create collapsible section HTML
+   * @param {string} title - Header title
+   * @param {string} contentHtml - Content to display
+   * @param {boolean} isInitiallyExpanded - Whether section is expanded by default
+   */
+  function createCollapsibleSection(title, contentHtml, isInitiallyExpanded = false) {
+    const defaultClass = isInitiallyExpanded ? 'collapsible-section expanded' : 'collapsible-section';
+    const iconClass = isInitiallyExpanded ? 'collapsible-icon expanded' : 'collapsible-icon';
+    const arrow = isInitiallyExpanded ? '▼' : '▶';
+
+    return `
+      <div class="${defaultClass}" data-expanded="${isInitiallyExpanded}">
+        <div class="collapsible-header">
+          <span class="collapsible-toggle">
+            <span class="${iconClass}">${arrow}</span>
+          </span>
+          <span class="collapsible-title">${title}</span>
+        </div>
+        <div class="collapsible-content" style="display: ${isInitiallyExpanded ? 'block' : 'none'};">
+          <div class="collapsible-body">
+            ${contentHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Clear debug history
+  async function clearDebugHistory() {
+    const result = await apiClient.clearDebugHistory();
+
+    if (result.success) {
+      showNotification('Debug history cleared successfully', 'success');
+      loadDebugData();
+    } else {
+      showNotification(`Failed to clear debug history: ${result.error}`, 'error');
+    }
+  }
+
   // Render dashboard with data
   function renderDashboard() {
     const data = apiClient.getData();
@@ -445,13 +690,104 @@ document.addEventListener('DOMContentLoaded', () => {
     createDashboard();
 
     // Ensure apiClient is loaded
-
     if (!window.apiClient) {
       loadingContainer.innerHTML = '<p>Error: API client not loaded</p>';
       return;
     }
 
     const apiClient = window.apiClient;
+
+    // Add event listener for debug toggle
+    const toggleButton = document.getElementById('toggleDebug');
+    if (toggleButton) {
+      toggleButton.addEventListener('click', toggleDebugSection);
+    }
+
+    // Add event listeners for debug controls
+    const refreshButton = document.getElementById('refreshDebug');
+    const clearButton = document.getElementById('clearDebug');
+    const backendFilter = document.getElementById('backendFilter');
+    const requestLimit = document.getElementById('requestLimit');
+
+    if (refreshButton) {
+      refreshButton.addEventListener('click', loadDebugData);
+    }
+
+    if (clearButton) {
+      clearButton.addEventListener('click', clearDebugHistory);
+    }
+
+    if (backendFilter) {
+      backendFilter.addEventListener('change', loadDebugData);
+    }
+
+    if (requestLimit) {
+      requestLimit.addEventListener('change', loadDebugData);
+    }
+
+    // Add event listener for collapsible sections
+    const debugSection = document.getElementById('debugSection');
+    if (debugSection) {
+      debugSection.addEventListener('click', (e) => {
+        const header = e.target.closest('.collapsible-header');
+        if (header) {
+          const section = header.parentElement;
+          const content = section.querySelector('.collapsible-content');
+          const icon = section.querySelector('.collapsible-icon');
+          const isExpanded = section.classList.contains('expanded');
+
+          if (isExpanded) {
+            section.classList.remove('expanded');
+            content.style.display = 'none';
+            icon.classList.remove('expanded');
+            icon.textContent = '▶';
+            section.setAttribute('data-expanded', 'false');
+          } else {
+            section.classList.add('expanded');
+            content.style.display = 'block';
+            icon.classList.add('expanded');
+            icon.textContent = '▼';
+            section.setAttribute('data-expanded', 'true');
+          }
+        }
+      });
+    }
+
+    // Add event listeners for expand/collapse all
+    const expandAllButton = document.getElementById('expandAll');
+    const collapseAllButton = document.getElementById('collapseAll');
+
+    if (expandAllButton) {
+      expandAllButton.addEventListener('click', () => {
+        document.querySelectorAll('.collapsible-section').forEach(section => {
+          section.classList.add('expanded');
+          const content = section.querySelector('.collapsible-content');
+          const icon = section.querySelector('.collapsible-icon');
+          if (content) content.style.display = 'block';
+          if (icon) {
+            icon.classList.add('expanded');
+            icon.textContent = '▼';
+          }
+          section.setAttribute('data-expanded', 'true');
+        });
+      });
+    }
+
+    if (collapseAllButton) {
+      collapseAllButton.addEventListener('click', () => {
+        document.querySelectorAll('.collapsible-section').forEach(section => {
+          section.classList.remove('expanded');
+          const content = section.querySelector('.collapsible-content');
+          const icon = section.querySelector('.collapsible-icon');
+          if (content) content.style.display = 'none';
+          if (icon) {
+            icon.classList.remove('expanded');
+            icon.textContent = '▶';
+          }
+          section.setAttribute('data-expanded', 'false');
+        });
+      });
+    }
 
     // Start polling
 
