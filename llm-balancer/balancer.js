@@ -3,6 +3,11 @@
  * Distributes requests among healthy backends
  */
 
+// Helper function to get formatted timestamp
+function getTimestamp() {
+  return new Date().toISOString();
+}
+
 class Balancer {
   constructor(backends, maxQueueSize = 100, queueTimeout = 30000, debug = false, debugRequestHistorySize = 100) {
     this.backends = backends;
@@ -106,7 +111,7 @@ class Balancer {
     const queue = this.queues.get(0);
     if (!queue || queue.length === 0) return;
 
-    console.log(`[Balancer] Backend available, processing ${queue.length} queued request(s) for priority ${priority}`);
+    console.log(`[${getTimestamp()}] [Balancer] Backend available, processing ${queue.length} queued request(s) for priority ${priority}`);
 
     // Process all pending requests from the single queue
     while (queue.length > 0) {
@@ -118,7 +123,7 @@ class Balancer {
 
       if (backend && !backend.busy) {
         queue.shift();  // Remove from queue
-        console.log(`[Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
+        console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
         request.resolve({
           backend: {
             id: backend.id,
@@ -272,7 +277,7 @@ class Balancer {
       backend.failCount = (backend.failCount || 0) + 1;
       backend.errorCount = (backend.errorCount || 0) + 1;
       this.healthCheckCount.set(backendUrl, (this.healthCheckCount.get(backendUrl) || 0) + 1);
-      console.error(`[Balancer] Backend marked as unhealthy: ${backendUrl}`);
+      console.error(`[${getTimestamp()}] [Balancer] Backend marked as unhealthy: ${backendUrl}`);
     }
   }
 
@@ -286,7 +291,7 @@ class Balancer {
       backend.healthy = true;
       backend.failCount = 0;
       backend.busy = false;  // Reset busy state when backend is marked healthy
-      console.log(`[Balancer] Backend recovered: ${backendUrl}`);
+      console.log(`[${getTimestamp()}] [Balancer] Backend recovered: ${backendUrl}`);
     }
   }
 
@@ -346,7 +351,7 @@ class Balancer {
     }
 
     // Log to console if debug is enabled
-    console.log(`[DEBUG] Request tracked:`, metadata);
+    console.log(`[${getTimestamp()}] [DEBUG] Request tracked:`, metadata);
   }
 
   /**
@@ -388,7 +393,7 @@ class Balancer {
   clearDebugRequestHistory() {
     if (!this.debug) return;
     this.debugRequests = [];
-    console.log('[DEBUG] Request history cleared');
+    console.log(`[${getTimestamp()}] [DEBUG] Request history cleared`);
   }
 
   /**
