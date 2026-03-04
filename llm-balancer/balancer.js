@@ -1,6 +1,6 @@
 /**
- * Round-robin load balancer
- * Distributes requests among healthy backends
+ * Priority-based load balancer with FIFO queueing
+ * Distributes requests among healthy backends by priority, then queues waiting requests
  */
 
 // Helper function to get formatted timestamp
@@ -11,14 +11,13 @@ function getTimestamp() {
 class Balancer {
   constructor(backends, maxQueueSize = 100, queueTimeout = 30000, debug = false, debugRequestHistorySize = 100) {
     this.backends = backends;
-    this.currentIndex = 0;
     this.requestCount = new Map();
     this.healthCheckCount = new Map();
 
     // Queue management
     this.maxQueueSize = maxQueueSize;
     this.queueTimeout = queueTimeout;
-    this.queues = new Map([[0, []]]); // Single global queue (priority 0)
+    this.queue = []; // Single global queue
 
     // Debug configuration
     this.debug = debug;
@@ -31,23 +30,11 @@ class Balancer {
   /**
    * Get queue statistics for the single global queue
    */
-  getQueueStats(priority) {
-    const queue = this.queues.get(0);
+  getQueueStats() {
+    const queue = this.queue;
     const now = Date.now();
 
-    if (!queue) {
-      return {
-        priority: priority || 0,
-        depth: 0,
-        maxQueueSize: this.maxQueueSize,
-        queueTimeout: this.queueTimeout,
-        oldestRequestAge: 0,
-        isFull: false
-      };
-    }
-
     return {
-      priority: priority || 0,
       depth: queue.length,
       maxQueueSize: this.maxQueueSize,
       queueTimeout: this.queueTimeout,
@@ -60,77 +47,98 @@ class Balancer {
    * Get all queue statistics (now single queue)
    */
   getAllQueueStats() {
+    // TODO: this function is deprecated. replace all usage by getQueueStats() instead.
     return [this.getQueueStats()];
   }
 
   /**
-   * Get a backend for a request, with optional queuing
-   * If immediate=false, will queue the request if no backend is immediately available
-   * @param {number} priority - Priority tier to use (undefined = use all tiers)
-   * @param {boolean} immediate - If true, return immediately even if no backend available
-   * @returns {Object|null|Promise} Backend or null, or Promise that resolves to backend
-   */
-  getBackend(priority, immediate = false) {
-    if (!immediate) {
-      // Use queuing
-      return this.queueRequest(priority);
-    }
-
-    // Synchronous selection (existing behavior)
-    return this.getNextBackend();
-  }
-
-  /**
-   * Queue a request until a backend becomes available
-   * @param {number} priority - Optional: priority level (used for backend selection only)
-   * @returns {Promise<Object|null>} Resolves to backend or null if all backends unhealthy
+   * Queue a request for processing when a backend becomes available
+   * If there's no backlog (queue empty), get an immediate backend
+   * Otherwise, maintain FIFO by queuing the request
+   * @returns {Promise} Promise that resolves when a backend is available
    */
   async queueRequest() {
-    // Try to get backend immediately (when at least one backend is available)
-    const immediateBackend = this._getHighestPriorityBackend();
-    if (immediateBackend) {
-      // Mark as busy immediately to prevent concurrent requests getting same backend
-      immediateBackend.busy = true;
-      // Increment request count for this backend
-      immediateBackend.requestCount = (immediateBackend.requestCount || 0) + 1;
-      this.requestCount.set(immediateBackend.url,
-        (this.requestCount.get(immediateBackend.url) || 0) + 1);
-      return immediateBackend;
+    console.log(`[${getTimestamp()}] [Balancer] queueRequest() called, queue length: ${this.queue.length}, busy backends: ${this.backends.filter(b => b.busy).length}`);
+
+    // Check if any healthy backends exist before queuing
+    if (!this.hasHealthyBackends()) {
+        console.log(`[${getTimestamp()}] [Balancer] No healthy backends available`);
+        return Promise.reject(new Error('No healthy backends available'));
     }
 
-    // All backends are busy/unhealthy, queue for single global queue
-    return this._queueForPriorityTier();
+    // If queue is empty, try to get immediate backend
+    if (this.queue.length === 0) {
+        console.log(`[${getTimestamp()}] [Balancer] Queue empty, trying to get immediate backend`);
+        const backend = this.getNextBackend();
+        if (backend && !backend.busy) {
+            // Mark backend as busy to prevent concurrent requests getting same backend
+            backend.busy = true;
+            // Increment request count for this backend
+            backend.requestCount = (backend.requestCount || 0) + 1;
+            this.requestCount.set(backend.url,
+              (this.requestCount.get(backend.url) || 0) + 1);
+
+            console.log(`[${getTimestamp()}] [Balancer] Direct assignment to backend ${backend.url}`);
+            return Promise.resolve(backend);
+        } else {
+            console.log(`[${getTimestamp()}] [Balancer] No available backend found`);
+        }
+    }
+
+    return new Promise((resolve, reject) => {
+        const queue = this.queue;
+
+        if (queue.length >= this.maxQueueSize) {
+            reject(new Error('Queue is full'));
+            return;
+        }
+
+        const request = {
+            resolve,
+            reject,
+            timestamp: Date.now(),
+            timeout: setTimeout(() => {
+                reject(new Error('Request timeout'));
+            }, this.queueTimeout)
+        };
+
+        queue.push(request);
+        this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
+    });
   }
 
   /**
    * Notify that a backend is available (called when a backend becomes idle)
    * This will wake up queued requests from the single global queue
-   * @param {number} priority - The priority tier that became available (used for logging only)
    */
-  notifyBackendAvailable(priority) {
-    const queue = this.queues.get(0);
+  notifyBackendAvailable() {
+    const queue = this.queue;
     if (!queue || queue.length === 0) return;
 
-    console.log(`[${getTimestamp()}] [Balancer] Backend available, processing ${queue.length} queued request(s) for priority ${priority}`);
+    console.log(`[${getTimestamp()}] [Balancer] Backend available, processing ${queue.length} queued request(s)`);
 
     // Process all pending requests from the single queue
     while (queue.length > 0) {
       const request = queue[0];
       clearTimeout(request.timeout);
 
-      const backendIndex = this.getNextBackendIndex(priority);
-      const backend = this.backends[backendIndex];
+      const backend = this.getNextBackend();
 
       if (backend && !backend.busy) {
+        // Mark backend as busy to prevent concurrent requests getting same backend
+        backend.busy = true;
+        // Increment request count for this backend
+        backend.requestCount = (backend.requestCount || 0) + 1;
+        this.requestCount.set(backend.url,
+          (this.requestCount.get(backend.url) || 0) + 1);
+
         queue.shift();  // Remove from queue
-        console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
+        console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.url}`);
         request.resolve({
           backend: {
-            id: backend.id,
             url: backend.url,
             priority: backend.priority
-          },
-          backendIndex
+          }
         });
       } else {
         // No available backend, stop processing for now
@@ -140,59 +148,12 @@ class Balancer {
   }
 
   /**
-   * Queue a request for a specific priority tier
-   * All requests now go into a single global queue
-   */
-  _queueForPriorityTier() {
-    // Check if any healthy backends exist before queuing
-    if (!this.hasAvailableBackends()) {
-      return Promise.reject(new Error('No healthy backends available'));
-    }
-
-    return new Promise((resolve, reject) => {
-      if (!this.queues.has(0)) {
-        this.queues.set(0, []);
-      }
-      const queue = this.queues.get(0);
-
-      if (queue.length >= this.maxQueueSize) {
-        reject(new Error('Queue is full'));
-        return;
-      }
-
-      const request = {
-        resolve,
-        reject,
-        timestamp: Date.now(),
-        timeout: setTimeout(() => {
-          reject(new Error('Request timeout'));
-        }, this.queueTimeout)
-      };
-
-      queue.push(request);
-      this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
-    });
-  }
-
-
-  /**
-   * Get the highest priority available backend
-   * ALWAYS returns the highest priority healthy backend (no round-robin)
-   * @returns {Object|null} Highest priority backend or null if no healthy backends
-   */
-  _getHighestPriorityBackend() {
-    const backend = this._getSortedAvailableBackends()[0];
-    return backend || null;
-  }
-
-  /**
    * Get the index of the highest priority backend
    * Returns the index in the original backend array
    * Always returns the highest priority healthy backend
-   * @param {number} priority - Priority level (unused, kept for compatibility)
    * @returns {number|null} Index of highest priority backend or null
    */
-  getNextBackendIndex(priority) {
+  getNextBackendIndex() {
     const backend = this._getSortedAvailableBackends()[0];
     return backend ? this.backends.indexOf(backend) : null;
   }
@@ -207,7 +168,7 @@ class Balancer {
       return [];
     }
 
-    // Sort by priority (descending) to find highest priority
+    // Sort by priority (descending) to find the highest priority backend
     return [...availableBackends].sort((a, b) => {
       const priorityA = a.priority || 0;
       const priorityB = b.priority || 0;
@@ -220,8 +181,7 @@ class Balancer {
 
   /**
    * Get the next backend with priority-based selection
-   * Higher priority backends are selected first
-   * Uses round-robin across ALL backends (not within tiers)
+   * Higher priority backends are selected first (FIFO within same priority)
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {
@@ -231,35 +191,17 @@ class Balancer {
     }
 
     // Sort ALL backends by priority (descending), then by original order
-    const sortedBackends = [...this.backends].sort((a, b) => {
-      const priorityA = a.priority || 0;
-      const priorityB = b.priority || 0;
-      if (priorityA !== priorityB) {
-        return priorityB - priorityA;  // Higher priority first
-      }
-      return this.backends.indexOf(a) - this.backends.indexOf(b);  // Original order as tiebreaker
-    });
+    const sortedBackends = this._getSortedAvailableBackends();
 
-    // Get next backend using round-robin across ALL sorted backends
-    let attempts = 0;
-    let backend;
-
-    while (attempts < totalBackends) {
-      backend = sortedBackends[this.currentIndex % totalBackends];
+    for (let i = 0; i < sortedBackends.length; i++ ) {
+      let backend = sortedBackends[i];
 
       if (backend.healthy && !backend.busy) {
-        backend.requestCount = (backend.requestCount || 0) + 1;
-        this.requestCount.set(backend.url,
-          (this.requestCount.get(backend.url) || 0) + 1
-        );
-
-        this.currentIndex = (this.currentIndex + 1) % totalBackends;
         return backend;
       }
 
       // Backend is unhealthy or busy, try next
-      this.currentIndex = (this.currentIndex + 1) % totalBackends;
-      attempts++;
+      i++;
     }
 
     return null;
@@ -299,7 +241,7 @@ class Balancer {
    * Check if any healthy backends exist
    * @returns {boolean} True if there are healthy backends
    */
-  hasAvailableBackends() {
+  hasHealthyBackends() {
     return this.backends.some(b => b.healthy);
   }
 
@@ -406,8 +348,7 @@ class Balancer {
     return {
       enabled: true,
       totalRequests: this.debugRequests.length,
-      queueSize: this.queues.get(0)?.length || 0,
-      currentIndex: this.currentIndex,
+      queueSize: this.queue.length,
       requestHistorySize: this.debugRequestHistorySize
     };
   }
