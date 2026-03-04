@@ -13,8 +13,8 @@ Successfully implemented a load balancer for Ollama API servers with health chec
    - Loads configuration settings (port, health check intervals, timeouts, retries)
    - Creates backend objects with health status tracking
 
-2. **balancer.js** - Round-robin load balancer
-   - Distributes requests across multiple backends
+2. **balancer.js** - Priority-based load balancer with FIFO queueing
+   - Distributes requests across multiple backends by priority
    - Skips unhealthy backends
    - Tracks request counts and health check statistics
    - Provides recovery mechanisms for failed backends
@@ -51,12 +51,12 @@ Successfully implemented a load balancer for Ollama API servers with health chec
 
 ## Key Features Implemented
 
-✅ **Round-robin load balancing** - Distributes requests across multiple backends
+✅ **FIFO-based load balancing** - Distributes requests across multiple backends
 ✅ **Smart request routing with idle backend prioritization** - Routes to idle backends first for better load distribution
 ✅ **Per-backend busy state tracking** - Each backend tracks if it's handling a request
 ✅ **30-second timeout for busy state** - Prevents backends from staying stuck in busy state
 ✅ **Health checking** - Periodic health checks via `/api/tags` endpoint
-✅ **Automatic failover** - Skips unhealthy backends in round-robin
+✅ **Automatic failover** - Skips unhealthy backends during selection
 ✅ **Backend recovery** - Automatically recovers healthy backends
 ✅ **Streaming support** - Maintains streaming response capability
 ✅ **Multiple API formats** - Supports Anthropic and Ollama API formats
@@ -92,7 +92,7 @@ Each backend tracks whether it's actively handling a request. The load balancer 
 
 2. **Request Routing** (`balancer.js`):
    - **Priority 1**: Selects an idle, healthy backend (`!b.busy`)
-   - **Priority 2**: Falls back to round-robin across all healthy backends
+   - **Priority 2**: Falls back to lower priority backends when higher priority are busy
    - This ensures better load distribution when backends have varying request loads
 
 3. **Busy State Management** (`index.js`):
@@ -166,7 +166,7 @@ All components have been tested and verified:
 
 ✅ Health check endpoint works correctly
 ✅ Statistics endpoint provides detailed information
-✅ Round-robin distribution works as expected
+✅ FIFO-based distribution works as expected
 ✅ Backend health tracking functions properly
 ✅ Streaming responses handled correctly
 ✅ Configuration loading works with environment variables

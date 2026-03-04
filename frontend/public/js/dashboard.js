@@ -7,6 +7,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadingContainer = document.querySelector('.loading-container');
   const lastUpdateTime = document.querySelector('.last-update');
 
+  // Token speed indicator
+  let tokenSpeedIndicator = null;
+
+  /**
+   * Show token speed indicator during streaming
+   * @param {number} tokenSpeed - Current token speed in tokens per second
+   */
+  function showTokenSpeedIndicator(tokenSpeed) {
+    if (!tokenSpeedIndicator) {
+      tokenSpeedIndicator = document.createElement('div');
+      tokenSpeedIndicator.id = 'tokenSpeedIndicator';
+      tokenSpeedIndicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        z-index: 1000;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      `;
+      document.body.appendChild(tokenSpeedIndicator);
+    }
+
+    tokenSpeedIndicator.innerHTML = `
+      <span style="font-size: 18px;">⚡</span>
+      <span id="tokenSpeedValue">${tokenSpeed}</span>
+      <span style="font-size: 12px; opacity: 0.8;">tokens/sec</span>
+    `;
+  }
+
+  /**
+   * Hide token speed indicator
+   */
+  function hideTokenSpeedIndicator() {
+    if (tokenSpeedIndicator) {
+      tokenSpeedIndicator.remove();
+      tokenSpeedIndicator = null;
+    }
+  }
+
   // Create dashboard structure
   function createDashboard() {
     root.innerHTML = `
@@ -206,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update connection status
     const connectionStatus = document.getElementById('connectionStatus');
-    if (healthData.hasAvailableBackends) {
+    if (healthData.hasHealthyBackends) {
       connectionStatus.className = 'status-badge connected';
       connectionStatus.querySelector('span:last-child').textContent = 'Connected';
     } else {
@@ -353,6 +399,46 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateLastUpdateTime(lastUpdateTime) {
     if (lastUpdateTime) {
       document.getElementById('updateTime').textContent = new Date(lastUpdateTime).toLocaleString();
+    }
+  }
+
+  // Show token speed indicator
+  function showTokenSpeedIndicator(tokenSpeed) {
+    let indicator = document.getElementById('tokenSpeedIndicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'tokenSpeedIndicator';
+      indicator.className = 'token-speed-indicator';
+      indicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        z-index: 1000;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      `;
+      document.body.appendChild(indicator);
+    }
+
+    indicator.innerHTML = `
+      <span style="font-size: 18px;">⚡</span>
+      <span id="tokenSpeedValue">${tokenSpeed}</span>
+      <span style="font-size: 12px; opacity: 0.8;">tokens/sec</span>
+    `;
+  }
+
+  // Hide token speed indicator
+  function hideTokenSpeedIndicator() {
+    const indicator = document.getElementById('tokenSpeedIndicator');
+    if (indicator) {
+      indicator.remove();
     }
   }
 
@@ -562,6 +648,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="debug-request-time">${new Date(req.timestamp).toLocaleString()}</span>
           </div>
           ${req.backendId ? `<div class="debug-request-backend">Backend: ${req.backendId}</div>` : ''}
+          ${req.tokenCount !== undefined ? `
+          <div class="debug-request-tokens">
+            <span class="token-label">Tokens:</span>
+            <span class="token-count">${req.tokenCount}</span>
+          </div>
+          ` : ''}
+          ${req.responseLength !== undefined ? `
+          <div class="debug-request-length">
+            <span class="length-label">Length:</span>
+            <span class="length-count">${req.responseLength} chars</span>
+          </div>
+          ` : ''}
           ${req.requestContent ? createCollapsibleSection('Request Body', formatJson(req.requestContent), false) : ''}
           ${req.responseContent ? createCollapsibleSection('Response', formatJson(extractResponseData(req.responseContent).data), false) : ''}
         </div>

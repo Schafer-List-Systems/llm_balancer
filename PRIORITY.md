@@ -64,14 +64,14 @@ The selection algorithm works as follows:
 2. **Sort priority tiers** from highest to lowest
 3. **For each priority tier**:
    - **Try to find an idle backend first**
-   - **If no idle backend, use round-robin** across all healthy backends in that tier
+   - **If no idle backend, use FIFO queueing** to handle waiting requests
    - **If no backend is available in this tier, immediately move to the next lower priority tier**
 4. **Return the selected backend** (marked as busy)
 
 ### Selection Priority Order
 
 1. **Idle, healthy backend** in the highest priority tier
-2. **Round-robin selection** among all healthy backends in the highest priority tier
+2. **FIFO queueing** for waiting requests in the highest priority tier
 3. **Immediate fallback** to the next lower priority tier if no backend is available
 4. **Repeat** until an available backend is found or all tiers are exhausted
 

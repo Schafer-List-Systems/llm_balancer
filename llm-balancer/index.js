@@ -275,16 +275,6 @@ function forwardRequest(req, res, backend) {
  * Route: Anthropic API routes (with queuing support)
  */
 app.all('/v1/messages*', async (req, res) => {
-  const immediate = req.query.immediate === 'true';
-
-  if (immediate && !balancer.hasAvailableBackends()) {
-    return res.status(503).json({
-      error: 'Service Unavailable',
-      message: 'No healthy backends available',
-      stats: balancer.getStats()
-    });
-  }
-
   try {
     const backend = await balancer.queueRequest();
     if (!backend) {
@@ -324,15 +314,6 @@ app.all('/v1/messages*', async (req, res) => {
  */
 app.all('/api/*', async (req, res) => {
   const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
-  const immediate = req.query.immediate === 'true';
-
-  if (immediate && !balancer.hasAvailableBackends()) {
-    return res.status(503).json({
-      error: 'Service Unavailable',
-      message: 'No healthy backends available',
-      stats: balancer.getStats()
-    });
-  }
 
   try {
     const backend = await balancer.queueRequest();
@@ -372,10 +353,7 @@ app.all('/api/*', async (req, res) => {
  * Route: Models endpoint (with queuing support)
  */
 app.all('/models*', async (req, res) => {
-  const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
-  const immediate = req.query.immediate === 'true';
-
-  if (immediate && !balancer.hasAvailableBackends()) {
+  if (!balancer.hasHealthyBackends()) {
     return res.status(503).json({
       error: 'Service Unavailable',
       message: 'No healthy backends available',
@@ -465,7 +443,7 @@ app.get('/health', (req, res) => {
     healthyBackends: stats.healthyBackends,
     totalBackends: stats.totalBackends,
     backends: stats.backends,
-    hasAvailableBackends: balancer.hasAvailableBackends(),
+    hasAvailableBackends: balancer.hasHealthyBackends(),
     // Add: Busy state information
     busyBackends: config.backends.filter(b => b.busy).length,
     idleBackends: config.backends.filter(b => !b.busy).length
@@ -574,7 +552,6 @@ app.get('/queue/list/:priority', (req, res) => {
  */
 app.get('/backend/current', (req, res) => {
   res.json({
-    currentIndex: balancer.getCurrentIndex(),
     currentBackend: balancer.getNextBackend(),
     stats: balancer.getStats()
   });

@@ -57,7 +57,7 @@ curl http://localhost:3001/api/generate \
 
 ## Features
 
-- ✅ Round-robin load balancing across multiple backends
+- ✅ **FIFO queueing** for request distribution
 - ✅ Automatic health checking every 30 seconds
 - ✅ Automatic failover when backends fail
 - ✅ Graceful shutdown handling
@@ -89,7 +89,7 @@ Client → Load Balancer (Port 3001) → Backend 1 → Ollama Server
 The load balancer automatically:
 1. Health checks all backends every 30 seconds
 2. Marks unhealthy backends as failed
-3. Skips failed backends in round-robin
+3. Skips unhealthy backends during selection
 4. Recovers backends when they become healthy again
 
 View real-time health status:

@@ -5,11 +5,10 @@ A load balancer for Ollama API servers with health checking and automatic failov
 ## Features
 
 ### Load Balancer (v2.0)
-- ✅ Round-robin load balancing across multiple Ollama backends
+- ✅ **FIFO queueing** for request distribution
 - ✅ Automatic health checking with recovery
 - ✅ Automatic failover when backends become unhealthy
-- ✅ **Priority-based load balancing** (prioritizes high-priority backends)
-- ✅ **Round-robin within priority tiers** for fair distribution
+- ✅ **Priority-based selection** (prioritizes high-priority backends)
 - ✅ **Immediate fallback** to lower priority tiers when higher priority backends are busy
 - ✅ **Idle backend tracking** to prevent overloading
 - ✅ Streaming and non-streaming request support
@@ -264,12 +263,11 @@ Client → Load Balancer (localhost:3001) → Multiple Ollama Servers (host1, ho
 ```
 
 The load balancer:
-- Distributes requests across all healthy backends using priority-based round-robin
-- **Prioritizes high-priority backends for better performance and cost optimization**
-- **Uses round-robin within priority tiers** to ensure fair distribution
+- **Prioritizes high-priority backends** for better performance and cost optimization
+- **Uses FIFO queueing** to handle concurrent requests
 - **Immediately falls back to lower priority tiers** when higher priority backends are busy
 - Tracks and prioritizes idle backends to distribute load more evenly
-- Skips unhealthy backends in the round-robin cycle
+- Skips unhealthy backends during selection
 - Automatically recovers healthy backends after recovery interval
 - Handles both Anthropic and Ollama API formats
 - Tracks busy state of each backend with 30-second timeout for stuck requests
@@ -320,7 +318,7 @@ curl http://host2:11434/api/tags
 llm-balancer/
 ├── llm-balancer/                 # Backend load balancer
 │   ├── index.js                  # Load balancer server
-│   ├── balancer.js               # Round-robin balancer
+│   ├── balancer.js               # Priority-based balancer with FIFO queue
 │   ├── health-check.js           # Health checker
 │   ├── config.js                 # Configuration loader
 │   ├── package.json

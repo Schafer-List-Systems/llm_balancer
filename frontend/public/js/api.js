@@ -39,6 +39,72 @@ class ApiClient {
   }
 
   /**
+   * Stream request with token speed tracking
+   * @param {string} endpoint - API endpoint
+   * @param {Object} data - Request data
+   * @param {Function} onChunk - Callback for each chunk
+   * @param {Function} onTokenSpeed - Callback for token speed updates
+   */
+  async streamRequestWithTokenTracking(endpoint, data, onChunk, onTokenSpeed) {
+    const url = `${this.apiBaseUrl}${endpoint}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let chunkCount = 0;
+      let lastChunkTime = Date.now();
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop();  // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+
+              if (eventData.type === 'token-speed') {
+                onTokenSpeed(eventData.tokensPerSecond, eventData.chunksReceived);
+              } else if (eventData.type === 'stream-start') {
+                onChunk({ type: 'start', data: eventData });
+              } else if (eventData.type === 'stream-end') {
+                onChunk({ type: 'end', data: eventData });
+              }
+            } catch (e) {
+              console.error('Error parsing SSE event:', e);
+            }
+          }
+        }
+      }
+
+      return { success: true };
+
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Get health status
    */
   async getHealth() {
@@ -242,6 +308,68 @@ class ApiClient {
    */
   getLastUpdateTime() {
     return this.lastUpdateTime;
+  }
+
+  /**
+   * Stream request with token speed tracking
+   * @param {string} endpoint - API endpoint
+   * @param {Object} data - Request data
+   * @param {Function} onChunk - Callback for each chunk
+   * @param {Function} onTokenSpeed - Callback for token speed updates
+   */
+  async streamRequestWithTokenTracking(endpoint, data, onChunk, onTokenSpeed) {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    try {
+      const response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let totalChunks = 0;
+      let lastChunkTime = Date.now();
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop();  // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+
+              if (eventData.type === 'token-speed') {
+                onTokenSpeed(eventData.tokensPerSecond, eventData.chunksReceived);
+              } else if (eventData.type === 'stream-start') {
+                onChunk({ type: 'start', data: eventData });
+              } else if (eventData.type === 'stream-end') {
+                onChunk({ type: 'end', data: eventData });
+              }
+            } catch (e) {
+              console.error('Error parsing SSE event:', e);
+            }
+          }
+        }
+      }
+
+      return { success: true };
+
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 
   /**
