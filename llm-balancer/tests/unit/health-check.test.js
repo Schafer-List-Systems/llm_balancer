@@ -2,8 +2,8 @@
  * Health Check Configuration Tests
  */
 
-const config = require('../config');
-const HealthChecker = require('../health-check');
+const config = require('../../config');
+const HealthChecker = require('../../health-check');
 
 describe('HealthChecker Configuration', () => {
   test('should load health check interval from environment', () => {
