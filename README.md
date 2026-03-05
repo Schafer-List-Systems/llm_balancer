@@ -245,6 +245,7 @@ curl http://localhost:3001/stats | grep -E "busyBackends|idleBackends"
 | `BACKEND_PRIORITY_0` | 1 | Priority for first backend (any integer, higher = higher priority) |
 | `BACKEND_PRIORITY_1` | 1 | Priority for second backend |
 | `BACKEND_PRIORITY_2` | 1 | Priority for third backend |
+| `SHUTDOWN_TIMEOUT` | 60000ms | Graceful shutdown timeout (time to wait for in-flight requests before force exit) |
 
 ## Architecture
 

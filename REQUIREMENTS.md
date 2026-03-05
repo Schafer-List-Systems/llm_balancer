@@ -42,6 +42,7 @@ All configuration must be loaded from environment variables with the following s
 | `QUEUE_TIMEOUT` | Integer | No | 30000 | Request timeout in queue before rejection (ms) |
 | `DEBUG` | Boolean | No | `false` | Enable debug request tracking mode |
 | `DEBUG_REQUEST_HISTORY_SIZE` | Integer | No | 100 | Maximum number of requests to track in debug history |
+| `SHUTDOWN_TIMEOUT` | Integer | No | 60000 | Graceful shutdown timeout in milliseconds (time to wait for in-flight requests before force exit) |
 
 ### 2.2 Backend Object Structure
 
@@ -541,13 +542,19 @@ When a backend request fails (network error, timeout, HTTP error):
 
 ### 8.6 Graceful Shutdown
 
-Handle shutdown signals:
+Handle shutdown signals with Option B strategy (graceful drain with queue rejection):
 - **SIGINT** and **SIGTERM**:
-  1. Log "Shutting down gracefully..." message
-  2. Stop health checker
-  3. Close HTTP server (wait for existing connections)
-  4. Log "Server closed" message
-  5. Exit process with code 0
+  1. Log `${signal} received. Shutting down gracefully...` message
+  2. Stop health checker immediately
+  3. Reject all queued requests with `Error('Server shutting down, please retry')`
+     - Clear their timeouts before rejection
+     - Log number of rejected queued requests
+  4. Close HTTP server (wait for in-flight backend requests to complete)
+  5. Log "Server closed. All in-flight requests completed." message
+  6. Exit process with code 0 on successful close
+  7. Force exit after `SHUTDOWN_TIMEOUT` milliseconds if in-flight requests are still pending
+     - Default timeout: 60000ms (60 seconds) for compute-heavy LLM requests
+     - Log warning message before forcing exit
 
 ---
 

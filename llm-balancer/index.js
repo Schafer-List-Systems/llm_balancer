@@ -513,24 +513,38 @@ function startServer() {
     console.error(`[${getTimestamp()}] [Balancer] Server error:`, err);
   });
 
-  // Graceful shutdown
-  process.on('SIGINT', () => {
-    console.log(`\n[${getTimestamp()}] [Balancer] Shutting down gracefully...`);
+// Graceful shutdown - Option B: reject queued requests, drain in-flight, force exit after timeout
+  const gracefulShutdown = (signal) => {
+    console.log(`\n[${getTimestamp()}] [Balancer] ${signal} received. Shutting down gracefully...`);
+    
+    // Stop accepting new health checks
     healthChecker.stop();
+    
+    // Reject all queued requests with a retry message
+    const queueSize = balancer.getQueueStats().depth;
+    if (queueSize > 0) {
+      console.log(`[${getTimestamp()}] [Balancer] Rejecting ${queueSize} queued request(s)...`);
+      for (const request of balancer.queue) {
+        clearTimeout(request.timeout);
+        request.reject(new Error('Server shutting down, please retry'));
+      }
+    }
+    
+    // Close server to stop accepting new connections and wait for in-flight requests
     server.close(() => {
-      console.log(`[${getTimestamp()}] [Balancer] Server closed`);
+      console.log(`[${getTimestamp()}] [Balancer] Server closed. All in-flight requests completed.`);
       process.exit(0);
     });
-  });
+    
+    // Force exit after shutdown timeout if in-flight requests are still pending
+    setTimeout(() => {
+      console.warn(`\n[${getTimestamp()}] [Balancer] ${config.shutdownTimeout / 1000}s timeout reached. Forcing exit...`);
+      process.exit(1);
+    }, config.shutdownTimeout);
+  };
 
-  process.on('SIGTERM', () => {
-    console.log(`\n[${getTimestamp()}] [Balancer] Shutting down gracefully...`);
-    healthChecker.stop();
-    server.close(() => {
-      console.log(`[${getTimestamp()}] [Balancer] Server closed`);
-      process.exit(0);
-    });
-  });
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 }
 
 // Start the server

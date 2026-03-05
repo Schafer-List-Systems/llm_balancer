@@ -30,6 +30,9 @@ function loadConfig() {
   const debug = process.env.DEBUG === 'true';
   const debugRequestHistorySize = parseInt(process.env.DEBUG_REQUEST_HISTORY_SIZE) || 100;
 
+  // Parse graceful shutdown timeout (default: 60 seconds for compute-heavy requests)
+  const shutdownTimeout = parseInt(process.env.SHUTDOWN_TIMEOUT) || 60000;
+
   // Create backend objects with health status and statistics
   const backends = backendArray.map((url, index) => {
     // Parse priority from environment variable using index-based naming
@@ -65,7 +68,8 @@ function loadConfig() {
     maxQueueSize,
     queueTimeout,
     debug,
-    debugRequestHistorySize
+    debugRequestHistorySize,
+    shutdownTimeout
   };
 }
 

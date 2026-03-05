@@ -183,6 +183,7 @@ The `/stats` endpoint provides detailed information:
 | `BACKEND_PRIORITY_0` | 1 | Priority for first backend (any integer, higher = higher priority) |
 | `BACKEND_PRIORITY_1` | 1 | Priority for second backend |
 | `BACKEND_PRIORITY_2` | 1 | Priority for third backend |
+| `SHUTDOWN_TIMEOUT` | 60000 | Graceful shutdown timeout in ms (time to wait for in-flight requests before force exit) |
 
 ## Debug Features
 
@@ -244,9 +245,22 @@ Restart the server after changing the value.
 
 ### Stop the server gracefully
 
-The load balancer handles SIGINT and SIGTERM signals gracefully:
+The load balancer handles SIGINT and SIGTERM signals with Option B strategy (graceful drain):
+1. Stops health checking immediately
+2. Rejects all queued requests with "Server shutting down, please retry" error
+3. Waits for in-flight backend requests to complete
+4. Forces exit after `SHUTDOWN_TIMEOUT` milliseconds if still pending
+
 ```bash
 # Stop with Ctrl+C or kill signal
+# In-flight requests will be given up to 60 seconds (default) to complete
+# Queued requests are rejected immediately with a retry message
+```
+
+To customize the shutdown timeout, set `SHUTDOWN_TIMEOUT` in your `.env` file:
+```bash
+# Wait up to 120 seconds for in-flight requests
+SHUTDOWN_TIMEOUT=120000
 ```
 
 ## Compatibility

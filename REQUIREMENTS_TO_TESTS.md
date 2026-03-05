@@ -167,6 +167,14 @@ This document maps each section of `REQUIREMENTS.md` to the corresponding test f
 |-------------|---------------|
 | Request rejected when queue full | `balancer.test.js`: "should reject new requests when queue is full" |
 
+### 8.6 Graceful Shutdown
+
+| Requirement | Test Coverage |
+|-------------|---------------|
+| Reject queued requests with "Server shutting down, please retry" error | Integration test: graceful shutdown handler rejects all queued promises |
+| Clear timeouts before rejecting queued requests | Integration test: verify timeout cleared on rejection |
+| Force exit after SHUTDOWN_TIMEOUT milliseconds | Integration test: simulate slow in-flight requests and verify force exit at timeout |
+
 ## Summary
 
 - **Total Requirements Sections**: 10 (Overview through Integration Test Derivation)
