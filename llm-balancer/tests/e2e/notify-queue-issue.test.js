@@ -1,6 +1,6 @@
 const request = require('supertest');
 const app = require('../index');
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 describe('Notify Backend Available Queue Issue - Integration', () => {
   let backends;

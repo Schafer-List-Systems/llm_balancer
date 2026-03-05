@@ -3,7 +3,7 @@
  * Verifies the queue processing behavior when backends become available
  */
 
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 describe('notifyBackendAvailable', () => {
   let balancer;

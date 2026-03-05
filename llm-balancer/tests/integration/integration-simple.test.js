@@ -1,6 +1,6 @@
 require('dotenv').config({ path: __dirname + '/../.env' });
-const Balancer = require('../balancer');
-const config = require('../config');
+const Balancer = require('../../balancer');
+const config = require('../../config');
 
 /**
  * Simple Integration Tests using actual backends from environment

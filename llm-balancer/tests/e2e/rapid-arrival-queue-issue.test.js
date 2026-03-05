@@ -1,4 +1,4 @@
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 describe('Rapid Request Arrival Queue Issue', () => {
   let backends;

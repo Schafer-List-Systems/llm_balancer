@@ -3,7 +3,7 @@
  * Verifies request tracking, history management, and filtering
  */
 
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 describe('Debug Mode', () => {
   let backends;

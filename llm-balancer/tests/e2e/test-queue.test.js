@@ -1,4 +1,4 @@
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 describe('Queue Management', () => {
   let backends;

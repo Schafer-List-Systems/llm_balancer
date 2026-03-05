@@ -1,4 +1,4 @@
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 describe('Debug Test', () => {
   let backends;

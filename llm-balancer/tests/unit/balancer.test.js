@@ -1,4 +1,4 @@
-const Balancer = require('../balancer');
+const Balancer = require('../../balancer');
 
 // Helper function to create fresh backend copies for testing
 const getFreshBackends = () => {

@@ -1,5 +1,5 @@
-const Balancer = require('../balancer');
-const config = require('../config');
+const Balancer = require('../../balancer');
+const config = require('../../config');
 
 /**
  * Integration Tests using actual backends from environment
