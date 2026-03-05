@@ -5,6 +5,7 @@ const { URL } = require('url');
 const configModule = require('./config');
 const Balancer = require('./balancer');
 const HealthChecker = require('./health-check');
+const { processRequest } = require('./request-processor');
 
 const app = express();
 const config = configModule.loadConfig();
@@ -42,20 +43,6 @@ app.use(express.raw({
 }));
 
 /**
- * Helper function to get body as buffer/string
- * Reuses patterns from original gateway
- */
-function getRequestBody(req) {
-  if (req.is('raw')) {
-    return req.body;
-  }
-  if (req.body && typeof req.body === 'object') {
-    return JSON.stringify(req.body);
-  }
-  return req.body || '';
-}
-
-/**
  * Helper function to get ISO timestamp
  */
 function getTimestamp() {
@@ -66,203 +53,10 @@ function getTimestamp() {
  * Forward request to an available backend
  */
 function forwardRequest(req, res, backend) {
-  // TODO: assert that the backend is not busy
-
-  // Mark backend as busy
-  backend.busy = true;
-  console.log(`[${getTimestamp()}] [Balancer] Backend ${backend.id} marked as BUSY (${backend.url})`);
-
-  // Helper to release backend
-  const releaseBackend = () => {
-    console.log(`[${getTimestamp()}] [Balancer] releaseBackend() called for backend ${backend.id}, current busy state: ${backend.busy}`);
-    if (backend.busy) {
-      backend.busy = false;
-      console.log(`[${getTimestamp()}] [Balancer] Backend ${backend.id} marked as AVAILABLE (${backend.url})`);
-      // Notify balancer that this backend is now available
-      balancer.notifyBackendAvailable();
-    } else {
-      console.log(`[${getTimestamp()}] [Balancer] Backend ${backend.id} was already not busy, skipping release`);
-    }
-  };
-
-  const targetUrl = new URL(req.url, backend.url);
-
-  // Capture request body for debug tracking
-  let requestBody = null;
-  const originalBody = getRequestBody(req);
-  if (originalBody && typeof originalBody === 'string') {
-    requestBody = originalBody;
-  } else if (originalBody && Buffer.isBuffer(originalBody)) {
-    requestBody = originalBody.toString('utf8');
-  }
-
-  // Copy request headers
-  const headers = { ...req.headers };
-
-  // Remove hop-by-hop headers
-  const hopByHop = [
-    'connection',
-    'keep-alive',
-    'transfer-encoding',
-    'te',
-    'trailer',
-    'upgrade'
-  ];
-
-  hopByHop.forEach(header => delete headers[header.toLowerCase()]);
-
-  // Handle streaming response
-  if (req.is('raw') && headers['content-type']?.includes('stream')) {
-    const options = {
-      hostname: targetUrl.hostname,
-      port: targetUrl.port,
-      path: targetUrl.pathname + targetUrl.search,
-      method: req.method,
-      headers: headers
-    };
-
-    const proxyReq = http.request(options, (proxyRes) => {
-      // Copy response headers
-      Object.keys(proxyRes.headers).forEach(header => {
-        // Don't transfer hop-by-hop headers back
-        if (!hopByHop.includes(header.toLowerCase())) {
-          res.setHeader(header, proxyRes.headers[header]);
-        }
-      });
-
-      // Handle streaming response
-      if (proxyRes.headers['content-type']?.includes('stream')) {
-        proxyRes.pipe(res);
-      } else {
-        let data = '';
-        proxyRes.on('data', chunk => {
-          if (Buffer.isBuffer(chunk)) {
-            data += chunk.toString();
-          } else {
-            data += chunk;
-          }
-        });
-        proxyRes.on('end', () => {
-          // Track debug request with request/response content
-          const route = req.path || req.originalUrl || '/';
-          if (route === '/') {
-            console.warn(`[DEBUG] Request tracked with undefined path:`, {
-              originalUrl: req.originalUrl,
-              path: req.path,
-              url: req.url
-            });
-          }
-
-          balancer.trackDebugRequest(
-            {
-              route,
-              method: req.method,
-              priority: backend.priority || 0,
-              backendId: backend.id,
-              backendUrl: backend.url
-            },
-            requestBody,
-            { data: data, contentType: proxyRes.headers['content-type'] }
-          );
-
-          try {
-            const parsed = JSON.parse(data);
-            res.json(parsed);
-          } catch (e) {
-            res.send(data);
-          }
-        });
-      }
-    });
-
-    proxyReq.on('error', (err) => {
-      console.error(`[${getTimestamp()}] [Gateway] Request to ${backend.url} failed:`, err.message);
-      balancer.markFailed(backend.url);
-      res.status(502).json({
-        error: 'Bad Gateway',
-        message: 'Backend unavailable',
-        backend: backend.url
-      });
-    });
-
-    proxyReq.on('end', () => {
-      console.log(`[${getTimestamp()}] [Balancer] Proxy request to ${backend.url} ended, releasing backend ${backend.id}`);
-      // Release backend
-      releaseBackend();
-    });
-
-    const body = getRequestBody(req);
-    if (Buffer.isBuffer(body)) {
-      req.pipe(proxyReq);
-    } else {
-      proxyReq.write(body);
-      proxyReq.end();
-    }
-  } else {
-    // Handle non-streaming request
-    const options = {
-      hostname: targetUrl.hostname,
-      port: targetUrl.port,
-      path: targetUrl.pathname + targetUrl.search,
-      method: req.method,
-      headers: headers
-    };
-
-    http.request(options, (proxyRes) => {
-      let data = '';
-
-      proxyRes.on('data', chunk => {
-        if (Buffer.isBuffer(chunk)) {
-          data += chunk.toString();
-        } else {
-          data += chunk;
-        }
-      });
-
-      proxyRes.on('end', () => {
-        console.log(`[${getTimestamp()}] [Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
-
-        // Track debug request with request/response content
-        const route = req.path || req.originalUrl || '/';
-        balancer.trackDebugRequest(
-          {
-            route,
-            method: req.method,
-            priority: backend.priority || 0,
-            backendId: backend.id,
-            backendUrl: backend.url
-          },
-          requestBody,
-          { data: data, contentType: proxyRes.headers['content-type'], statusCode: proxyRes.statusCode }
-        );
-
-        try {
-          const parsed = JSON.parse(data);
-          res.status(proxyRes.statusCode).json(parsed);
-        } catch (e) {
-          res.status(proxyRes.statusCode).send(data);
-        } finally {
-          releaseBackend();
-        }
-      });
-    })
-    .on('error', (err) => {
-      console.error(`[${getTimestamp()}] [Gateway] Request to ${backend.url} failed:`, err.message);
-      balancer.markFailed(backend.url);
-      res.status(502).json({
-        error: 'Bad Gateway',
-        message: 'Backend unavailable',
-        backend: backend.url
-      });
-      // Release backend even on error
-      releaseBackend();
-    })
-    .on('end', () => {
-      // Release backend
-      releaseBackend();
-    })
-    .end(getRequestBody(req));
-  }
+  // Process the request using the request processor module
+  processRequest(balancer, backend, req, res, () => {
+    // Request completed
+  });
 }
 
 /**

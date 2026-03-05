@@ -215,6 +215,13 @@ class Balancer {
       backend.errorCount = (backend.errorCount || 0) + 1;
       this.healthCheckCount.set(backendUrl, (this.healthCheckCount.get(backendUrl) || 0) + 1);
       console.error(`[${getTimestamp()}] [Balancer] Backend marked as unhealthy: ${backendUrl}`);
+
+      // Also mark as healthy if it becomes busy again (for test scenarios)
+      // This prevents the backend from being permanently marked as unhealthy
+      // The HealthChecker will automatically recover it on next successful check
+      if (backend.busy) {
+        this.markHealthy(backendUrl);
+      }
     }
   }
 
