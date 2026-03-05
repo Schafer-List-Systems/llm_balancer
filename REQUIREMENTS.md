@@ -60,18 +60,14 @@ Each backend parsed from `OLLAMA_BACKENDS` must have the following properties:
 }
 ```
 
-### 2.3 Priority Configuration Methods
+### 2.3 Priority Configuration
 
-Backends can be assigned priorities using two methods:
+Backends can be assigned priorities using index-based environment variables:
 
-**Method 1 - Index-based priority:**
-- `BACKEND_PRIORITY_0` = "http://localhost:11434" -> sets priority for first backend
-- `BACKEND_PRIORITY_1` = "http://localhost:11435" -> sets priority for second backend
+- `BACKEND_PRIORITY_0` = "5" -> sets priority for first backend (index 0)
+- `BACKEND_PRIORITY_1` = "3" -> sets priority for second backend (index 1)
 
-**Method 2 - URL-based priority:**
-- `BACKEND_PRIORITY_http://localhost:11434` = "5" -> sets explicit priority for specific URL
-
-URL-based takes precedence over index-based. If neither is specified, default priority is 1.
+If not specified, default priority is 1. Priority values can be any integer (positive or negative). Higher numbers indicate higher priority.
 
 ### 2.4 Configuration Validation
 

@@ -180,6 +180,9 @@ The `/stats` endpoint provides detailed information:
 | `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout in ms |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size in bytes |
+| `BACKEND_PRIORITY_0` | 1 | Priority for first backend (any integer, higher = higher priority) |
+| `BACKEND_PRIORITY_1` | 1 | Priority for second backend |
+| `BACKEND_PRIORITY_2` | 1 | Priority for third backend |
 
 ## Debug Features
 

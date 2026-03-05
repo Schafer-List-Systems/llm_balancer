@@ -22,7 +22,7 @@ This document maps each section of `REQUIREMENTS.md` to the corresponding test f
 
 | Requirement | Test Coverage |
 |-------------|---------------|
-| Higher priority backends selected first (0-10 scale) | `balancer.test.js`: "should select highest priority backend", "should prioritize higher priority backends" |
+| Higher priority backends selected first (any integer) | `balancer.test.js`: "should select highest priority backend", "should prioritize higher priority backends" |
 | Fallback to lower priority when high-priority busy | `balancer.test.js`: "should fallback to lower priority when high priority busy" |
 | Selection based on healthy status | `balancer.test.js`: "should skip unhealthy backends", "notify-backend-available.test.js": "should select highest priority backend when available" |
 | FIFO within same priority tier | `balancer.test.js`: "should maintain FIFO order within priority tier" |

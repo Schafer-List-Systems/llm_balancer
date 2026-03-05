@@ -177,6 +177,7 @@ class Balancer {
   /**
    * Get the next backend with priority-based selection
    * Higher priority backends are selected first (FIFO within same priority)
+   * Priority can be any integer (positive, negative, or zero)
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {

@@ -51,10 +51,11 @@ BACKEND_PRIORITY=http://host2:11434=0
 
 ### Priority Levels
 
-- **Higher numbers = higher priority** (e.g., priority 10 > priority 5)
-- **Default priority**: 0 if not specified
+- **Higher numbers = higher priority** (e.g., priority 100 > priority 50 > priority 0 > priority -1)
+- **Default priority**: 1 if not specified
 - **Priority tiers**: Backends are grouped by their priority level
 - **Immediate fallback**: If no backend is available in the current priority tier, the system immediately falls back to the next lower priority tier
+- **Any integer value**: Priority can be any positive or negative integer
 
 ## Selection Algorithm
 
@@ -80,15 +81,15 @@ The selection algorithm works as follows:
 ### Example 1: Critical and Backup Backends
 
 ```bash
-# Critical backend (priority 10)
+# Critical backend (highest priority)
 BACKEND_0=http://critical-host:11434
-BACKEND_0_PRIORITY=10
+BACKEND_0_PRIORITY=100
 
-# Secondary backend (priority 5)
+# Secondary backend (medium priority)
 BACKEND_1=http://secondary-host:11434
-BACKEND_1_PRIORITY=5
+BACKEND_1_PRIORITY=50
 
-# Backup backend (priority 0)
+# Backup backend (lowest priority)
 BACKEND_2=http://backup-host:11434
 BACKEND_2_PRIORITY=0
 ```

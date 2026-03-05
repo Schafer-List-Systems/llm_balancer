@@ -32,20 +32,13 @@ function loadConfig() {
 
   // Create backend objects with health status and statistics
   const backends = backendArray.map((url, index) => {
-    // Try to parse priority from environment variable
-    // Support both BACKEND_PRIORITY_{index} and BACKEND_PRIORITY_{url}
-    let priority = 0;  // Default priority
+    // Parse priority from environment variable using index-based naming
+    // BACKEND_PRIORITY_0, BACKEND_PRIORITY_1, etc.
+    let priority = 1;  // Default priority
 
-    // Method 1: Try specific backend index
     const priorityEnv = process.env[`BACKEND_PRIORITY_${index}`];
     if (priorityEnv) {
       priority = parseInt(priorityEnv);
-    }
-
-    // Method 2: Try URL-based priority
-    const urlPriority = process.env[`BACKEND_PRIORITY_${url}`];
-    if (urlPriority !== undefined) {
-      priority = parseInt(urlPriority);
     }
 
     return {

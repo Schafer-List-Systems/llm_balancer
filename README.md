@@ -57,21 +57,12 @@ Configure priority levels for each backend to prioritize specific servers:
 ```bash
 cd llm-balancer
 OLLAMA_BACKENDS="http://high-priority:11434,http://medium-priority:11434,http://low-priority:11434"
-BACKEND_PRIORITY_0=10  # High priority for first backend
-BACKEND_PRIORITY_1=5   # Medium priority for second backend
-BACKEND_PRIORITY_2=0   # Low priority for third backend
+BACKEND_PRIORITY_0=100  # High priority for first backend (highest number = highest priority)
+BACKEND_PRIORITY_1=50   # Medium priority for second backend
+BACKEND_PRIORITY_2=0    # Low priority for third backend
 ```
 
-**Using URL-based priority:**
-
-```bash
-cd llm-balancer
-OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
-BACKEND_PRIORITY_host1:11434=10  # High priority for host1
-BACKEND_PRIORITY_host2:11434=5   # Medium priority for host2
-```
-
-The load balancer will always try to use high-priority backends first
+**Priority values can be any integer:** Higher numbers indicate higher priority. Negative values are also supported. The load balancer will always try to use high-priority backends first.
 
 ## Usage
 
@@ -251,10 +242,9 @@ curl http://localhost:3001/stats | grep -E "busyBackends|idleBackends"
 | `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout (5 seconds) |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size |
-| `BACKEND_PRIORITY_0` | 0 | Priority for first backend (10=high, 5=medium, 0=low) |
-| `BACKEND_PRIORITY_1` | 0 | Priority for second backend |
-| `BACKEND_PRIORITY_2` | 0 | Priority for third backend |
-| `BACKEND_PRIORITY_host1:11434` | 0 | Priority for backend by URL (alternative to index-based) |
+| `BACKEND_PRIORITY_0` | 1 | Priority for first backend (any integer, higher = higher priority) |
+| `BACKEND_PRIORITY_1` | 1 | Priority for second backend |
+| `BACKEND_PRIORITY_2` | 1 | Priority for third backend |
 
 ## Architecture
 
