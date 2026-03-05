@@ -133,13 +133,8 @@ class Balancer {
           (this.requestCount.get(backend.url) || 0) + 1);
 
         queue.shift();  // Remove from queue
-        console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.url}`);
-        request.resolve({
-          backend: {
-            url: backend.url,
-            priority: backend.priority
-          }
-        });
+        console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
+        request.resolve(backend);
       } else {
         // No available backend, stop processing for now
         break;

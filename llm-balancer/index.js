@@ -63,8 +63,7 @@ function getTimestamp() {
 }
 
 /**
- * Forward request to a specific backend
- * Reuses patterns from original gateway with modifications for load balancer
+ * Forward request to an available backend
  */
 function forwardRequest(req, res, backend) {
   // TODO: assert that the backend is not busy
@@ -73,9 +72,6 @@ function forwardRequest(req, res, backend) {
   backend.busy = true;
   console.log(`[${getTimestamp()}] [Balancer] Backend ${backend.id} marked as BUSY (${backend.url})`);
 
-  // Get the priority tier for this backend
-  const backendPriority = backend.priority || 0;
-
   // Helper to release backend
   const releaseBackend = () => {
     console.log(`[${getTimestamp()}] [Balancer] releaseBackend() called for backend ${backend.id}, current busy state: ${backend.busy}`);
@@ -83,9 +79,7 @@ function forwardRequest(req, res, backend) {
       backend.busy = false;
       console.log(`[${getTimestamp()}] [Balancer] Backend ${backend.id} marked as AVAILABLE (${backend.url})`);
       // Notify balancer that this backend is now available
-      // TODO: - Is this the right strategy? If a backend times out, it should rather be marked as failed or over-busy.
-      //         Alternatively, the priority could be lowered. However, Timing out is not a cause for being available.
-      balancer.notifyBackendAvailable(backendPriority);
+      balancer.notifyBackendAvailable();
     } else {
       console.log(`[${getTimestamp()}] [Balancer] Backend ${backend.id} was already not busy, skipping release`);
     }
@@ -313,8 +307,6 @@ app.all('/v1/messages*', async (req, res) => {
  * Route: Ollama API routes (with queuing support)
  */
 app.all('/api/*', async (req, res) => {
-  const priority = req.query.priority !== undefined ? parseInt(req.query.priority) : undefined;
-
   try {
     const backend = await balancer.queueRequest();
     if (!backend) {
