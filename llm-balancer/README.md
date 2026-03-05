@@ -180,9 +180,7 @@ The `/stats` endpoint provides detailed information:
 | `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout in ms |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size in bytes |
-| `BACKEND_PRIORITY_0` | 1 | Priority for first backend (any integer, higher = higher priority) |
-| `BACKEND_PRIORITY_1` | 1 | Priority for second backend |
-| `BACKEND_PRIORITY_2` | 1 | Priority for third backend |
+| `BACKEND_PRIORITY_N` | 1 | Priority for backend at index N (any integer, higher = higher priority; e.g., BACKEND_PRIORITY_0 for first backend, BACKEND_PRIORITY_1 for second, etc.) |
 | `SHUTDOWN_TIMEOUT` | 60000 | Graceful shutdown timeout in ms (time to wait for in-flight requests before force exit) |
 
 ## Debug Features
