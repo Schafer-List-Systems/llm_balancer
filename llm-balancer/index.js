@@ -229,7 +229,7 @@ app.get('/health', (req, res) => {
     healthyBackends: stats.healthyBackends,
     totalBackends: stats.totalBackends,
     backends: stats.backends,
-    hasAvailableBackends: balancer.hasHealthyBackends(),
+    hasHealthyBackends: balancer.hasHealthyBackends(),
     // Add: Busy state information
     busyBackends: config.backends.filter(b => b.busy).length,
     idleBackends: config.backends.filter(b => !b.busy).length
