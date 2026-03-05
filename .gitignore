@@ -7,3 +7,5 @@ node_modules/
 .vscode/
 .idea/
 frontend/public/js/dist
+CLAUDE.md
+coverage/
