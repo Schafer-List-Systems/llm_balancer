@@ -290,16 +290,20 @@ document.addEventListener('DOMContentLoaded', () => {
               <span class="info-value">${busyText}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Request Count</span>
+              <span class="info-label">Concurrency</span>
+              <span class="info-value">${backend.activeRequestCount || 0}/${backend.maxConcurrency || 0}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Requests</span>
               <span class="info-value">${backend.requestCount || 0}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Error Count</span>
-              <span class="info-value">${backend.errorCount || 0}</span>
+              <span class="info-label">Errors</span>
+              <span class="info-value ${backend.errorCount > 0 ? 'text-danger' : ''}">${backend.errorCount || 0}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Fail Count</span>
-              <span class="info-value">${backend.failCount || 0}</span>
+              <span class="info-label">Fails</span>
+              <span class="info-value ${backend.failCount > 0 ? 'text-danger' : ''}">${backend.failCount || 0}</span>
             </div>
           </div>
           ${backend.models && backend.models.length > 0 ? `
@@ -331,13 +335,13 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="card-header">
             <span class="card-title">Health Check Interval</span>
           </div>
-          <div class="card-value">${(config.healthCheckInterval / 1000).toFixed(1)}s</div>
+          <div class="card-value" style="font-size: 1rem;">${(config.healthCheckInterval / 1000).toFixed(1)}s</div>
         </div>
         <div class="card">
           <div class="card-header">
             <span class="card-title">Last Health Check</span>
           </div>
-          <div class="card-value" style="font-size: 1.25rem;">
+          <div class="card-value" style="font-size: 1rem;">
             ${healthCheck.lastCheck ? new Date(healthCheck.lastCheck).toLocaleString() : 'Never'}
           </div>
         </div>
@@ -345,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="card-header">
             <span class="card-title">Consecutive Failures</span>
           </div>
-          <div class="card-value" style="font-size: 1.25rem; color: ${healthCheck.consecutiveFailures > 0 ? 'var(--danger-color)' : 'var(--success-color)'};">
+          <div class="card-value" style="font-size: 1rem; color: ${healthCheck.consecutiveFailures > 0 ? 'var(--danger-color)' : 'var(--success-color)'};">
             ${healthCheck.consecutiveFailures || 0}
           </div>
         </div>
@@ -353,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="card-header">
             <span class="card-title">Max Payload Size</span>
           </div>
-          <div class="card-value">${config.maxPayloadSizeMB} MB</div>
+          <div class="card-value" style="font-size: 1rem;">${config.maxPayloadSizeMB} MB</div>
         </div>
       </div>
     `;
@@ -515,19 +519,19 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="queue-stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
           <div class="queue-stat-item">
             <div class="queue-stat-label">Pending Requests</div>
-            <div class="queue-stat-value">${pendingRequests}</div>
+            <div class="queue-stat-value" style="font-size: 1.5rem; font-weight: 800;">${pendingRequests}</div>
           </div>
           <div class="queue-stat-item">
             <div class="queue-stat-label">Processing Requests</div>
-            <div class="queue-stat-value">${processingRequests}</div>
+            <div class="queue-stat-value" style="font-size: 1.5rem; font-weight: 800;">${processingRequests}</div>
           </div>
           <div class="queue-stat-item">
             <div class="queue-stat-label">Max Queue Size</div>
-            <div class="queue-stat-value">${maxQueueSize}</div>
+            <div class="queue-stat-value" style="font-size: 1.5rem; font-weight: 800;">${maxQueueSize}</div>
           </div>
           <div class="queue-stat-item">
             <div class="queue-stat-label">Queue Utilization</div>
-            <div class="queue-stat-value ${getUtilizationColor(queueUtilization)}">
+            <div class="queue-stat-value ${getUtilizationColor(queueUtilization)}" style="font-size: 1.5rem; font-weight: 800;">
               ${(queueUtilization * 100).toFixed(1)}%
             </div>
           </div>
