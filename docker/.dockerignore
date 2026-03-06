@@ -15,6 +15,7 @@ yarn-error.log
 
 # Build artifacts
 dist
+frontend/public/js/dist
 build
 *.bundle.js
 

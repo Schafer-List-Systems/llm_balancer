@@ -80,49 +80,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
       <main class="main-content">
         <section class="overview-section">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-icon">🖥️</div>
-              <span class="card-title">Total Backends</span>
+          <div class="card horizontal">
+            <div class="card-icon">🖥️</div>
+            <div class="card-content">
+              <span class="card-title" id="totalBackends">-</span>
+              <span class="card-subtitle">Total Backends</span>
             </div>
-            <div class="card-value" id="totalBackends">-</div>
-            <div class="card-subtitle">Backends configured</div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div class="card-icon" style="background-color: #dcfce7; color: #166534;">💚</div>
-              <span class="card-title">Healthy</span>
+          <div class="card horizontal">
+            <div class="card-icon" style="background-color: #dcfce7; color: #166534;">💚</div>
+            <div class="card-content">
+              <span class="card-title" id="healthyBackends">-</span>
+              <span class="card-subtitle">Healthy</span>
             </div>
-            <div class="card-value" id="healthyBackends">-</div>
-            <div class="card-subtitle">Operational backends</div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div class="card-icon" style="background-color: #fee2e2; color: #991b1b;">💔</div>
-              <span class="card-title">Unhealthy</span>
+          <div class="card horizontal">
+            <div class="card-icon" style="background-color: #fee2e2; color: #991b1b;">💔</div>
+            <div class="card-content">
+              <span class="card-title" id="unhealthyBackends">-</span>
+              <span class="card-subtitle">Unhealthy</span>
             </div>
-            <div class="card-value" id="unhealthyBackends">-</div>
-            <div class="card-subtitle">Failed backends</div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div class="card-icon" style="background-color: #fef3c7; color: #92400e;">🔄</div>
-              <span class="card-title">Busy</span>
+          <div class="card horizontal">
+            <div class="card-icon" style="background-color: #fef3c7; color: #92400e;">🔄</div>
+            <div class="card-content">
+              <span class="card-title" id="busyBackends">-</span>
+              <span class="card-subtitle">Busy</span>
             </div>
-            <div class="card-value" id="busyBackends">-</div>
-            <div class="card-subtitle">Currently processing</div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div class="card-icon" style="background-color: #d1fae5; color: #065f46;">✅</div>
-              <span class="card-title">Available</span>
+          <div class="card horizontal">
+            <div class="card-icon" style="background-color: #d1fae5; color: #065f46;">✅</div>
+            <div class="card-content">
+              <span class="card-title" id="availableBackends">-</span>
+              <span class="card-subtitle">Available</span>
             </div>
-            <div class="card-value" id="availableBackends">-</div>
-            <div class="card-subtitle">Ready to accept requests</div>
           </div>
         </section>
 
@@ -414,14 +409,14 @@ document.addEventListener('DOMContentLoaded', () => {
         right: 20px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
+        padding: 8px 16px;
+        border-radius: 6px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         z-index: 1000;
-        font-size: 14px;
+        font-size: 12px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
       `;
       document.body.appendChild(indicator);
     }
