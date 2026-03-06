@@ -249,16 +249,17 @@ body {
 
 /* Configuration Section */
 .config-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
 }
 
 .config-card {
   background-color: var(--card-bg);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-color);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
@@ -267,58 +268,31 @@ body {
   box-shadow: var(--shadow-md);
 }
 
-.config-card--wide {
-  grid-column: 1 / -1;
-  background-color: linear-gradient(135deg, var(--card-bg) 0%, rgba(59, 130, 246, 0.1) 100%);
-  border-color: var(--primary-color);
-}
-
 .config-label {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   margin-bottom: 0.5rem;
-}
-
-.config-value {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 1rem;
 }
 
 .config-url {
   font-family: 'Courier New', monospace;
-  font-size: 0.875rem;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--primary-color);
-  padding: 0.375rem;
-  background-color: rgba(0, 0, 0, 0.05);
-  border-radius: 0.25rem;
-  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background-color: rgba(59, 130, 246, 0.1);
+  border-radius: 0.375rem;
   word-break: break-all;
 }
 
-.config-instructions {
-  padding: 0.75rem;
-  background-color: rgba(0, 0, 0, 0.03);
-  border-radius: 0.375rem;
-}
-
-.config-instructions p {
-  margin: 0 0 0.25rem 0;
+.config-card p {
   font-size: 0.75rem;
   color: var(--text-secondary);
-}
-
-.config-instructions code {
-  display: block;
-  background-color: var(--card-bg);
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  font-family: 'Courier New', monospace;
-  font-size: 0.8125rem;
-  color: var(--text-primary);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  margin-top: 0.5rem;
+  line-height: 1.4;
 }
 
 .backends-grid {

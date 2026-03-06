@@ -371,23 +371,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     configSection.innerHTML = `
       <div class="config-container">
-        <div class="config-card">
-          <div class="config-label">Frontend URL (for dashboard)</div>
-          <div class="config-value">${frontendUrl}</div>
+        <div class="config-card" style="flex: 1; min-width: 250px;">
+          <div class="config-label">Frontend URL</div>
+          <div class="config-url">${frontendUrl}</div>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Dashboard access point</p>
         </div>
 
-        <div class="config-card">
-          <div class="config-label">API Base URL (backend)</div>
-          <div class="config-value">${apiUrl}</div>
+        <div class="config-card" style="flex: 1; min-width: 250px;">
+          <div class="config-label">API Base URL</div>
+          <div class="config-url">${apiUrl}</div>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Load balancer endpoint for Ollama/Anthropic APIs</p>
         </div>
 
-        <div class="config-card config-card--wide">
-          <div class="config-label">Application Configuration</div>
+        <div class="config-card" style="flex: 1; min-width: 250px;">
+          <div class="config-label">Application Integration</div>
           <div class="config-url">${frontendUrl}/api</div>
-          <div class="config-instructions">
-            <p>Configure your applications to use:</p>
-            <code>BASE_URL=${frontendUrl}/api</code>
-          </div>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Set your app's BASE_URL to this endpoint</p>
         </div>
       </div>
     `;
