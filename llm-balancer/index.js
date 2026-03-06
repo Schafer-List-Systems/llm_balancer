@@ -196,19 +196,16 @@ app.get('/', (req, res) => {
     backends: stats.totalBackends,
     healthy: stats.healthyBackends,
     unhealthy: stats.unhealthyBackends,
-    busyBackends: config.backends.filter(b => b.busy).length,
-    idleBackends: config.backends.filter(b => !b.busy).length,
+    busyBackends: config.backends.filter(b => b.activeRequestCount > 0).length,
+    idleBackends: config.backends.filter(b => b.activeRequestCount === 0).length,
     backendUrls: config.backends.map(b => b.url),
     healthCheckInterval: config.healthCheckInterval,
     overloadedBackends: config.backends.filter(
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
     availableBackends: config.backends.filter(
-      b => b.activeRequestCount < b.maxConcurrency
+      b => b.healthy && b.activeRequestCount < b.maxConcurrency
     ).length,
-    // Deprecated: use overloadedBackends/availableBackends instead
-    busyBackends: 0,
-    idleBackends: 2,
     routes: {
       anthropic_api: '/v1/messages*',
       ollama_api: '/api/*',
@@ -244,8 +241,10 @@ app.get('/health', (req, res) => {
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
     availableBackends: config.backends.filter(
-      b => b.activeRequestCount < b.maxConcurrency
-    ).length
+      b => b.healthy && b.activeRequestCount < b.maxConcurrency
+    ).length,
+    busyBackends: config.backends.filter(b => b.activeRequestCount > 0).length,
+    idleBackends: config.backends.filter(b => b.activeRequestCount === 0).length
   });
 });
 
@@ -272,8 +271,10 @@ app.get('/stats', (req, res) => {
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
     availableBackends: config.backends.filter(
-      b => b.activeRequestCount < b.maxConcurrency
+      b => b.healthy && b.activeRequestCount < b.maxConcurrency
     ).length,
+    busyBackends: config.backends.filter(b => b.activeRequestCount > 0).length,
+    idleBackends: config.backends.filter(b => b.activeRequestCount === 0).length,
     backendDetails: config.backends.map(b => ({
       url: b.url,
       priority: b.priority || 0,

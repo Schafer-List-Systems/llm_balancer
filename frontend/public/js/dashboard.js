@@ -277,9 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
     backendsGrid.innerHTML = backendsData.backends.map(backend => {
       const healthClass = backend.healthy ? 'healthy' : 'unhealthy';
       const healthText = backend.healthy ? 'Healthy' : 'Unhealthy';
-      const busyText = backend.busy ? 'Busy' : 'Idle';
-      const busyClass = backend.busy ? 'text-warning' : 'text-success';
-      const busyBgClass = backend.busy ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800';
+      const busyText = backend.activeRequestCount > 0 ? 'Busy' : 'Idle';
+      const busyBgClass = backend.activeRequestCount > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800';
 
       return `
         <div class="backend-card">
