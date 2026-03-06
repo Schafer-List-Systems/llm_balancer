@@ -16,6 +16,7 @@ class HealthChecker {
     this.backends = backends;
     this.config = config;
     this.healthCheckIntervalId = null;
+    this.lastCheckTime = null;
   }
 
   /**
@@ -63,6 +64,7 @@ class HealthChecker {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[${getTimestamp()}] [HealthChecker] Running health checks for all backends...`);
     }
+    this.lastCheckTime = new Date().toISOString();
     this.backends.forEach(backend => {
       this.checkBackend(backend);
     });
@@ -155,6 +157,7 @@ class HealthChecker {
       totalBackends: this.backends.length,
       healthyBackends: this.backends.filter(b => b.healthy).length,
       unhealthyBackends: this.backends.filter(b => !b.healthy).length,
+      lastCheck: this.lastCheckTime,
       interval: this.config.healthCheckInterval,
       timeout: this.config.healthCheckTimeout
     };
