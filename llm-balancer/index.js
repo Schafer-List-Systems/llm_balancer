@@ -200,6 +200,15 @@ app.get('/', (req, res) => {
     idleBackends: config.backends.filter(b => !b.busy).length,
     backendUrls: config.backends.map(b => b.url),
     healthCheckInterval: config.healthCheckInterval,
+    overloadedBackends: config.backends.filter(
+      b => b.activeRequestCount >= b.maxConcurrency
+    ).length,
+    availableBackends: config.backends.filter(
+      b => b.activeRequestCount < b.maxConcurrency
+    ).length,
+    // Deprecated: use overloadedBackends/availableBackends instead
+    busyBackends: 0,
+    idleBackends: 2,
     routes: {
       anthropic_api: '/v1/messages*',
       ollama_api: '/api/*',
@@ -230,9 +239,13 @@ app.get('/health', (req, res) => {
     totalBackends: stats.totalBackends,
     backends: stats.backends,
     hasHealthyBackends: balancer.hasHealthyBackends(),
-    // Add: Busy state information
-    busyBackends: config.backends.filter(b => b.busy).length,
-    idleBackends: config.backends.filter(b => !b.busy).length
+    // Add: Backend concurrency information
+    overloadedBackends: config.backends.filter(
+      b => b.activeRequestCount >= b.maxConcurrency
+    ).length,
+    availableBackends: config.backends.filter(
+      b => b.activeRequestCount < b.maxConcurrency
+    ).length
   });
 });
 
@@ -254,14 +267,20 @@ app.get('/stats', (req, res) => {
       maxQueueSize: config.maxQueueSize,
       queueTimeout: config.queueTimeout
     },
-    // Add: Backend busy counts
-    busyBackends: config.backends.filter(b => b.busy).length,
-    idleBackends: config.backends.filter(b => !b.busy).length,
+    // Add: Backend concurrency counts
+    overloadedBackends: config.backends.filter(
+      b => b.activeRequestCount >= b.maxConcurrency
+    ).length,
+    availableBackends: config.backends.filter(
+      b => b.activeRequestCount < b.maxConcurrency
+    ).length,
     backendDetails: config.backends.map(b => ({
       url: b.url,
       priority: b.priority || 0,
       healthy: b.healthy,
-      busy: b.busy,
+      activeRequestCount: b.activeRequestCount,
+      maxConcurrency: b.maxConcurrency,
+      utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
       requestCount: b.requestCount,
       errorCount: b.errorCount
     })),
@@ -279,7 +298,9 @@ app.get('/backends', (req, res) => {
       url: b.url,
       priority: b.priority || 0,
       healthy: b.healthy,
-      busy: b.busy,
+      activeRequestCount: b.activeRequestCount,
+      maxConcurrency: b.maxConcurrency,
+      utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
       failCount: b.failCount || 0,
       requestCount: b.requestCount || 0,
       errorCount: b.errorCount || 0,

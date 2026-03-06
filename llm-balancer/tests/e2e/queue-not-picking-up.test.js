@@ -43,7 +43,7 @@ describe('Queue Not Picking Up Issue', () => {
 
     // Release backend1 (should pick up the queued request)
     console.log('7. Releasing backend1');
-    backends[0].busy = false;
+    backends[0].activeRequestCount = 0;
 
     // Notify that backend is available
     balancer.notifyBackendAvailable();

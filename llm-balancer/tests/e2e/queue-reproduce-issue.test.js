@@ -35,7 +35,7 @@ describe('Queue Request Issue Reproduction', () => {
     // Release backend1
     console.log('4. Releasing backend1 (now busy=false)');
     const backend1 = backends[0];
-    backend1.busy = false;
+    backend1.activeRequestCount = 0;
 
     // Notify that backend is available
     balancer.notifyBackendAvailable();
@@ -85,7 +85,7 @@ describe('Queue Request Issue Reproduction', () => {
     expect(stats.depth).toBe(3);
 
     // Release backend1
-    backends[0].busy = false;
+    backends[0].activeRequestCount = 0;
     balancer.notifyBackendAvailable();
     console.log('2. Backend1 released and notified');
 
@@ -101,7 +101,7 @@ describe('Queue Request Issue Reproduction', () => {
     }
 
     // Release backend2
-    backends[1].busy = false;
+    backends[1].activeRequestCount = 0;
     balancer.notifyBackendAvailable();
     console.log('4. Backend2 released and notified');
 

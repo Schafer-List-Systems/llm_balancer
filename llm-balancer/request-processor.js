@@ -89,9 +89,12 @@ function sendRequestBody(proxyReq, body) {
  * @param {Object} backend - Backend to release
  */
 function releaseBackend(balancer, backend) {
-  if (backend.busy) {
-    backend.busy = false;
-    balancer.notifyBackendAvailable();
+  if (backend.activeRequestCount > 0) {
+    backend.activeRequestCount--;
+    // Notify when transitioning from max to below max (queue may have waiting requests)
+    if (backend.activeRequestCount < backend.maxConcurrency) {
+      balancer.notifyBackendAvailable();
+    }
   }
 }
 
@@ -104,8 +107,8 @@ function releaseBackend(balancer, backend) {
  * @param {Function} onRequestComplete - Callback when request is complete
  */
 function processRequest(balancer, backend, req, res, onRequestComplete) {
-  // Mark backend as busy
-  backend.busy = true;
+  // Increment active request count for this backend
+  backend.activeRequestCount++;
 
   const targetUrl = new URL(req.url, backend.url);
 

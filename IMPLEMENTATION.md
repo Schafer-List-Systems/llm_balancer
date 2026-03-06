@@ -195,6 +195,56 @@ All components have been tested and verified:
 - Compatible with Ollama API version 0.1.x and later
 - Uses Express 4.18.2 for HTTP server
 
+## Concurrency Count Management
+
+### Overview
+This section explains how `activeRequestCount` is managed across the codebase to prevent bugs related to double-incrementing or count drift.
+
+### Request Flow and Counter Lifecycle
+
+1. **Request arrives** at route handler in `index.js` (e.g., `/v1/messages*`, `/api/*`)
+2. **`balancer.queueRequest()` is called**:
+   - If queue is empty AND backend available → returns backend immediately
+   - Otherwise → queues request, returns Promise that resolves when backend frees up
+   - **Important:** Does NOT modify `activeRequestCount`
+3. **Backend assigned** to `forwardRequest()` in `index.js`
+4. **`processRequest(balancer, backend, req, res)` is called** (`request-processor.js`)
+   - **ONLY HERE:** `backend.activeRequestCount++` (line 111)
+5. **HTTP request executes** to the backend
+6. **Request completes**, `releaseBackend(balancer, backend)` is called (`request-processor.js:91-98`)
+   - `backend.activeRequestCount--` (line 93)
+   - If count drops below `maxConcurrency`, calls `balancer.notifyBackendAvailable()` to wake queued requests
+
+### Key Rules
+
+| Action | Location | Counter Modified |
+|--------|----------|------------------|
+| Assign backend | `queueRequest()`, `notifyBackendAvailable()` | `requestCount++` (total served) |
+| Start processing | `processRequest()` | `activeRequestCount++` |
+| Release backend | `releaseBackend()` | `activeRequestCount--` |
+
+### Why This Design?
+
+The separation ensures **exactly one increment and one decrement per request**. If the balancer also incremented `activeRequestCount` in `queueRequest()` or `notifyBackendAvailable()`, we'd get double-increment:
+
+```
+// WRONG (old buggy code):
+queueRequest(): backend.activeRequestCount++  // First increment
+processRequest(): backend.activeRequestCount++ // Second increment!
+releaseBackend(): backend.activeRequestCount-- // Only one decrement!
+// Result: count drifts up by 1 per request until backends appear permanently busy
+```
+
+The fix: `activeRequestCount` is **only** managed in `request-processor.js`, not in the balancer's queue methods.
+
+### Regression Tests
+
+See `tests/unit/balancer.test.js` → "Concurrency Count Integrity (Regression Tests)" section for tests that verify:
+- Correct count after immediate assignment
+- Correct count when queuing
+- No count drift with rapid sequential requests
+- Count integrity after multiple release cycles
+
 ## Future Enhancements
 
 Possible improvements for future versions:

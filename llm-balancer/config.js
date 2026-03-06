@@ -44,6 +44,15 @@ function loadConfig() {
       priority = parseInt(priorityEnv);
     }
 
+    // Parse concurrency from environment variable using index-based naming
+    // BACKEND_CONCURRENCY_0, BACKEND_CONCURRENCY_1, etc.
+    let maxConcurrency = 1;  // Default: 1 concurrent request at a time
+
+    const concurrencyEnv = process.env[`BACKEND_CONCURRENCY_${index}`];
+    if (concurrencyEnv) {
+      maxConcurrency = Math.max(1, parseInt(concurrencyEnv));
+    }
+
     return {
       id: index + 1,  // Backend ID (1-based)
       url: url,
@@ -52,7 +61,8 @@ function loadConfig() {
       failCount: 0,
       requestCount: 0,
       errorCount: 0,
-      busy: false,  // Track if backend is handling a request
+      activeRequestCount: 0,  // Counter for concurrent requests
+      maxConcurrency: maxConcurrency,  // Maximum parallel requests allowed
       models: []
     };
   });

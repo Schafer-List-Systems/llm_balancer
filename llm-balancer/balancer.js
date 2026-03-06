@@ -58,7 +58,7 @@ class Balancer {
    * @returns {Promise} Promise that resolves when a backend is available
    */
   async queueRequest() {
-    console.log(`[${getTimestamp()}] [Balancer] queueRequest() called, queue length: ${this.queue.length}, busy backends: ${this.backends.filter(b => b.busy).length}`);
+    console.log(`[${getTimestamp()}] [Balancer] queueRequest() called, queue length: ${this.queue.length}, backends at max concurrency: ${this.backends.filter(b => b.activeRequestCount >= b.maxConcurrency).length}`);
 
     // Check if any healthy backends exist before queuing
     if (!this.hasHealthyBackends()) {
@@ -70,10 +70,9 @@ class Balancer {
     if (this.queue.length === 0) {
         console.log(`[${getTimestamp()}] [Balancer] Queue empty, trying to get immediate backend`);
         const backend = this.getNextBackend();
-        if (backend && !backend.busy) {
-            // Mark backend as busy to prevent concurrent requests getting same backend
-            backend.busy = true;
+        if (backend) {
             // Increment request count for this backend
+            // Note: activeRequestCount is incremented in processRequest() after this returns
             backend.requestCount = (backend.requestCount || 0) + 1;
             this.requestCount.set(backend.url,
               (this.requestCount.get(backend.url) || 0) + 1);
@@ -124,10 +123,9 @@ class Balancer {
 
       const backend = this.getNextBackend();
 
-      if (backend && !backend.busy) {
-        // Mark backend as busy to prevent concurrent requests getting same backend
-        backend.busy = true;
+      if (backend) {
         // Increment request count for this backend
+        // Note: activeRequestCount is incremented in processRequest() after this resolves
         backend.requestCount = (backend.requestCount || 0) + 1;
         this.requestCount.set(backend.url,
           (this.requestCount.get(backend.url) || 0) + 1);
@@ -158,7 +156,9 @@ class Balancer {
    * @returns {Array} Sorted array of available backends (highest priority first)
    */
   _getSortedAvailableBackends() {
-    const availableBackends = this.backends.filter(b => b.healthy && !b.busy);
+    const availableBackends = this.backends.filter(
+      b => b.healthy && b.activeRequestCount < b.maxConcurrency
+    );
     if (availableBackends.length === 0) {
       return [];
     }
@@ -181,22 +181,16 @@ class Balancer {
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {
-    const totalBackends = this.backends.length;
-    if (totalBackends === 0) {
-      return null;
-    }
-
-    // Sort ALL backends by priority (descending), then by original order
     const sortedBackends = this._getSortedAvailableBackends();
 
     for (let i = 0; i < sortedBackends.length; i++ ) {
       let backend = sortedBackends[i];
 
-      if (backend.healthy && !backend.busy) {
+      if (backend.healthy && backend.activeRequestCount < backend.maxConcurrency) {
         return backend;
       }
 
-      // Backend is unhealthy or busy, try next
+      // Backend is unhealthy or at max concurrency, try next
       i++;
     }
 
@@ -211,16 +205,16 @@ class Balancer {
     const backend = this.backends.find(b => b.url === backendUrl);
     if (backend) {
       backend.healthy = false;
-      backend.busy = false; // Also clear busy flag so it can be retried
+      backend.activeRequestCount = 0; // Also clear active request count so it can be retried
       backend.failCount = (backend.failCount || 0) + 1;
       backend.errorCount = (backend.errorCount || 0) + 1;
       this.healthCheckCount.set(backendUrl, (this.healthCheckCount.get(backendUrl) || 0) + 1);
       console.error(`[${getTimestamp()}] [Balancer] Backend marked as unhealthy: ${backendUrl}`);
 
-      // Also mark as healthy if it becomes busy again (for test scenarios)
+      // Also mark as healthy if it becomes active again (for test scenarios)
       // This prevents the backend from being permanently marked as unhealthy
       // The HealthChecker will automatically recover it on next successful check
-      if (backend.busy) {
+      if (backend.activeRequestCount > 0) {
         this.markHealthy(backendUrl);
       }
     }
@@ -263,6 +257,9 @@ class Balancer {
       backends: this.backends.map(b => ({
         url: b.url,
         healthy: b.healthy,
+        activeRequestCount: b.activeRequestCount,
+        maxConcurrency: b.maxConcurrency,
+        utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
         failCount: b.failCount || 0,
         requestCount: b.requestCount || 0,
         errorCount: b.errorCount || 0,

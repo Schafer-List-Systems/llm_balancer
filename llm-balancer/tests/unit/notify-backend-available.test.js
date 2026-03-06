@@ -11,9 +11,9 @@ describe('notifyBackendAvailable', () => {
   beforeEach(() => {
     // Create fresh backend objects for each test
     const backends = [
-      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-      { url: 'http://backend3:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+      { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0, failCount: 0 },
+      { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0, failCount: 0 },
+      { url: 'http://backend3:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0, failCount: 0 }
     ];
     balancer = new Balancer(backends);
   });
@@ -38,17 +38,17 @@ describe('notifyBackendAvailable', () => {
     it('should process queued requests when backends become available', async () => {
       const testBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         30000
       );
 
-      // Mark all backends busy to force queueing
-      testBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency to force queueing
+      testBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
-      // Queue requests - they will go into the queue since all are busy
+      // Queue requests - they will go into the queue since all are at capacity
       const promises = [];
       for (let i = 0; i < 2; i++) {
         promises.push(testBalancer.queueRequest());
@@ -60,8 +60,8 @@ describe('notifyBackendAvailable', () => {
       // Check that requests are in the queue
       expect(testBalancer.queue.length).toBeGreaterThan(0);
 
-      // Release backends by marking them NOT busy BEFORE calling notifyBackendAvailable
-      testBalancer.backends.forEach(b => b.busy = false);
+      // Release backends by setting activeRequestCount to 0 BEFORE calling notifyBackendAvailable
+      testBalancer.backends.forEach(b => b.activeRequestCount = 0);
 
       // Now call notify - it will find available backends and resolve queued requests
       testBalancer.notifyBackendAvailable();
@@ -74,15 +74,15 @@ describe('notifyBackendAvailable', () => {
     it('should process queued requests in FIFO order', async () => {
       const fifoBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         30000
       );
 
-      // Mark all backends busy first
-      fifoBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency first
+      fifoBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue multiple requests (matching number of backends)
       const promises = [];
@@ -92,8 +92,8 @@ describe('notifyBackendAvailable', () => {
 
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Release backends - mark NOT busy before notify
-      fifoBalancer.backends.forEach(b => b.busy = false);
+      // Release backends - set activeRequestCount to 0 before notify
+      fifoBalancer.backends.forEach(b => b.activeRequestCount = 0);
       fifoBalancer.notifyBackendAvailable();
 
       const results = await Promise.all(promises);
@@ -103,15 +103,15 @@ describe('notifyBackendAvailable', () => {
     it('should clear timeout when resolving queued request', async () => {
       const shortTimeoutBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         100  // Very short timeout
       );
 
-      // Mark all backends busy to force queueing
-      shortTimeoutBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency to force queueing
+      shortTimeoutBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue a request with very short timeout
       const promise = shortTimeoutBalancer.queueRequest();
@@ -119,8 +119,8 @@ describe('notifyBackendAvailable', () => {
       // Wait a bit for the queued request to start timing out
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Release backend before timeout fires - mark NOT busy first
-      shortTimeoutBalancer.backends.forEach(b => b.busy = false);
+      // Release backend before timeout fires - set activeRequestCount to 0 first
+      shortTimeoutBalancer.backends.forEach(b => b.activeRequestCount = 0);
       shortTimeoutBalancer.notifyBackendAvailable();
 
       // Should resolve successfully without timeout error
@@ -131,15 +131,15 @@ describe('notifyBackendAvailable', () => {
     it('should process queued requests one per available backend', async () => {
       const testBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         30000
       );
 
-      // Mark all backends busy to force queueing
-      testBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency to force queueing
+      testBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue more requests than we have backends
       const promises = [];
@@ -150,16 +150,16 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release only one backend at a time to simulate gradual availability
-      testBalancer.backends[0].busy = false;
+      testBalancer.backends[0].activeRequestCount = 0;
       testBalancer.notifyBackendAvailable();
 
       // One should resolve immediately
       const result1 = await promises[0];
       expect(result1).not.toBe(null);
 
-      // Mark that backend busy again and release another
-      testBalancer.backends[0].busy = true;
-      testBalancer.backends[1].busy = false;
+      // Mark that backend at max concurrency again and release another
+      testBalancer.backends[0].activeRequestCount = testBalancer.backends[0].maxConcurrency;
+      testBalancer.backends[1].activeRequestCount = 0;
       testBalancer.notifyBackendAvailable();
 
       const result2 = await promises[1];
@@ -177,15 +177,15 @@ describe('notifyBackendAvailable', () => {
     it('should increment request count for each resolved backend', async () => {
       const counterBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         30000
       );
 
-      // Mark all backends busy to force queueing
-      counterBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency to force queueing
+      counterBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue multiple requests (matching number of backends)
       const promises = [];
@@ -196,7 +196,7 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release backends
-      counterBalancer.backends.forEach(b => b.busy = false);
+      counterBalancer.backends.forEach(b => b.activeRequestCount = 0);
       counterBalancer.notifyBackendAvailable();
 
       await Promise.all(promises);
@@ -221,15 +221,15 @@ describe('notifyBackendAvailable', () => {
     it('should handle concurrent notifyBackendAvailable calls safely', async () => {
       const concurrentBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         30000
       );
 
-      // Mark all backends busy to force queueing
-      concurrentBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency to force queueing
+      concurrentBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue multiple requests (matching number of backends)
       const promises = [];
@@ -240,7 +240,7 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release backends and call notify multiple times (should be safe)
-      concurrentBalancer.backends.forEach(b => b.busy = false);
+      concurrentBalancer.backends.forEach(b => b.activeRequestCount = 0);
       concurrentBalancer.notifyBackendAvailable();
       concurrentBalancer.notifyBackendAvailable();
       concurrentBalancer.notifyBackendAvailable();
@@ -252,15 +252,15 @@ describe('notifyBackendAvailable', () => {
     it('should handle queue with only one backend available', async () => {
       const limitedBalancer = new Balancer(
         [
-          { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-          { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false }
+          { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+          { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
         ],
         100,
         30000
       );
 
-      // Mark all backends busy to force queueing
-      limitedBalancer.backends.forEach(b => b.busy = true);
+      // Mark all backends at max concurrency to force queueing
+      limitedBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue more requests than we have backends available
       const promises = [];
@@ -271,14 +271,14 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Process all queued requests by repeatedly releasing and re-marking backend[0]
-      // Each cycle: release -> notify (assigns one request) -> mark busy again -> repeat
+      // Each cycle: release -> notify (assigns one request) -> mark at max concurrency again -> repeat
       for (let i = 0; i < 4; i++) {
-        limitedBalancer.backends[0].busy = false;
+        limitedBalancer.backends[0].activeRequestCount = 0;
         limitedBalancer.notifyBackendAvailable();
         const result = await promises[i];
         expect(result).not.toBe(null);
-        // Mark backend busy again so we can process the next queued request in next iteration
-        limitedBalancer.backends[0].busy = true;
+        // Mark backend at max concurrency again so we can process the next queued request in next iteration
+        limitedBalancer.backends[0].activeRequestCount = limitedBalancer.backends[0].maxConcurrency;
       }
 
       // All 4 requests should have resolved (using the same backend sequentially)
@@ -288,13 +288,13 @@ describe('notifyBackendAvailable', () => {
   describe('Integration with Backend Selection', () => {
     it('should select highest priority backend when available', async () => {
       const backends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false },
-        { url: 'http://backend2:11434', priority: 5, healthy: true, busy: false }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 },
+        { url: 'http://backend2:11434', priority: 5, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
       ];
       const priorityBalancer = new Balancer(backends);
 
-      // Mark lower priority backend busy first
-      backends[0].busy = true;
+      // Mark lower priority backend at max concurrency first
+      backends[0].activeRequestCount = backends[0].maxConcurrency;
 
       // Queue a request - should go to higher priority backend when available
       const promise = priorityBalancer.queueRequest();
@@ -302,7 +302,7 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release the higher priority backend (backend2 with priority 5)
-      backends[1].busy = false;
+      backends[1].activeRequestCount = 0;
       priorityBalancer.notifyBackendAvailable();
 
       const result = await promise;
@@ -312,7 +312,7 @@ describe('notifyBackendAvailable', () => {
 
     it('should reject when no healthy backends available', async () => {
       const backends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: false, busy: false }
+        { url: 'http://backend1:11434', priority: 1, healthy: false, activeRequestCount: 0, maxConcurrency: 1 }
       ];
       const unhealthyBalancer = new Balancer(backends);
 

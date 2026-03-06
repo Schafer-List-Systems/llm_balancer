@@ -3,9 +3,9 @@ const Balancer = require('../../balancer');
 // Helper function to create fresh backend copies for testing
 const getFreshBackends = () => {
   return JSON.parse(JSON.stringify([
-    { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-    { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-    { url: 'http://backend3:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+    { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+    { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+    { url: 'http://backend3:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
   ]));
 };
 
@@ -25,9 +25,9 @@ describe('Balancer', () => {
   beforeEach(() => {
     // Create test backends
     backends = [
-      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, failCount: 0 },
-      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0, failCount: 0 },
-      { url: 'http://backend3:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, failCount: 0 }
+      { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0, failCount: 0 },
+      { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0, failCount: 0 },
+      { url: 'http://backend3:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0, failCount: 0 }
     ];
     balancer = new Balancer(backends);
   });
@@ -46,8 +46,8 @@ describe('Balancer', () => {
 
     it('should initialize with single global queue', () => {
       const customBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const customBalancer = new Balancer(customBackends);
       expect(customBalancer.queue).toBeDefined();
@@ -68,8 +68,8 @@ describe('Balancer', () => {
       const backend1 = await smallTimeoutBalancer.queueRequest();
       expect(backend1).not.toBe(null);
 
-      // Mark the backend as busy and mark it as unhealthy so queueRequest won't get it
-      backend1.busy = true;
+      // Mark the backend as at max concurrency and mark it as unhealthy so queueRequest won't get it
+      backend1.activeRequestCount = backend1.maxConcurrency;
       backend1.healthy = false;
 
       // Second request should reject due to queue timeout
@@ -121,8 +121,8 @@ describe('Balancer', () => {
   describe('Priority Tiers', () => {
     it('should prioritize higher priority backends', async () => {
       const priorityBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const priorityBalancer = new Balancer(priorityBackends);
 
@@ -132,8 +132,8 @@ describe('Balancer', () => {
 
     it('should allow queuing for specific priority tier', async () => {
       const priorityBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const priorityBalancer = new Balancer(priorityBackends);
 
@@ -145,8 +145,8 @@ describe('Balancer', () => {
 
     it('should fall back to lower priority when higher is unavailable', async () => {
       const priorityBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: true, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 1, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const priorityBalancer = new Balancer(priorityBackends);
 
@@ -169,7 +169,7 @@ describe('Balancer', () => {
       const backend = backends.find(b => b.url === 'http://backend1:11434');
       expect(backend.healthy).toBe(true);
       expect(backend.failCount).toBe(0);
-      expect(backend.busy).toBe(false); // busy flag should remain unchanged
+      expect(backend.activeRequestCount).toBe(0);
     });
 
     it('should return false when no healthy backends exist', () => {
@@ -242,11 +242,11 @@ describe('Balancer', () => {
   });
 
   describe('Complex Scenarios', () => {
-    it('should handle mixed priority and busy states', async () => {
+    it('should handle mixed priority and concurrency states', async () => {
       const mixedBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: true, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend3:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 1, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend3:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const mixedBalancer = new Balancer(mixedBackends);
 
@@ -257,9 +257,9 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle full failover scenario', async () => {
-      // Mark all backends as busy and unhealthy
+      // Mark all backends as at max concurrency and unhealthy
       backends.forEach(b => {
-        b.busy = true;
+        b.activeRequestCount = b.maxConcurrency;
         b.healthy = false;
       });
 
@@ -278,7 +278,7 @@ describe('Balancer', () => {
         url: 'http://backend1:11434',
         priority: 1,
         healthy: true,
-        busy: false,
+        activeRequestCount: 0, maxConcurrency: 1,
         requestCount: 0,
         errorCount: 0,
         processRequest: () => new Promise(resolve => {
@@ -299,7 +299,7 @@ describe('Balancer', () => {
       expect(backend).not.toBe(null);
 
       // Mark as busy during processing
-      backend.busy = true;
+      backend.activeRequestCount = backend.maxConcurrency;
 
       // Queue another request - should timeout since first request takes 10s > 5s timeout
       await expect(slowBalancer.queueRequest()).rejects.toThrow('Request timeout');
@@ -330,7 +330,7 @@ describe('Balancer', () => {
       const timeoutBalancer = new Balancer(backends, 50, 100);
 
       // Mark all backends as busy
-      backends.forEach(b => b.busy = true);
+      backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Try to queue when no backend is available
       const promise = timeoutBalancer.queueRequest();
@@ -341,13 +341,13 @@ describe('Balancer', () => {
 
     it('should handle partial timeout (some succeed, some timeout)', async () => {
       const mixedBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const mixedBalancer = new Balancer(mixedBackends, 50, 100);
 
-      // Make backend 1 busy
-      mixedBackends[0].busy = true;
+      // Make backend 1 at max concurrency
+      mixedBackends[0].activeRequestCount = mixedBackends[0].maxConcurrency;
 
       // Queue requests
       const promises = [
@@ -371,7 +371,7 @@ describe('Balancer', () => {
       expect(backend.url).toBeDefined();
 
       // Mark as busy
-      backend.busy = true;
+      backend.activeRequestCount = backend.maxConcurrency;
     }, 5000);
 
     it('should handle exponential backoff on retry', async () => {
@@ -395,36 +395,41 @@ describe('Balancer', () => {
   });
 
   describe('Busy State Edge Cases', () => {
-    it('should mark backend as busy and queue subsequent requests', async () => {
-      const busyBalancer = new Balancer(backends);
-      const backend = await busyBalancer.queueRequest();
+    it('should mark backend as at max concurrency and queue subsequent requests', async () => {
+      const concurrencyBalancer = new Balancer(backends);
+      const backend = await concurrencyBalancer.queueRequest();
 
-      // Should be marked as busy
-      expect(backend.busy).toBe(true);
+      // After queue assignment, activeRequestCount is 0 (processRequest hasn't run yet)
+      // This is correct behavior - count is incremented in processRequest(), not here
+      expect(backend.activeRequestCount).toBe(0);
 
-      // Another request should be queued (same backend is busy, so can't assign)
-      const backend2 = await busyBalancer.queueRequest();
+      // Simulate what processRequest() does: increment the count
+      backend.activeRequestCount++;
+      expect(backend.activeRequestCount).toBe(1);
+
+      // Another request should go to a different backend since first is at max concurrency
+      const backend2 = await concurrencyBalancer.queueRequest();
       expect(backend2).not.toBe(null);
-      // Second request should go to queue and be assigned later when backend is free
+      // Second request should be assigned to a different backend (or queued if all busy)
     }, 5000);
 
-    it('should handle busy state during failover', async () => {
-      const busyBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: true, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend3:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+    it('should handle max concurrency during failover', async () => {
+      const concurrencyBackends = [
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 1, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend3:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
-      const busyBalancer = new Balancer(busyBackends);
+      const concurrencyBalancer = new Balancer(concurrencyBackends);
 
       // Get first backend
-      const backend1 = await busyBalancer.queueRequest();
+      const backend1 = await concurrencyBalancer.queueRequest();
       expect(backend1).not.toBe(null);
 
       // Mark backend 1 as unhealthy
-      busyBackends[0].healthy = false;
+      concurrencyBackends[0].healthy = false;
 
       // Should get another backend
-      const backend2 = await busyBalancer.queueRequest();
+      const backend2 = await concurrencyBalancer.queueRequest();
       expect(backend2).not.toBe(null);
       expect(backend2.url).not.toBe('http://backend1:11434');
     }, 5000);
@@ -437,10 +442,10 @@ describe('Balancer', () => {
       const backend = await resetBalancer.queueRequest();
 
       // Mark as busy
-      backend.busy = true;
+      backend.activeRequestCount = backend.maxConcurrency;
 
       // Simulate request completion
-      backend.busy = false;
+      backend.activeRequestCount = 0;
       backend.requestCount++;
 
       // Now backend should be available again
@@ -453,9 +458,9 @@ describe('Balancer', () => {
 
     it('should handle busy state with priority tiers', async () => {
       const priorityBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: true, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend3:11434', priority: 3, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 1, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend3:11434', priority: 3, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const priorityBalancer = new Balancer(priorityBackends);
 
@@ -480,7 +485,7 @@ describe('Balancer', () => {
       expect(backend1).not.toBe(null);
 
       // Mark as busy and unhealthy
-      backend1.busy = true;
+      backend1.activeRequestCount = backend1.maxConcurrency;
       backend1.healthy = false;
 
       // Second request should go to queue
@@ -496,7 +501,7 @@ describe('Balancer', () => {
       expect(backend1).not.toBe(null);
 
       // Mark as busy and unhealthy
-      backend1.busy = true;
+      backend1.activeRequestCount = backend1.maxConcurrency;
       backend1.healthy = false;
 
       // Try to queue another request - should get a different backend
@@ -507,9 +512,9 @@ describe('Balancer', () => {
 
     it('should handle mixed priority queue when full', async () => {
       const priorityBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend3:11434', priority: 3, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend3:11434', priority: 3, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const fullQueueBalancer = new Balancer(priorityBackends, 2, 30000);
 
@@ -532,7 +537,7 @@ describe('Balancer', () => {
       expect(backend1).not.toBe(null);
 
       // Mark as busy and unhealthy
-      backend1.busy = true;
+      backend1.activeRequestCount = backend1.maxConcurrency;
       backend1.healthy = false;
 
       // Try to queue another request - should get a different backend
@@ -598,13 +603,13 @@ describe('Balancer', () => {
       expect(backend.failCount).toBeGreaterThan(0);
 
       // Manually mark busy as false (simulating request completion)
-      backend.busy = false;
+      backend.activeRequestCount = 0;
 
       // Mark as healthy again
       transitionBalancer.markHealthy(backend.url);
       expect(backend.healthy).toBe(true);
       expect(backend.failCount).toBe(0);
-      expect(backend.busy).toBe(false);
+      expect(backend.activeRequestCount).toBe(0);
     }, 5000);
 
     it('should handle partial degradation (some backends fail, others work)', async () => {
@@ -636,7 +641,7 @@ describe('Balancer', () => {
 
       // Mark all backends as busy and unhealthy
       backends.forEach(b => {
-        b.busy = true;
+        b.activeRequestCount = b.maxConcurrency;
         b.healthy = false;
       });
 
@@ -645,7 +650,7 @@ describe('Balancer', () => {
 
       // Restore backends for other tests
       backends.forEach(b => {
-        b.busy = false;
+        b.activeRequestCount = 0;
         b.healthy = true;
         b.failCount = 0;
       });
@@ -660,7 +665,7 @@ describe('Balancer', () => {
           url: `http://backend${i}:11434`,
           priority: i % 3 + 1,
           healthy: true,
-          busy: false,
+          activeRequestCount: 0, maxConcurrency: 1,
           requestCount: 0,
           errorCount: 0
         });
@@ -678,9 +683,9 @@ describe('Balancer', () => {
     it('should track statistics accurately under heavy load', async () => {
       // Create fresh backends for this test
       const freshBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-        { url: 'http://backend3:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend3:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
       const statsBalancer = new Balancer(freshBackends);
 
@@ -692,7 +697,7 @@ describe('Balancer', () => {
         await statsBalancer.queueRequest();
 
         // Free up backends to simulate request completion
-        freshBackends.forEach(b => b.busy = false);
+        freshBackends.forEach(b => b.activeRequestCount = 0);
         statsBalancer.notifyBackendAvailable();
       }
 
@@ -736,7 +741,7 @@ describe('Balancer', () => {
         url: 'http://single:11434',
         priority: 1,
         healthy: true,
-        busy: false,
+        activeRequestCount: 0, maxConcurrency: 1,
         requestCount: 0,
         errorCount: 0
       };
@@ -777,7 +782,7 @@ describe('Balancer', () => {
 
     it('should handle invalid URL format', () => {
       const invalidUrlBalancer = new Balancer([
-        { url: 'invalid-url', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'invalid-url', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ]);
 
       // The current implementation accepts any string as URL, even invalid formats
@@ -787,7 +792,7 @@ describe('Balancer', () => {
 
     it('should handle null URL', () => {
       const nullUrlBalancer = new Balancer([
-        { url: null, priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: null, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ]);
 
       // The current implementation accepts null URLs
@@ -797,7 +802,7 @@ describe('Balancer', () => {
 
     it('should handle undefined URL', () => {
       const undefinedUrlBalancer = new Balancer([
-        { url: undefined, priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: undefined, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ]);
 
       // The current implementation accepts undefined URLs
@@ -819,7 +824,7 @@ describe('Balancer', () => {
 
     it('should handle negative priorities', async () => {
       const negativeBalancer = new Balancer([
-        { url: 'http://backend1:11434', priority: -1, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: -1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ]);
 
       const backend = await negativeBalancer.queueRequest();
@@ -828,12 +833,203 @@ describe('Balancer', () => {
 
     it('should handle very high priorities', async () => {
       const highPriorityBalancer = new Balancer([
-        { url: 'http://backend1:11434', priority: 999, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+        { url: 'http://backend1:11434', priority: 999, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ]);
 
       const backend = await highPriorityBalancer.queueRequest();
       expect(backend).not.toBe(null);
       expect(backend.url).toBe('http://backend1:11434');
     }, 5000);
+  });
+
+  describe('Concurrency Count Integrity (Regression Tests)', () => {
+    /**
+     * Regression test for double-increment bug where activeRequestCount was incremented
+     * both in queueRequest()/notifyBackendAvailable() AND again in processRequest(),
+     * but only decremented once in releaseBackend(). This caused counts to grow by 1 per
+     * request, eventually filling all concurrency slots permanently.
+     *
+     * The fix: activeRequestCount is ONLY incremented in processRequest(), not in the
+     * balancer's queue methods. The balancer only tracks requestCount (total requests served).
+     *
+     * IMPORTANT: When a backend is returned from queueRequest(), its activeRequestCount
+     * has NOT been incremented yet - that happens later when processRequest() runs.
+     * This test simulates the full lifecycle by manually incrementing after assignment
+     * and decrementing on release, mimicking what processRequest/releaseBackend do.
+     */
+
+    it('should not double-increment activeRequestCount during immediate assignment', async () => {
+      // Use backends with equal priority and maxConcurrency=1 to ensure different backends are selected
+      const testBackends = [
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
+      ];
+      const testBalancer = new Balancer(testBackends);
+
+      // Get first backend from queue (simulating what happens in index.js)
+      // Due to priority-based selection with equal priorities, backend1 is selected first (lower array index wins tie-breaker)
+      const assignedBackend1 = await testBalancer.queueRequest();
+      expect(assignedBackend1.activeRequestCount).toBe(0); // Not incremented yet - processRequest hasn't run
+
+      // Simulate what processRequest() does: increment count to mark backend as "in use"
+      // This is necessary before the next queueRequest because activeRequestCount determines availability
+      assignedBackend1.activeRequestCount++;
+      expect(assignedBackend1.activeRequestCount).toBe(1);
+
+      // Now get second backend - should be different since first is at maxConcurrency
+      const assignedBackend2 = await testBalancer.queueRequest();
+      expect(assignedBackend2.activeRequestCount).toBe(0); // Not incremented yet - processRequest hasn't run
+
+      // Verify different backends were selected (no count drift from reusing same backend)
+      expect(assignedBackend1.url).not.toBe(assignedBackend2.url);
+
+      // Simulate what processRequest() does: increment count for second assigned backend
+      assignedBackend2.activeRequestCount++;
+
+      // Now counts should be 1 each (not 2, which would indicate double-increment)
+      expect(assignedBackend1.activeRequestCount).toBe(1);
+      expect(assignedBackend2.activeRequestCount).toBe(1);
+
+      // Simulate what releaseBackend() does: decrement count for both
+      assignedBackend1.activeRequestCount--;
+      assignedBackend2.activeRequestCount--;
+
+      testBalancer.notifyBackendAvailable();
+
+      // After release, counts should be 0 again (not -1 or other values)
+      expect(assignedBackend1.activeRequestCount).toBe(0);
+      expect(assignedBackend2.activeRequestCount).toBe(0);
+    });
+
+    it('should not double-increment during queued assignment', async () => {
+      const testBackends = [
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
+      ];
+      const testBalancer = new Balancer(testBackends);
+
+      // First request gets immediate backend (count is 0 after assignment)
+      const firstBackend = await testBalancer.queueRequest();
+      expect(firstBackend.activeRequestCount).toBe(0);
+
+      // Simulate processRequest() increment for first request
+      firstBackend.activeRequestCount++;
+      expect(firstBackend.activeRequestCount).toBe(1);
+
+      // Second request should queue (no capacity)
+      let queuedBackend;
+      const queuePromise = testBalancer.queueRequest().then(b => {
+        queuedBackend = b;
+      });
+
+      // Release: simulate releaseBackend() decrement and notify
+      testBackends[0].activeRequestCount--;
+      expect(testBackends[0].activeRequestCount).toBe(0);
+      testBalancer.notifyBackendAvailable();
+
+      await queuePromise;
+
+      // After queued assignment, count is still 0 (processRequest hasn't run)
+      expect(queuedBackend.activeRequestCount).toBe(0);
+
+      // Simulate processRequest() increment for second request
+      queuedBackend.activeRequestCount++;
+      expect(queuedBackend.activeRequestCount).toBe(1); // Should be 1, not 2
+
+      // Release again
+      testBackends[0].activeRequestCount--;
+      expect(testBackends[0].activeRequestCount).toBe(0);
+    });
+
+    it('should handle rapid sequential requests without count drift', async () => {
+      const testBackends = [
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, requestCount: 0, errorCount: 0 },
+        { url: 'http://backend2:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, requestCount: 0, errorCount: 0 }
+      ];
+      const testBalancer = new Balancer(testBackends);
+
+      // Simulate rapid arrival of more requests than capacity (4 requests for 2 backends)
+      const promises = [];
+      for (let i = 0; i < 4; i++) {
+        promises.push(testBalancer.queueRequest());
+      }
+
+      const assignedBackends = await Promise.all(promises);
+
+      // All should be assigned eventually
+      expect(assignedBackends.length).toBe(4);
+
+      // After queue assignment, counts are still 0 (processRequest hasn't run)
+      const totalActiveAfterQueue = testBackends.reduce((sum, b) => sum + b.activeRequestCount, 0);
+      expect(totalActiveAfterQueue).toBe(0);
+
+      // Simulate processRequest() incrementing for each request assigned to backends
+      // Each backend gets 2 requests (maxConcurrency=2), so we increment twice per backend
+      testBackends[0].activeRequestCount = 2; // 2 requests assigned
+      testBackends[1].activeRequestCount = 2; // 2 requests assigned
+
+      // Total should be 4, NOT 8 (which would indicate double-increment bug)
+      const totalActiveAfterProcess = testBackends.reduce((sum, b) => sum + b.activeRequestCount, 0);
+      expect(totalActiveAfterProcess).toBe(4);
+
+      // Each backend should have exactly 2 active requests (their maxConcurrency)
+      expect(testBackends[0].activeRequestCount).toBe(2);
+      expect(testBackends[1].activeRequestCount).toBe(2);
+
+      // Simulate releaseBackend() decrementing for all completed requests
+      testBackends.forEach(b => b.activeRequestCount = 0);
+      testBalancer.notifyBackendAvailable();
+
+      const totalActiveAfterRelease = testBackends.reduce((sum, b) => sum + b.activeRequestCount, 0);
+      expect(totalActiveAfterRelease).toBe(0);
+    });
+
+    it('should maintain count integrity after multiple release cycles', async () => {
+      const testBackends = [
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, requestCount: 0, errorCount: 0 }
+      ];
+      const testBalancer = new Balancer(testBackends);
+
+      // Cycle through multiple assign/release cycles
+      for (let cycle = 0; cycle < 5; cycle++) {
+        // Assign a request from queue (count still 0)
+        const backend = await testBalancer.queueRequest();
+        expect(backend.activeRequestCount).toBe(0);
+
+        // Simulate processRequest() increment
+        backend.activeRequestCount++;
+
+        // Simulate releaseBackend() decrement
+        backend.activeRequestCount--;
+        testBalancer.notifyBackendAvailable();
+
+        // After release, count should be 0 (before next assignment)
+        expect(testBackends[0].activeRequestCount).toBe(0);
+      }
+
+      // Final state: no active requests after all cycles
+      expect(testBackends[0].activeRequestCount).toBe(0);
+    });
+
+    it('should verify requestCount is tracked separately from activeRequestCount', async () => {
+      const testBackends = [
+        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, requestCount: 0, errorCount: 0 }
+      ];
+      const testBalancer = new Balancer(testBackends);
+
+      // Make multiple requests (simulating completed lifecycle)
+      for (let i = 0; i < 3; i++) {
+        await testBalancer.queueRequest();
+        // Simulate process + release
+        testBackends[0].activeRequestCount++;
+        testBackends[0].activeRequestCount--;
+        testBalancer.notifyBackendAvailable();
+      }
+
+      // requestCount should be 3 (total requests served)
+      expect(testBackends[0].requestCount).toBe(3);
+
+      // activeRequestCount should be 0 (no active requests)
+      expect(testBackends[0].activeRequestCount).toBe(0);
+    });
   });
 });

@@ -36,7 +36,7 @@ describe('Rapid Request Arrival Queue Issue', () => {
 
     // Now release backend1
     console.log('3. Releasing backend1 (should pick up queued request)');
-    backends[0].busy = false;
+    backends[0].activeRequestCount = 0;
     balancer.notifyBackendAvailable();
 
     // Wait for request to process

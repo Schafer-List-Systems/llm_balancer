@@ -9,8 +9,9 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Automatic health checking with recovery
 - ✅ Automatic failover when backends become unhealthy
 - ✅ **Priority-based selection** (prioritizes high-priority backends)
-- ✅ **Immediate fallback** to lower priority tiers when higher priority backends are busy
-- ✅ **Idle backend tracking** to prevent overloading
+- ✅ **Concurrency-based load limiting** (configurable max parallel requests per backend)
+- ✅ **Immediate fallback** to lower priority tiers when higher priority backends are at capacity
+- ✅ **Utilization tracking** to prevent overloading individual servers
 - ✅ Streaming and non-streaming request support
 - ✅ Health check endpoint with backend status
 - ✅ Detailed statistics and monitoring
@@ -63,6 +64,21 @@ BACKEND_PRIORITY_2=0    # Low priority for third backend (index 2)
 ```
 
 **Priority values can be any integer:** Higher numbers indicate higher priority. Negative values are also supported. The load balancer will always try to use high-priority backends first. Use `BACKEND_PRIORITY_N` where N is the zero-based index of your backend in the `OLLAMA_BACKENDS` list.
+
+### Concurrency-Based Load Limiting
+
+Configure maximum parallel requests per backend to prevent overloading:
+
+**Using index-based concurrency:**
+
+```bash
+cd llm-balancer
+OLLAMA_BACKENDS="http://fast-server:11434,http://slower-server:11434"
+BACKEND_CONCURRENCY_0=5   # Allow 5 concurrent requests to fast server (index 0)
+BACKEND_CONCURRENCY_1=2   # Allow only 2 concurrent requests to slower server (index 1)
+```
+
+**Concurrency values can be any positive integer:** Higher numbers allow more parallel requests. The load balancer will track active request count per backend and only assign new requests when `activeRequestCount < maxConcurrency`. Use `BACKEND_CONCURRENCY_N` where N is the zero-based index of your backend in the `OLLAMA_BACKENDS` list.
 
 ## Usage
 
@@ -184,9 +200,10 @@ curl http://localhost:3001/backends
 
 Returns per-backend statistics including:
 - URL and health status
-- **Busy state** (whether backend is handling a request)
-- Idle state (available for new requests)
-- Request count
+- **Active request count** (current concurrent requests)
+- **Max concurrency** (configured limit for parallel requests)
+- **Utilization percentage** (`activeRequestCount / maxConcurrency * 100`)
+- Request count (total requests handled)
 - Error count
 - Failure count
 - Available models
@@ -198,7 +215,9 @@ Example response:
     {
       "url": "http://host1:11434",
       "healthy": true,
-      "busy": true,
+      "activeRequestCount": 2,
+      "maxConcurrency": 5,
+      "utilizationPercent": 40,
       "requestCount": 42,
       "errorCount": 1,
       "models": ["llama2", "mistral"]
@@ -206,7 +225,9 @@ Example response:
     {
       "url": "http://host2:11434",
       "healthy": true,
-      "busy": false,
+      "activeRequestCount": 0,
+      "maxConcurrency": 3,
+      "utilizationPercent": 0,
       "requestCount": 38,
       "errorCount": 0,
       "models": ["llama2", "gemma"]
@@ -215,21 +236,22 @@ Example response:
 }
 ```
 
-#### Busy State Information
+#### Concurrency-Based Load Tracking
 
-The load balancer tracks the busy state of each backend:
-- **Busy**: Backend is currently handling a request (30-second timeout applies)
-- **Idle**: Backend is available and ready to handle new requests
+The load balancer tracks concurrent requests per backend:
+- **activeRequestCount**: Number of currently in-flight requests
+- **maxConcurrency**: Configurable maximum (default: 1)
+- **utilizationPercent**: Current utilization as percentage of max concurrency
 
-When multiple backends are available, the balancer prioritizes **idle backends** to distribute load more evenly and prevent overloading individual servers.
+When multiple backends are available, the balancer selects based on priority and availability (backends not at their concurrency limit). New requests are queued when all high-priority backends have reached their `maxConcurrency` threshold.
 
-Check total busy and idle backends:
+Check total overloaded and available backends:
 ```bash
-# Via health endpoint
-curl http://localhost:3001/health | grep -E "busyBackends|idleBackends"
+# Via health endpoint - overloaded = at max concurrency, available = below limit
+curl http://localhost:3001/health | grep -E "overloadedBackends|availableBackends"
 
 # Via stats endpoint
-curl http://localhost:3001/stats | grep -E "busyBackends|idleBackends"
+curl http://localhost:3001/stats | grep -E "overloadedBackends|availableBackends"
 ```
 
 ## Environment Variables
@@ -243,6 +265,7 @@ curl http://localhost:3001/stats | grep -E "busyBackends|idleBackends"
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |
 | `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size |
 | `BACKEND_PRIORITY_N` | 1 | Priority for backend at index N (any integer, higher = higher priority; e.g., BACKEND_PRIORITY_0 for first backend, BACKEND_PRIORITY_1 for second, etc.) |
+| `BACKEND_CONCURRENCY_N` | 1 | Maximum concurrent requests for backend at index N (positive integer; e.g., BACKEND_CONCURRENCY_0=5 allows 5 parallel requests to first backend) |
 | `SHUTDOWN_TIMEOUT` | 60000ms | Graceful shutdown timeout (time to wait for in-flight requests before force exit) |
 
 ## Architecture
@@ -254,12 +277,12 @@ Client → Load Balancer (localhost:3001) → Multiple Ollama Servers (host1, ho
 The load balancer:
 - **Prioritizes high-priority backends** for better performance and cost optimization
 - **Uses FIFO queueing** to handle concurrent requests
-- **Immediately falls back to lower priority tiers** when higher priority backends are busy
-- Tracks and prioritizes idle backends to distribute load more evenly
-- Skips unhealthy backends during selection
+- **Immediately falls back to lower priority tiers** when higher priority backends are at capacity (max concurrency reached)
+- Tracks active request count per backend with configurable `maxConcurrency` limit
+- Skips backends that have reached their concurrency limit during selection
 - Automatically recovers healthy backends after recovery interval
 - Handles both Anthropic and Ollama API formats
-- Tracks busy state of each backend with 30-second timeout for stuck requests
+- Reports utilization percentage (`activeRequestCount / maxConcurrency * 100`) for each backend
 
 ## Troubleshooting
 

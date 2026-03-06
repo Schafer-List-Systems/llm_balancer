@@ -11,15 +11,18 @@ describe('Request Processor', () => {
         notifyBackendAvailable: jest.fn()
       };
 
+      // Start with activeRequestCount at maxConcurrency so release will notify
       const backend = {
         id: 'test-backend',
         url: 'http://localhost:3000',
-        busy: true
+        busy: true,
+        activeRequestCount: 2,
+        maxConcurrency: 2
       };
 
       requestProcessor.releaseBackend(mockBalancer, backend);
 
-      expect(backend.busy).toBe(false);
+      expect(backend.activeRequestCount).toBe(1);
       expect(mockBalancer.notifyBackendAvailable).toHaveBeenCalled();
     });
 
@@ -31,12 +34,13 @@ describe('Request Processor', () => {
       const backend = {
         id: 'test-backend',
         url: 'http://localhost:3000',
-        busy: false
+        busy: false,
+        activeRequestCount: 0
       };
 
       requestProcessor.releaseBackend(mockBalancer, backend);
 
-      expect(backend.busy).toBe(false);
+      expect(backend.activeRequestCount).toBe(0);
       expect(mockBalancer.notifyBackendAvailable).not.toHaveBeenCalled();
     });
 
@@ -47,12 +51,14 @@ describe('Request Processor', () => {
 
       const backend = {
         url: 'http://localhost:3000',
-        busy: true
+        busy: true,
+        activeRequestCount: 1,
+        maxConcurrency: 2
       };
 
       requestProcessor.releaseBackend(mockBalancer, backend);
 
-      expect(backend.busy).toBe(false);
+      expect(backend.activeRequestCount).toBe(0);
       expect(mockBalancer.notifyBackendAvailable).toHaveBeenCalled();
     });
   });
@@ -128,7 +134,9 @@ describe('Request Processor', () => {
         id: 'test-backend',
         url: 'http://localhost:3000',
         busy: false,
-        priority: 5
+        priority: 5,
+        activeRequestCount: 0,
+        maxConcurrency: 10
       };
 
       // Create mock request
@@ -157,7 +165,8 @@ describe('Request Processor', () => {
     it('should mark backend as busy before processing', () => {
       requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, jest.fn());
 
-      expect(mockBackend.busy).toBe(true);
+      // After processRequest, activeRequestCount is incremented by 1 (not set to maxConcurrency)
+      expect(mockBackend.activeRequestCount).toBe(1);
     });
 
     it('should handle non-streaming response requests', () => {
@@ -166,7 +175,8 @@ describe('Request Processor', () => {
       const onComplete = jest.fn();
       requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete);
 
-      expect(mockBackend.busy).toBe(true);
+      // After processRequest, activeRequestCount is incremented by 1
+      expect(mockBackend.activeRequestCount).toBe(1);
     });
 
     it('should handle streaming response requests', () => {
@@ -176,8 +186,8 @@ describe('Request Processor', () => {
       const onComplete = jest.fn();
       requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete);
 
-      // Just verify that busy state is set
-      expect(mockBackend.busy).toBe(true);
+      // After processRequest, activeRequestCount is incremented by 1
+      expect(mockBackend.activeRequestCount).toBe(1);
     });
 
     it('should release backend after request completes', () => {
@@ -250,7 +260,9 @@ describe('Request Processor', () => {
         id: 'backend-1',
         url: 'http://localhost:3000',
         busy: false,
-        priority: 10
+        priority: 10,
+        activeRequestCount: 0,
+        maxConcurrency: 10
       };
 
       const mockReq = {
@@ -277,7 +289,7 @@ describe('Request Processor', () => {
 
       // Wait for the request to complete
       setTimeout(() => {
-        expect(mockBackend.busy).toBe(false);
+        expect(mockBackend.activeRequestCount).toBe(0);
         expect(mockBalancer.trackDebugRequest).toHaveBeenCalled();
         expect(mockBalancer.notifyBackendAvailable).toHaveBeenCalled();
         done();
