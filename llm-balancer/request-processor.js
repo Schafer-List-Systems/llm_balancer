@@ -170,6 +170,12 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config) 
   // Increment active request count for this backend
   backend.activeRequestCount++;
 
+  // Also increment the processed request counter here
+  // This ensures the counter is tracked when the request actually starts processing
+  backend.requestCount = (backend.requestCount || 0) + 1;
+  balancer.requestCount.set(backend.url,
+    (balancer.requestCount.get(backend.url) || 0) + 1);
+
   const targetUrl = new URL(req.url, backend.url);
 
   // Capture request body for debug tracking

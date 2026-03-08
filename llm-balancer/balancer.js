@@ -76,12 +76,6 @@ class Balancer {
         console.log(`[${getTimestamp()}] [Balancer] Queue empty, trying to get immediate backend`);
         const backend = this.getNextBackend();
         if (backend) {
-            // Increment request count for this backend
-            // Note: activeRequestCount is incremented in processRequest() after this returns
-            backend.requestCount = (backend.requestCount || 0) + 1;
-            this.requestCount.set(backend.url,
-              (this.requestCount.get(backend.url) || 0) + 1);
-
             console.log(`[${getTimestamp()}] [Balancer] Direct assignment to backend ${backend.url}`);
             return Promise.resolve(backend);
         } else {
@@ -147,12 +141,6 @@ class Balancer {
     console.log(`[${getTimestamp()}] [Balancer] getNextBackend() returned: ${backend ? backend.url : 'null'}`);
 
     if (backend) {
-      // Increment request count for this backend
-      // Note: activeRequestCount is incremented in processRequest() after this resolves
-      backend.requestCount = (backend.requestCount || 0) + 1;
-      this.requestCount.set(backend.url,
-        (this.requestCount.get(backend.url) || 0) + 1);
-
       queue.shift();  // Remove from queue
       console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
       request.resolve(backend);
