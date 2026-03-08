@@ -376,6 +376,37 @@ body {
   flex-shrink: 0;
 }
 
+/* API Type Badge */
+.api-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin: 0.5rem 0;
+}
+
+.api-badge.openai {
+  background-color: #10a37f;
+  color: white;
+}
+
+.api-badge.anthropic {
+  background-color: #d97f56;
+  color: white;
+}
+
+.api-badge.google {
+  background-color: #4285f4;
+  color: white;
+}
+
+.api-badge.ollama {
+  background-color: #f59e0b;
+  color: white;
+}
+
 /* Health Indicator */
 .health-indicator {
   display: inline-flex;

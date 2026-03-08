@@ -15,10 +15,18 @@ class MultiAPIChecker extends IHealthCheck {
   constructor(timeout = 5000) {
     super();
     this.timeout = timeout;
-    // Priority order for API detection: Ollama first, then litellm/openai
+    // Priority order for API detection: OpenAI-compatible first, then Anthropic, Google, Ollama
+    // OpenAI-compatible includes: OpenAI, Mistral, Groq, Cohere (grouped together)
     this.apiOrder = [
-      { type: 'ollama', endpoint: '/api/tags', format: 'models' },
-      { type: 'litellm', endpoint: '/v1/models', format: 'data' }
+      // OpenAI-compatible APIs (Mistral, Groq, Cohere grouped here)
+      { type: 'openai', endpoint: '/v1/models', format: 'data' },
+      // Anthropic - check messages endpoint first, then chat/completions for models
+      { type: 'anthropic', endpoint: '/v1/messages', format: null },
+      { type: 'anthropic', endpoint: '/chat/completions', format: 'data' },
+      // Google Gemini
+      { type: 'google', endpoint: '/v1beta/models', format: 'models' },
+      // Ollama
+      { type: 'ollama', endpoint: '/api/tags', format: 'models' }
     ];
   }
 
@@ -137,8 +145,27 @@ class MultiAPIChecker extends IHealthCheck {
     try {
       const data = JSON.parse(body);
 
-      // Extract models based on format key ('models' for Ollama, 'data' for OpenAI)
+      // Handle endpoints without model lists (e.g., /v1/messages)
       const modelsKey = apiConfig.format;
+      if (modelsKey === null) {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[${getTimestamp()}] [MultiAPIChecker] ${res.req.path}: ${apiConfig.type} endpoint available (no model list)`);
+          return {
+            healthy: true,
+            apiType: apiConfig.type,
+            models: [],
+            statusCode: res.statusCode
+          };
+        }
+        return {
+          healthy: false,
+          error: 'Endpoint not available',
+          apiType: apiConfig.type,
+          statusCode: res.statusCode
+        };
+      }
+
+      // Extract models based on format key
       if (data[modelsKey] && Array.isArray(data[modelsKey])) {
         const models = data[modelsKey].map(m => m.name || m.id || m);
         console.log(`[${getTimestamp()}] [MultiAPIChecker] ${res.req.path}: Found ${models.length} model(s) via ${apiConfig.type}`);
@@ -222,9 +249,10 @@ class MultiAPIChecker extends IHealthCheck {
    */
   getEndpointForAPI(apiType) {
     const mapping = {
-      ollama: '/api/tags',
-      litellm: '/v1/models',
-      openai: '/v1/models'
+      openai: '/v1/models',
+      anthropic: '/v1/messages',
+      google: '/v1beta/models',
+      ollama: '/api/tags'
     };
     return mapping[apiType] || '/unknown';
   }

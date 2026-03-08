@@ -275,9 +275,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const busyText = backend.activeRequestCount > 0 ? 'Busy' : 'Idle';
       const busyBgClass = backend.activeRequestCount > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800';
 
+      const apiTypeLabels = {
+        'openai': 'OpenAI',
+        'anthropic': 'Anthropic',
+        'google': 'Gemini',
+        'ollama': 'Ollama'
+      };
+
+      const apiTypeBadge = backend.apiType && backend.apiType !== 'unknown' ? `
+            <div class="api-badge ${backend.apiType}">${apiTypeLabels[backend.apiType] || backend.apiType.toUpperCase()}</div>
+          ` : '';
+
       return `
         <div class="backend-card">
           <div class="backend-url">${backend.url}</div>
+          ${apiTypeBadge}
           <div class="backend-info">
             <div class="info-row">
               <span class="info-label">Health</span>

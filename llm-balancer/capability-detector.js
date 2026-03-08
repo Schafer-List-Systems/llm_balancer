@@ -13,10 +13,18 @@ function getTimestamp() {
 class CapabilityDetector {
   constructor(timeout = 5000) {
     this.timeout = timeout;
-    // Priority order: try Ollama first, then litellm/openai
+    // Priority order: try OpenAI-compatible first, then Anthropic, Google, Ollama
+    // OpenAI-compatible includes: OpenAI, Mistral, Groq, Cohere (grouped together)
     this.apiOrder = [
-      { type: 'ollama', endpoint: '/api/tags', formatKey: 'models' },
-      { type: 'litellm', endpoint: '/v1/models', formatKey: 'data' }
+      // OpenAI-compatible APIs (Mistral, Groq, Cohere grouped here)
+      { type: 'openai', endpoint: '/v1/models', formatKey: 'data' },
+      // Anthropic - check messages endpoint first, then chat/completions for models
+      { type: 'anthropic', endpoint: '/v1/messages', formatKey: null },
+      { type: 'anthropic', endpoint: '/chat/completions', formatKey: 'data' },
+      // Google Gemini
+      { type: 'google', endpoint: '/v1beta/models', formatKey: 'models' },
+      // Ollama
+      { type: 'ollama', endpoint: '/api/tags', formatKey: 'models' }
     ];
   }
 
@@ -127,8 +135,29 @@ class CapabilityDetector {
     try {
       const data = JSON.parse(body);
 
-      // Extract models based on format key ('models' for Ollama, 'data' for OpenAI)
+      // Handle endpoints without model lists (e.g., /v1/messages)
       const formatKey = apiConfig.formatKey;
+      if (formatKey === null) {
+        // Just check if endpoint exists and returns 200
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (no model list)`);
+          return {
+            healthy: true,
+            apiType: apiConfig.type,
+            models: [],
+            statusCode: res.statusCode
+          };
+        }
+        return {
+          healthy: false,
+          error: 'Endpoint not available',
+          apiType: apiConfig.type,
+          statusCode: res.statusCode,
+          models: []
+        };
+      }
+
+      // Extract models based on format key ('models' for Ollama, 'data' for OpenAI)
       if (data[formatKey] && Array.isArray(data[formatKey])) {
         const models = data[formatKey].map(m => {
           if (typeof m === 'string') return m;

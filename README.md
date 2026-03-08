@@ -18,10 +18,11 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Graceful shutdown handling
 
 ### API Capability Detection (v2.1)
-- ✅ **Automatic API type detection** - discovers whether each backend speaks Ollama, litellm, or OpenAI format
+- ✅ **Automatic API type detection** - discovers which API each backend serves (OpenAI, Anthropic, Google Gemini, Ollama)
 - ✅ **Model discovery on startup** - pre-populates available models before requests begin
 - ✅ **Interface-based architecture** - components interact through abstract interfaces for extensibility
-- ✅ **Multi-API fallback strategy** - tries Ollama endpoint first, falls back to OpenAI format automatically
+- ✅ **Multi-API fallback strategy** - tries multiple API endpoints in priority order, stops at first match
+- ✅ **Frontend API badges** - backend cards display detected API type with color-coded badges
 
 ### Dashboard (v1.0)
 - ✅ Real-time monitoring of all backends
@@ -206,6 +207,7 @@ curl http://localhost:3001/backends
 
 Returns per-backend statistics including:
 - URL and health status
+- **API type** (detected API: OpenAI, Anthropic, Gemini, or Ollama)
 - **Active request count** (current concurrent requests)
 - **Max concurrency** (configured limit for parallel requests)
 - **Utilization percentage** (`activeRequestCount / maxConcurrency * 100`)
@@ -221,6 +223,7 @@ Example response:
     {
       "url": "http://host1:11434",
       "healthy": true,
+      "apiType": "openai",
       "activeRequestCount": 2,
       "maxConcurrency": 5,
       "utilizationPercent": 40,
@@ -231,6 +234,7 @@ Example response:
     {
       "url": "http://host2:11434",
       "healthy": true,
+      "apiType": "ollama",
       "activeRequestCount": 0,
       "maxConcurrency": 3,
       "utilizationPercent": 0,
@@ -292,25 +296,38 @@ The load balancer uses an **interface pattern** to decouple components from spec
 ├─────────────────┤               ├──────────────┴──────────────┤
 │ Backend Selector│───────────────│                           │
 └─────────────────┘               ▼                           ▼
-                          ┌─────────────────┐     ┌─────────────────┐
-                          │ OllamaBackend   │     │ LiteLLMBackend  │
-                          ├─────────────────┤     ├─────────────────┤
-                          │ - /api/tags     │     │ - /v1/models    │
-                          │ - /api/chat     │     │ - /v1/chat/completions│
-                          └─────────────────┘     └─────────────────┘
+                          ┌─────────────────────────────────────────────┐
+                          │         MultiAPIChecker (Auto-Detect)       │
+                          ├─────────────────────────────────────────────┤
+                          │ - OpenAI-compatible (OpenAI, Mistral,       │
+                          │   Groq, Cohere) via /v1/models              │
+                          │ - Anthropic via /v1/messages, /chat/        │
+                          │   completions                               │
+                          │ - Google Gemini via /v1beta/models          │
+                          │ - Ollama via /api/tags                      │
+                          └─────────────────────────────────────────────┘
 ```
 
 **Key benefits:**
 - **Extensibility**: Add new API types by creating new interface implementations without modifying existing components
 - **Transparency**: Backend capabilities are explicitly declared (`backend.capabilities.apiType`, `backend.capabilities.models`)
 - **Testability**: Mock interfaces for unit tests without starting real backends
+- **Visual Feedback**: Frontend displays detected API type with color-coded badges on backend cards
 
 ### Startup Flow
 
 1. **Capability Detection Phase** - On startup, the system probes each backend to detect:
-   - API type (Ollama `/api/tags` or litellm/OpenAI `/v1/models`)
+   - API type (OpenAI-compatible, Anthropic, Google Gemini, or Ollama)
    - Available models
    - Supported endpoints
+
+**Detection Order:**
+1. OpenAI-compatible (`/v1/models`) - groups OpenAI, Mistral, Groq, Cohere
+2. Anthropic (`/v1/messages`, `/chat/completions`)
+3. Google Gemini (`/v1beta/models`)
+4. Ollama (`/api/tags`)
+
+The system stops at the first successful match. Each backend displays its detected API type as a color-coded badge in the frontend dashboard.
 
 2. **Health Check Phase** - Periodic health checks continue using the detected interface
 
@@ -323,8 +340,8 @@ The load balancer:
 - Tracks active request count per backend with configurable `maxConcurrency` limit
 - Skips backends that have reached their concurrency limit during selection
 - Automatically recovers healthy backends after recovery interval
-- Handles both Anthropic and Ollama API formats via interface pattern
-- Reports utilization percentage (`activeRequestCount / maxConcurrency * 100`) for each backend
+- **Auto-detects API types** (OpenAI, Anthropic, Gemini, Ollama) on startup
+- **Reports utilization percentage** (`activeRequestCount / maxConcurrency * 100`) for each backend
 
 ## Troubleshooting
 
