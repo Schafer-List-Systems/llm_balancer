@@ -26,12 +26,18 @@ function loadConfig() {
   const maxQueueSize = parseInt(process.env.MAX_QUEUE_SIZE) || 100;
   const queueTimeout = parseInt(process.env.QUEUE_TIMEOUT) || 30000;
 
+  // Parse request timeout (default: 5 minutes for LLM generation)
+  const requestTimeout = parseInt(process.env.REQUEST_TIMEOUT) || 300000;
+
   // Parse debug configuration
   const debug = process.env.DEBUG === 'true';
   const debugRequestHistorySize = parseInt(process.env.DEBUG_REQUEST_HISTORY_SIZE) || 100;
 
   // Parse graceful shutdown timeout (default: 60 seconds for compute-heavy requests)
   const shutdownTimeout = parseInt(process.env.SHUTDOWN_TIMEOUT) || 60000;
+
+  // Parse version
+  const version = process.env.VERSION || '0.0.0';
 
   // Create backend objects with health status and statistics
   const backends = backendArray.map((url, index) => {
@@ -77,9 +83,11 @@ function loadConfig() {
     maxPayloadSizeMB,
     maxQueueSize,
     queueTimeout,
+    requestTimeout,
     debug,
     debugRequestHistorySize,
-    shutdownTimeout
+    shutdownTimeout,
+    version
   };
 }
 

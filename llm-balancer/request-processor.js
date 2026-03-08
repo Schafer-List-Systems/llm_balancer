@@ -68,12 +68,13 @@ function extractModelsFromRequest(req) {
  * Execute a proxy request to a backend
  * @param {Object} backend - Backend object with url, id, etc.
  * @param {Object} options - Request options (method, headers, path, etc.)
+ * @param {Object} config - Configuration object with requestTimeout
  * @param {Function} onData - Callback for data chunks
  * @param {Function} onEnd - Callback when request completes
  * @param {Function} onError - Callback for errors
  * @returns {Object} HTTP request object
  */
-function executeProxyRequest(backend, options, onData, onEnd, onError) {
+function executeProxyRequest(backend, options, config, onData, onEnd, onError) {
   const parsedUrl = new URL(backend.url);
   const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
@@ -82,10 +83,18 @@ function executeProxyRequest(backend, options, onData, onEnd, onError) {
     port: parsedUrl.port,
     path: options.path,
     method: options.method,
-    headers: options.headers
+    headers: options.headers,
+    timeout: config.requestTimeout
   };
 
-  return protocol.request(requestOptions, (proxyRes) => {
+  console.debug(`[Gateway] executeProxyRequest to ${backend.url}: ${options.method} ${options.path}`);
+
+  const req = protocol.request(requestOptions, (proxyRes) => {
+    console.debug(`[Gateway] Proxy response from ${backend.url}: ${proxyRes.statusCode}`);
+    req.on('timeout', () => {
+      console.error(`[Gateway] Timeout after 60s for request to ${backend.url}`);
+      req.destroy();
+    });
     // Remove hop-by-hop headers from response
     Object.keys(proxyRes.headers).forEach(header => {
       const lowerHeader = header.toLowerCase();
@@ -150,8 +159,14 @@ function releaseBackend(balancer, backend) {
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} onRequestComplete - Callback when request is complete
+ * @param {Object} config - Configuration object with requestTimeout
  */
-function processRequest(balancer, backend, req, res, onRequestComplete) {
+function processRequest(balancer, backend, req, res, onRequestComplete, config) {
+  console.debug(`[Gateway] processRequest called for backend ${backend.id} (${backend.url})`);
+  console.debug(`[Gateway] req.is('raw'):`, req.is('raw'));
+  console.debug(`[Gateway] req.headers['content-type']:`, req.headers['content-type']);
+  console.debug(`[Gateway] req.body type:`, typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body));
+
   // Increment active request count for this backend
   backend.activeRequestCount++;
 
@@ -174,11 +189,16 @@ function processRequest(balancer, backend, req, res, onRequestComplete) {
     delete headers[header.toLowerCase()];
   });
 
+  // Remove Content-Length - let Node.js calculate it for the forwarded request
+  delete headers['content-length'];
+
   // Handle streaming response
   if (req.is('raw') && headers['content-type']?.includes('stream')) {
-    handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete);
+    console.debug(`[Gateway] Using handleStreamingRequest`);
+    handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
   } else {
-    handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete);
+    console.debug(`[Gateway] Using handleNonStreamingRequest`);
+    handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
   }
 }
 
@@ -186,17 +206,64 @@ function processRequest(balancer, backend, req, res, onRequestComplete) {
  * Handle streaming response request
  * @private
  */
-function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete) {
+function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers) {
   const targetUrl = new URL(req.url, backend.url);
   const options = {
     hostname: targetUrl.hostname,
     port: targetUrl.port,
     path: targetUrl.pathname + targetUrl.search,
     method: req.method,
-    headers: req.headers
+    headers: headers,
+    timeout: config.requestTimeout
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
+  console.debug(`[Gateway] handleStreamingRequest to ${backend.url}: ${options.method} ${options.path}`);
+  console.debug(`[Gateway] Request headers: ${JSON.stringify(req.headers)}`);
+
+  const proxyReq = http.request(options);
+
+  // Attach all handlers BEFORE the request is sent
+  proxyReq.on('error', (err) => {
+    console.error(`[Gateway] Proxy request error to ${backend.url}:`, err.message);
+    balancer.markFailed(backend.url);
+    // Ensure backend is released on error
+    releaseBackend(balancer, backend);
+    onRequestComplete();
+    // Only send response if not already sent
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Bad Gateway',
+        message: 'Backend unavailable',
+        backend: backend.url
+      });
+    }
+  });
+
+  proxyReq.setTimeout(config.requestTimeout, () => {
+    console.error(`[Gateway] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
+    proxyReq.destroy();
+    // Ensure backend is released even on timeout
+    releaseBackend(balancer, backend);
+    onRequestComplete();
+    // Send error response to client
+    if (!res.headersSent) {
+      res.status(504).json({
+        error: 'Gateway Timeout',
+        message: 'Backend request timed out',
+        backend: backend.url
+      });
+    }
+  });
+
+  proxyReq.on('end', () => {
+    console.debug(`[Balancer] Proxy request to ${backend.url} ended, releasing backend ${backend.id}`);
+    releaseBackend(balancer, backend);
+    onRequestComplete();
+  });
+
+  proxyReq.on('response', (proxyRes) => {
+    console.debug(`[Gateway] Proxy response from ${backend.url}: ${proxyRes.statusCode}`);
+
     // Copy response headers
     Object.keys(proxyRes.headers).forEach(header => {
       const lowerHeader = header.toLowerCase();
@@ -208,6 +275,11 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     // Handle streaming response
     if (proxyRes.headers['content-type']?.includes('stream')) {
       proxyRes.pipe(res);
+      // For piped streaming, release when the response ends
+      proxyRes.on('end', () => {
+        releaseBackend(balancer, backend);
+        onRequestComplete();
+      });
     } else {
       let data = '';
       proxyRes.on('data', chunk => {
@@ -241,24 +313,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     }
   });
 
-  proxyReq.on('error', (err) => {
-    console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
-    balancer.markFailed(backend.url);
-    res.status(502).json({
-      error: 'Bad Gateway',
-      message: 'Backend unavailable',
-      backend: backend.url
-    });
-    releaseBackend(balancer, backend);
-    onRequestComplete();
-  });
-
-  proxyReq.on('end', () => {
-    console.log(`[Balancer] Proxy request to ${backend.url} ended, releasing backend ${backend.id}`);
-    releaseBackend(balancer, backend);
-    onRequestComplete();
-  });
-
+  console.debug(`[Gateway] Sending request to ${backend.url} with body: ${requestBody ? requestBody.substring(0, 100) : 'none'}`);
   sendRequestBody(proxyReq, getRequestBody(req));
 }
 
@@ -266,17 +321,61 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
  * Handle non-streaming response request
  * @private
  */
-function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete) {
+function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers) {
+  console.debug(`[Gateway] handleNonStreamingRequest to ${backend.url}`);
   const targetUrl = new URL(req.url, backend.url);
   const options = {
     hostname: targetUrl.hostname,
     port: targetUrl.port,
     path: targetUrl.pathname + targetUrl.search,
     method: req.method,
-    headers: req.headers
+    headers: headers
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
+  console.debug(`[Gateway] Creating http.request to ${options.hostname}:${options.port}${options.path}`);
+  console.debug(`[Gateway] Proxy request options: ${JSON.stringify(options)}`);
+  const proxyReq = http.request(options);
+
+  // Set request timeout
+  proxyReq.setTimeout(config.requestTimeout, () => {
+    console.error(`[Gateway] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
+    proxyReq.destroy();
+    // Ensure backend is released even on timeout
+    releaseBackend(balancer, backend);
+    onRequestComplete();
+    // Send error response to client
+    res.status(504).json({
+      error: 'Gateway Timeout',
+      message: 'Backend request timed out',
+      backend: backend.url
+    });
+  });
+
+  // Attach error handler BEFORE the request is sent
+  proxyReq.on('error', (err) => {
+    console.error(`[Gateway] Proxy request error to ${backend.url}:`, err.message);
+    balancer.markFailed(backend.url);
+    // Ensure backend is released on error
+    releaseBackend(balancer, backend);
+    onRequestComplete();
+    // Only send response if not already sent
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: 'Bad Gateway',
+        message: 'Backend unavailable',
+        backend: backend.url
+      });
+    }
+  });
+
+  proxyReq.on('end', () => {
+    console.debug(`[Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
+    releaseBackend(balancer, backend);
+    onRequestComplete();
+  });
+
+  proxyReq.on('response', (proxyRes) => {
+    console.debug(`[Gateway] Proxy response received from ${backend.url}: ${proxyRes.statusCode}`);
     let data = '';
 
     proxyRes.on('data', chunk => {
@@ -284,8 +383,6 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     });
 
     proxyRes.on('end', () => {
-      console.log(`[Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
-
       // Track debug request with request/response content
       const route = req.path || req.originalUrl || '/';
       balancer.trackDebugRequest(
@@ -305,31 +402,16 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         res.status(proxyRes.statusCode).json(parsed);
       } catch (e) {
         res.status(proxyRes.statusCode).send(data);
-      } finally {
-        releaseBackend(balancer, backend);
       }
 
+      releaseBackend(balancer, backend);
       onRequestComplete();
     });
-  })
-  .on('error', (err) => {
-    console.error(`[Gateway] Request to ${backend.url} failed:`, err.message);
-    balancer.markFailed(backend.url);
-    res.status(502).json({
-      error: 'Bad Gateway',
-      message: 'Backend unavailable',
-      backend: backend.url
-    });
-    releaseBackend(balancer, backend);
-    onRequestComplete();
-  })
-  .on('end', () => {
-    // Release backend
-    releaseBackend(balancer, backend);
-    onRequestComplete();
   });
 
-  sendRequestBody(proxyReq, getRequestBody(req));
+  console.debug(`[Gateway] Request body type: ${typeof requestBody}, isBuffer: ${Buffer.isBuffer(requestBody)}, length: ${requestBody ? (Buffer.isBuffer(requestBody) ? requestBody.length : requestBody.length) : 'null'}`);
+  console.debug(`[Gateway] Sending request body to ${backend.url}`);
+  sendRequestBody(proxyReq, requestBody);
 }
 
 /**
