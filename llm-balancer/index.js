@@ -5,7 +5,7 @@ const { URL } = require('url');
 const configModule = require('./config');
 const Balancer = require('./balancer');
 const HealthChecker = require('./health-check');
-const { processRequest } = require('./request-processor');
+const { processRequest, extractModelsFromRequest } = require('./request-processor');
 
 const app = express();
 const config = configModule.loadConfig();
@@ -20,6 +20,10 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Initialize capability detector to discover API types before health checks
+const CapabilityDetector = require('./capability-detector');
+const capabilityDetector = new CapabilityDetector(config.healthCheckTimeout);
 
 // Initialize load balancer and health checker
 const balancer = new Balancer(config.backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
@@ -64,7 +68,28 @@ function forwardRequest(req, res, backend) {
  */
 app.all('/v1/messages*', async (req, res) => {
   try {
-    const backend = await balancer.queueRequest();
+    // Extract model from request body for backend selection
+    const models = extractModelsFromRequest(req);
+
+    // Select backend based on model if specified, otherwise use default selection
+    let backend;
+    // Check: models must be truthy AND have at least one valid entry (not empty array)
+    if (models && (Array.isArray(models) ? models.length > 0 : true)) {
+      backend = balancer.getNextBackendForModel(models);
+
+      // If no backend supports the requested model(s), try any available backend
+      if (!backend) {
+        console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
+        backend = await balancer.queueRequest();
+      } else {
+        // Model matched - logging handled above
+        console.log(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+      }
+    } else {
+      // No model specified in request or empty models array - use default selection
+      backend = await balancer.queueRequest();
+    }
+
     if (!backend) {
       return res.status(503).json({
         error: 'Service Unavailable',
@@ -74,7 +99,7 @@ app.all('/v1/messages*', async (req, res) => {
       });
     }
 
-    // Track debug request
+    // Track debug request with model information
     const route = req.path || req.originalUrl || '/';
     balancer.trackDebugRequest(
       {
@@ -82,7 +107,8 @@ app.all('/v1/messages*', async (req, res) => {
         method: req.method,
         priority: backend.priority || 0,
         backendId: backend.id,
-        backendUrl: backend.url
+        backendUrl: backend.url,
+        models: Array.isArray(models) ? models : (models ? [models] : [])
       }
     );
 
@@ -102,7 +128,28 @@ app.all('/v1/messages*', async (req, res) => {
  */
 app.all('/api/*', async (req, res) => {
   try {
-    const backend = await balancer.queueRequest();
+    // Extract model from request body for backend selection
+    const models = extractModelsFromRequest(req);
+
+    // Select backend based on model if specified, otherwise use default selection
+    let backend;
+    // Check: models must be truthy AND have at least one valid entry (not empty array)
+    if (models && (Array.isArray(models) ? models.length > 0 : true)) {
+      backend = balancer.getNextBackendForModel(models);
+
+      // If no backend supports the requested model(s), try any available backend
+      if (!backend) {
+        console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
+        backend = await balancer.queueRequest();
+      } else {
+        // Model matched - logging handled above
+        console.log(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+      }
+    } else {
+      // No model specified in request or empty models array - use default selection
+      backend = await balancer.queueRequest();
+    }
+
     if (!backend) {
       return res.status(503).json({
         error: 'Service Unavailable',
@@ -112,7 +159,7 @@ app.all('/api/*', async (req, res) => {
       });
     }
 
-    // Track debug request
+    // Track debug request with model information
     const route = req.path || req.originalUrl || '/';
     balancer.trackDebugRequest(
       {
@@ -120,7 +167,8 @@ app.all('/api/*', async (req, res) => {
         method: req.method,
         priority: backend.priority || 0,
         backendId: backend.id,
-        backendUrl: backend.url
+        backendUrl: backend.url,
+        models: Array.isArray(models) ? models : (models ? [models] : [])
       }
     );
 
@@ -148,7 +196,23 @@ app.all('/models*', async (req, res) => {
   }
 
   try {
-    const backend = await balancer.queueRequest();
+    // Extract model from request body for backend selection (if present)
+    const models = extractModelsFromRequest(req);
+
+    let backend;
+    if (models) {
+      backend = balancer.getNextBackendForModel(models);
+
+      if (!backend) {
+        console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
+        backend = await balancer.queueRequest();
+      } else {
+        console.log(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+      }
+    } else {
+      backend = await balancer.queueRequest();
+    }
+
     if (!backend) {
       return res.status(503).json({
         error: 'Service Unavailable',
@@ -158,7 +222,7 @@ app.all('/models*', async (req, res) => {
       });
     }
 
-    // Track debug request
+    // Track debug request with model information
     const route = req.path || req.originalUrl || '/';
     balancer.trackDebugRequest(
       {
@@ -166,7 +230,8 @@ app.all('/models*', async (req, res) => {
         method: req.method,
         priority: backend.priority || 0,
         backendId: backend.id,
-        backendUrl: backend.url
+        backendUrl: backend.url,
+        models: Array.isArray(models) ? models : (models ? [models] : [])
       }
     );
 
@@ -305,7 +370,8 @@ app.get('/backends', (req, res) => {
       failCount: b.failCount || 0,
       requestCount: b.requestCount || 0,
       errorCount: b.errorCount || 0,
-      models: b.models || []
+      models: b.capabilities?.models || [],
+      apiType: b.capabilities?.apiType || 'unknown'
     }))
   });
 });
@@ -353,6 +419,66 @@ app.get('/queue/list/:priority', (req, res) => {
   }
 
   res.json(queueInfo);
+});
+
+/**
+ * Route: Model availability statistics
+ */
+app.get('/models/stats', (req, res) => {
+  const stats = balancer.getModelAvailabilityStats();
+  res.json(stats);
+});
+
+/**
+ * Route: Check if backends support specific model(s)
+ * Query parameters:
+ *   - models: Comma-separated list of model names to check
+ */
+app.get('/models/check', (req, res) => {
+  const modelsParam = req.query.models;
+
+  if (!modelsParam) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'Missing required query parameter: models'
+    });
+  }
+
+  // Parse comma-separated model list
+  const requestedModels = modelsParam.split(',').map(m => m.trim()).filter(m => m.length > 0);
+
+  if (requestedModels.length === 0) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'No valid model names provided'
+    });
+  }
+
+  const hasBackend = balancer.hasBackendForModel(requestedModels);
+  const stats = balancer.getModelAvailabilityStats();
+
+  // Find which backends support each requested model
+  const backendSupports = {};
+  for (const model of requestedModels) {
+    const supportingBackends = [];
+    for (const backend of config.backends) {
+      if (backend.healthy && (backend.capabilities?.models || []).includes(model)) {
+        supportingBackends.push({
+          url: backend.url,
+          id: backend.id,
+          priority: backend.priority || 0
+        });
+      }
+    }
+    backendSupports[model] = supportingBackends;
+  }
+
+  res.json({
+    requestedModels,
+    hasBackend,
+    stats,
+    backendSupports
+  });
 });
 
 /**
@@ -502,71 +628,127 @@ app.use((err, req, res, next) => {
 });
 
 /**
- * Start the server
+ * Start the server with capability detection phase
  */
-function startServer() {
-  // Start health checker
-  healthChecker.start();
+async function startServer() {
+  // Phase 1: Detect backend capabilities before health checks begin
+  console.log(`[${getTimestamp()}] [Startup] Starting capability detection for ${config.backends.length} backends...`);
 
-  // Start the load balancer server
-  const server = app.listen(config.port, () => {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`LLM Balancer running at http://localhost:${config.port}`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`Backends (${config.backends.length}):`);
-    config.backends.forEach((backend, i) => {
-      console.log(`  ${i + 1}. ${backend.url} ${backend.healthy ? '✓' : '✗'}`);
-    });
-    console.log(`\nRoutes:`);
-    console.log(`  Anthropic API:  /v1/messages*`);
-    console.log(`  Ollama API:     /api/*`);
-    console.log(`  Models:         /models*`);
-    console.log(`  Health:         /health`);
-    console.log(`  Stats:          /stats`);
-    console.log(`\n${'='.repeat(60)}\n`);
-  });
+  try {
+    const urls = config.backends.map(b => b.url);
+    const capabilities = await capabilityDetector.detectAll(urls);
 
-  // Handle server errors
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`[${getTimestamp()}] [Balancer] Port ${config.port} is already in use`);
-      process.exit(1);
-    }
-    console.error(`[${getTimestamp()}] [Balancer] Server error:`, err);
-  });
+    // Store detected capabilities on backend objects immediately
+    for (const url in capabilities) {
+      const cap = capabilities[url];
+      const backend = config.backends.find(b => b.url === url);
+      if (backend && !backend.capabilities) {
+        backend.capabilities = {};
+      }
 
-// Graceful shutdown - Option B: reject queued requests, drain in-flight, force exit after timeout
-  const gracefulShutdown = (signal) => {
-    console.log(`\n[${getTimestamp()}] [Balancer] ${signal} received. Shutting down gracefully...`);
-    
-    // Stop accepting new health checks
-    healthChecker.stop();
-    
-    // Reject all queued requests with a retry message
-    const queueSize = balancer.getQueueStats().depth;
-    if (queueSize > 0) {
-      console.log(`[${getTimestamp()}] [Balancer] Rejecting ${queueSize} queued request(s)...`);
-      for (const request of balancer.queue) {
-        clearTimeout(request.timeout);
-        request.reject(new Error('Server shutting down, please retry'));
+      if (cap.apiType !== 'unknown') {
+        console.log(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API type: ${cap.apiType}, models:`, cap.models);
+        if (backend && backend.capabilities) {
+          backend.capabilities.apiType = cap.apiType;
+          backend.capabilities.models = cap.models;
+          backend.capabilities.endpoints = cap.endpoints || {};
+          backend.capabilities.detectedAt = cap.detectedAt;
+        }
+      } else if (cap.error) {
+        console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${cap.error}`);
       }
     }
-    
-    // Close server to stop accepting new connections and wait for in-flight requests
-    server.close(() => {
-      console.log(`[${getTimestamp()}] [Balancer] Server closed. All in-flight requests completed.`);
-      process.exit(0);
+
+    // Phase 2: Start health checker with pre-populated capabilities
+    console.log(`[${getTimestamp()}] [Startup] Starting health checker...`);
+    healthChecker.start();
+
+    // Phase 3: Start the load balancer server
+    const server = app.listen(config.port, () => {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`LLM Balancer running at http://localhost:${config.port}`);
+      console.log(`${'='.repeat(60)}`);
+      console.log(`Backends (${config.backends.length}):`);
+      config.backends.forEach((backend, i) => {
+        const apiType = backend.capabilities?.apiType || 'unknown';
+        const modelCount = backend.capabilities?.models?.length || 0;
+        const status = backend.healthy ? '✓' : '✗';
+        console.log(`  ${i + 1}. ${backend.url} (${apiType}, ${modelCount} models) ${status}`);
+      });
+      console.log(`\nRoutes:`);
+      console.log(`  Anthropic API:  /v1/messages*`);
+      console.log(`  Ollama API:     /api/*`);
+      console.log(`  Models:         /models*`);
+      console.log(`  Health:         /health`);
+      console.log(`  Stats:          /stats`);
+      console.log(`\n${'='.repeat(60)}\n`);
     });
-    
-    // Force exit after shutdown timeout if in-flight requests are still pending
-    setTimeout(() => {
-      console.warn(`\n[${getTimestamp()}] [Balancer] ${config.shutdownTimeout / 1000}s timeout reached. Forcing exit...`);
-      process.exit(1);
-    }, config.shutdownTimeout);
+
+    // Handle server errors (inside try block)
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[${getTimestamp()}] [Balancer] Port ${config.port} is already in use`);
+        process.exit(1);
+      }
+      console.error(`[${getTimestamp()}] [Balancer] Server error:`, err);
+    });
+
+    // Graceful shutdown - reject queued requests, drain in-flight, force exit after timeout
+    const gracefulShutdown = (signal) => {
+      console.log(`\n[${getTimestamp()}] [Balancer] ${signal} received. Shutting down gracefully...`);
+
+      // Stop accepting new health checks
+      healthChecker.stop();
+
+      // Reject all queued requests with a retry message
+      const queueSize = balancer.getQueueStats().depth;
+      if (queueSize > 0) {
+        console.log(`[${getTimestamp()}] [Balancer] Rejecting ${queueSize} queued request(s)...`);
+        for (const request of balancer.queue) {
+          clearTimeout(request.timeout);
+          request.reject(new Error('Server shutting down, please retry'));
+        }
+      }
+
+      // Close server to stop accepting new connections and wait for in-flight requests
+      if (server) {
+        server.close(() => {
+          console.log(`[${getTimestamp()}] [Balancer] Server closed. All in-flight requests completed.`);
+          process.exit(0);
+        });
+      } else {
+        process.exit(0);
+      }
+
+      // Force exit after shutdown timeout if in-flight requests are still pending
+      setTimeout(() => {
+        console.warn(`\n[${getTimestamp()}] [Balancer] ${config.shutdownTimeout / 1000}s timeout reached. Forcing exit...`);
+        process.exit(1);
+      }, config.shutdownTimeout);
+    };
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  } catch (err) {
+  console.error(`[${getTimestamp()}] [Startup] Capability detection failed:`, err.message);
+  process.exit(1);
+} finally {
+  // Ensure graceful shutdown handlers are registered even if startup fails
+  const gracefulShutdown = (signal) => {
+    console.log(`\n[${getTimestamp()}] [Balancer] ${signal} received. Shutting down gracefully...`);
+
+    try {
+      healthChecker.stop();
+    } catch (e) {
+      // Ignore errors during shutdown cleanup
+    }
+
+    process.exit(0);
   };
 
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+}
 }
 
 // Start the server

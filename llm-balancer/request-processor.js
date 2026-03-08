@@ -20,6 +20,51 @@ const hopByHopHeaders = [
 ];
 
 /**
+ * Extract model(s) from a request body
+ * Handles various request formats (JSON with "model" field or array of models)
+ * @param {Object} req - Express request object
+ * @returns {string|string[]} Model name(s) or null if not found
+ */
+function extractModelsFromRequest(req) {
+  // Handle different content types for body parsing
+  let body = null;
+
+  if (req.is('raw') && Buffer.isBuffer(req.body)) {
+    try {
+      body = JSON.parse(req.body.toString('utf8'));
+    } catch (e) {
+      return null;
+    }
+  } else if (req.body && typeof req.body === 'object') {
+    body = req.body;
+  }
+
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  // Check for "model" field in request body
+  const modelField = body.model;
+
+  if (modelField === undefined || modelField === null) {
+    return null;
+  }
+
+  // Handle both string and array formats
+  if (Array.isArray(modelField)) {
+    // Filter out invalid entries
+    const validModels = modelField.filter(m => typeof m === 'string' && m.length > 0);
+    return validModels.length > 0 ? validModels : null;
+  }
+
+  if (typeof modelField === 'string' && modelField.length > 0) {
+    return modelField;
+  }
+
+  return null;
+}
+
+/**
  * Execute a proxy request to a backend
  * @param {Object} backend - Backend object with url, id, etc.
  * @param {Object} options - Request options (method, headers, path, etc.)
@@ -307,5 +352,6 @@ module.exports = {
   processRequest,
   releaseBackend,
   executeProxyRequest,
-  getRequestBody
+  getRequestBody,
+  extractModelsFromRequest
 };

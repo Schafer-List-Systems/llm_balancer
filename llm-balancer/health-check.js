@@ -1,10 +1,10 @@
 /**
  * Health checker for backend servers
  * Periodically checks backend health and marks as failed/recovered
+ * Uses interface pattern to support multiple API types (Ollama, LiteLLM, OpenAI)
  */
 
-const http = require('http');
-const { URL } = require('url');
+const MultiAPIChecker = require('./interfaces/implementations/MultiAPIChecker');
 
 // Helper function to get formatted timestamp
 function getTimestamp() {
@@ -17,6 +17,9 @@ class HealthChecker {
     this.config = config;
     this.healthCheckIntervalId = null;
     this.lastCheckTime = null;
+
+    // Create health check interface instance (uses MultiAPIChecker for auto-detection)
+    this.healthInterface = new MultiAPIChecker(config.healthCheckTimeout);
   }
 
   /**
@@ -60,160 +63,62 @@ class HealthChecker {
   /**
    * Run health checks on all backends
    */
-  checkAll() {
+  async checkAll() {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[${getTimestamp()}] [HealthChecker] Running health checks for all backends...`);
     }
     this.lastCheckTime = new Date().toISOString();
-    this.backends.forEach(backend => {
-      this.checkBackend(backend);
-    });
+
+    // Run health checks in parallel for better performance
+    await Promise.all(this.backends.map(backend => this.checkBackend(backend)));
+
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[${getTimestamp()}] [HealthChecker] Health check cycle complete`);
+    }
   }
 
   /**
-   * Get request options for a specific endpoint URL
-   * @param {string} url - Backend URL
-   * @param {string} endpoint - Endpoint path (/api/tags or /v1/models)
-   * @returns {Object} HTTP request options
-   */
-  getEndpointOptions(url, endpoint) {
-    const parsedUrl = new URL(url);
-    return {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || 11434,
-      path: endpoint,
-      method: 'GET',
-      timeout: this.config.healthCheckTimeout
-    };
-  }
-
-  /**
-   * Make an HTTP request to check backend health
-   * @param {Object} options - HTTP request options
-   * @param {string} url - Backend URL for logging
-   * @param {string} endpointName - Name of endpoint being checked (for logging)
-   * @param {Object} backend - Backend object to update
-   */
-  makeHealthCheckRequest(options, url, endpointName, backend) {
-    const req = http.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => { body += chunk.toString(); });
-      res.on('end', () => this.handleHealthResponse(res, body, backend, endpointName));
-      res.resume();
-    });
-
-    req.on('error', (err) => {
-      if (process.env.NODE_ENV !== 'test') {
-        console.error(`[${getTimestamp()}] [HealthChecker] ${endpointName} error for ${url}:`, err.message);
-      }
-      backend.healthy = false;
-      backend.failCount = (backend.failCount || 0) + 1;
-    });
-
-    req.on('timeout', () => {
-      if (process.env.NODE_ENV !== 'test') {
-        console.error(`[${getTimestamp()}] [HealthChecker] ${endpointName} timeout for ${url}`);
-      }
-      backend.healthy = false;
-      backend.failCount = (backend.failCount || 0) + 1;
-      req.destroy();
-    });
-
-    req.end();
-  }
-
-  /**
-   * Check a single backend's health starting with Ollama endpoint
+   * Check a single backend's health using the interface pattern
+   * The interface knows how to detect API type and extract models
    * @param {Object} backend - Backend object with url property
    */
-  checkBackend(backend) {
+  async checkBackend(backend) {
     const url = backend.url;
     console.log(`[${getTimestamp()}] [HealthChecker] Checking ${url}`);
 
-    // Try Ollama endpoint first: /api/tags -> { models: [{name: "..."}, ...] }
-    this.makeHealthCheckRequest(
-      this.getEndpointOptions(url, '/api/tags'),
-      url,
-      'Ollama',
-      backend
-    );
-  }
-
-  /**
-   * Handle response and decide whether to try fallback endpoint
-   * @param {Object} res - HTTP response object
-   * @param {string} body - Response body as string
-   * @param {Object} backend - Backend object to update
-   * @param {string} endpointName - Name of endpoint that was checked
-   */
-  handleHealthResponse(res, body, backend, endpointName) {
-    const url = backend.url;
-    const healthy = backend.healthy;
-
-    // Parse response and extract models from either format
     try {
-      const data = JSON.parse(body);
+      // Use the health interface to check backend and update its capabilities
+      const result = await this.healthInterface.check(backend);
 
-      console.log(`[${getTimestamp()}] [HealthChecker] Parsed body for ${url} (${endpointName}):`, Object.keys(data));
+      if (result.healthy) {
+        // Update backend state from interface result
+        backend.healthy = true;
+        backend.failCount = 0;
 
-      // Handle Ollama format: { models: [{name: "..."}, ...] }
-      if (data.models && Array.isArray(data.models)) {
-        backend.models = data.models.map(m => m.name || m);
-        console.log(`[${getTimestamp()}] [HealthChecker] Extracted ${endpointName} models for ${url}:`, backend.models);
-      }
-      // Handle litellm/OpenAI format: { data: [{id: "...", ...}, ...] }
-      else if (data.data && Array.isArray(data.data)) {
-        backend.models = data.data.map(m => m.id || m);
-        console.log(`[${getTimestamp()}] [HealthChecker] Extracted ${endpointName} models for ${url}:`, backend.models);
-      }
-      else {
-        backend.models = [];
-        console.log(`[${getTimestamp()}] [HealthChecker] No models found in response for ${url} (${endpointName}). Full response:`, body);
-
-        // If this was Ollama endpoint and we got 404, try OpenAI format
-        if (endpointName === 'Ollama' && res.statusCode === 404) {
-          console.log(`[${getTimestamp()}] [HealthChecker] Trying OpenAI format fallback for ${url}`);
-          this.makeHealthCheckRequest(
-            this.getEndpointOptions(url, '/v1/models'),
-            url,
-            'OpenAI',
-            backend
-          );
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn(`[${getTimestamp()}] [HealthChecker] Failed to parse response from ${url} (${endpointName}):`, e.message, 'Body:', body);
-      backend.models = [];
-
-      // If this was Ollama endpoint and we got an error, try OpenAI format
-      if (endpointName === 'Ollama') {
-        console.log(`[${getTimestamp()}] [HealthChecker] Trying OpenAI format fallback for ${url}`);
-        this.makeHealthCheckRequest(
-          this.getEndpointOptions(url, '/v1/models'),
-          url,
-          'OpenAI',
-          backend
-        );
-        return;
-      }
-    }
-
-    // Check for successful response (2xx status)
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      if (!healthy) {
-        console.log(`[${getTimestamp()}] [HealthChecker] Backend recovered: ${url} (status: ${res.statusCode})`);
+        // Log with detected API type and models
+        console.log(`[${getTimestamp()}] [HealthChecker] Backend healthy: ${url} (${result.apiType}) - models:`, result.models);
       } else {
-        console.log(`[${getTimestamp()}] [HealthChecker] Backend healthy: ${url} (status: ${res.statusCode})`);
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (${result.error || 'unknown error'})`);
+        }
+        backend.healthy = false;
+        backend.failCount = (backend.failCount || 0) + 1;
+
+        // Clear models for unhealthy backends
+        if (!backend.capabilities) {
+          backend.capabilities = {};
+        }
+        backend.capabilities.models = [];
       }
-      backend.healthy = true;
-      backend.failCount = 0;
-    } else {
-      if (process.env.NODE_ENV !== 'test') {
-        console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (status: ${res.statusCode})`);
-      }
+    } catch (err) {
+      console.error(`[${getTimestamp()}] [HealthChecker] Error checking ${url}:`, err.message);
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
+
+      if (!backend.capabilities) {
+        backend.capabilities = {};
+      }
+      backend.capabilities.models = [];
     }
   }
 
@@ -222,14 +127,37 @@ class HealthChecker {
    * @returns {Object} Health check stats
    */
   getStats() {
+    const healthyBackends = this.backends.filter(b => b.healthy);
+    const unhealthyBackends = this.backends.filter(b => !b.healthy);
+
+    // Add API type info to backend stats if available
+    const backendsWithInfo = this.backends.map(b => ({
+      url: b.url,
+      healthy: b.healthy,
+      apiType: b.capabilities?.apiType || 'unknown',
+      models: b.capabilities?.models || [],
+      activeRequestCount: b.activeRequestCount,
+      maxConcurrency: b.maxConcurrency,
+      failCount: b.failCount || 0
+    }));
+
     return {
       totalBackends: this.backends.length,
-      healthyBackends: this.backends.filter(b => b.healthy).length,
-      unhealthyBackends: this.backends.filter(b => !b.healthy).length,
+      healthyBackends: healthyBackends.length,
+      unhealthyBackends: unhealthyBackends.length,
       lastCheck: this.lastCheckTime,
       interval: this.config.healthCheckInterval,
-      timeout: this.config.healthCheckTimeout
+      timeout: this.config.healthCheckTimeout,
+      backends: backendsWithInfo
     };
+  }
+
+  /**
+   * Get the health check interface (for external use)
+   * @returns {Object} Health check interface instance
+   */
+  getHealthInterface() {
+    return this.healthInterface;
   }
 }
 

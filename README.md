@@ -17,6 +17,12 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Detailed statistics and monitoring
 - ✅ Graceful shutdown handling
 
+### API Capability Detection (v2.1)
+- ✅ **Automatic API type detection** - discovers whether each backend speaks Ollama, litellm, or OpenAI format
+- ✅ **Model discovery on startup** - pre-populates available models before requests begin
+- ✅ **Interface-based architecture** - components interact through abstract interfaces for extensibility
+- ✅ **Multi-API fallback strategy** - tries Ollama endpoint first, falls back to OpenAI format automatically
+
 ### Dashboard (v1.0)
 - ✅ Real-time monitoring of all backends
 - ✅ Health status overview (healthy, unhealthy, busy, idle)
@@ -274,6 +280,42 @@ curl http://localhost:3001/stats | grep -E "overloadedBackends|availableBackends
 Client → Load Balancer (localhost:3001) → Multiple Ollama Servers (host1, host2, ...)
 ```
 
+### Interface-Based Design
+
+The load balancer uses an **interface pattern** to decouple components from specific API implementations:
+
+```
+┌─────────────────┐
+│  Request Router │──depends on──▶│ BackendInterface
+├─────────────────┤               ├──────────────┬──────────────┐
+│ Health Checker  │───────────────│ IHealthCheck │ IModelList   │
+├─────────────────┤               ├──────────────┴──────────────┤
+│ Backend Selector│───────────────│                           │
+└─────────────────┘               ▼                           ▼
+                          ┌─────────────────┐     ┌─────────────────┐
+                          │ OllamaBackend   │     │ LiteLLMBackend  │
+                          ├─────────────────┤     ├─────────────────┤
+                          │ - /api/tags     │     │ - /v1/models    │
+                          │ - /api/chat     │     │ - /v1/chat/completions│
+                          └─────────────────┘     └─────────────────┘
+```
+
+**Key benefits:**
+- **Extensibility**: Add new API types by creating new interface implementations without modifying existing components
+- **Transparency**: Backend capabilities are explicitly declared (`backend.capabilities.apiType`, `backend.capabilities.models`)
+- **Testability**: Mock interfaces for unit tests without starting real backends
+
+### Startup Flow
+
+1. **Capability Detection Phase** - On startup, the system probes each backend to detect:
+   - API type (Ollama `/api/tags` or litellm/OpenAI `/v1/models`)
+   - Available models
+   - Supported endpoints
+
+2. **Health Check Phase** - Periodic health checks continue using the detected interface
+
+3. **Request Routing** - Backend selector queries `backend.capabilities.models` for model matching
+
 The load balancer:
 - **Prioritizes high-priority backends** for better performance and cost optimization
 - **Uses FIFO queueing** to handle concurrent requests
@@ -281,7 +323,7 @@ The load balancer:
 - Tracks active request count per backend with configurable `maxConcurrency` limit
 - Skips backends that have reached their concurrency limit during selection
 - Automatically recovers healthy backends after recovery interval
-- Handles both Anthropic and Ollama API formats
+- Handles both Anthropic and Ollama API formats via interface pattern
 - Reports utilization percentage (`activeRequestCount / maxConcurrency * 100`) for each backend
 
 ## Troubleshooting
@@ -388,3 +430,8 @@ npm install
    ```bash
    npm start
    ```
+
+# Bugs and TODOs
+
+- [] The frontend shows 3 available even when 1 of the three configured backends is unhealthy. What does available actually mean? if it just counts the number of connected backends, it's redundant, because the cards below show how many are connected. i think busy should be the number of backends having at least one active job while available is those still being able to process at least one more concurrent job.
+- The backend http://10.0.0.5:8000 works, but it does not support all APIs (it is a vllm backend. which APIs does it support?). I think, on startup, we should check, which API is supported. however, /models is an endpoint of all of the APIs. could this be used for health checking. But then, we should not only print the available API endpoints in the backend cards, but also extend the BackendSelector to filter the backends regarding suitable API (matching with the request).

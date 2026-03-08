@@ -3,6 +3,8 @@
  * Distributes requests among healthy backends by priority, then queues waiting requests
  */
 
+const { BackendSelector } = require('./backend-selector');
+
 // Helper function to get formatted timestamp
 function getTimestamp() {
   return new Date().toISOString();
@@ -23,6 +25,9 @@ class Balancer {
     this.debug = debug;
     this.debugRequestHistorySize = debugRequestHistorySize;
     this.debugRequests = []; // Array to store request metadata including content
+
+    // Initialize backend selector for decoupled selection logic
+    this.selector = new BackendSelector();
   }
 
   /**
@@ -147,31 +152,8 @@ class Balancer {
    * @returns {number|null} Index of highest priority backend or null
    */
   getNextBackendIndex() {
-    const backend = this._getSortedAvailableBackends()[0];
+    const backend = this.selector.getAvailableBackends(this.backends)[0];
     return backend ? this.backends.indexOf(backend) : null;
-  }
-
-  /**
-   * Helper method to get sorted available backends
-   * @returns {Array} Sorted array of available backends (highest priority first)
-   */
-  _getSortedAvailableBackends() {
-    const availableBackends = this.backends.filter(
-      b => b.healthy && b.activeRequestCount < b.maxConcurrency
-    );
-    if (availableBackends.length === 0) {
-      return [];
-    }
-
-    // Sort by priority (descending) to find the highest priority backend
-    return [...availableBackends].sort((a, b) => {
-      const priorityA = a.priority || 0;
-      const priorityB = b.priority || 0;
-      if (priorityA !== priorityB) {
-        return priorityB - priorityA;  // Higher priority first
-      }
-      return this.backends.indexOf(a) - this.backends.indexOf(b);
-    });
   }
 
   /**
@@ -181,20 +163,25 @@ class Balancer {
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {
-    const sortedBackends = this._getSortedAvailableBackends();
+    return this.selector.selectBackend(this.backends);
+  }
 
-    for (let i = 0; i < sortedBackends.length; i++ ) {
-      let backend = sortedBackends[i];
+  /**
+   * Get the next backend filtered by model support
+   * Uses BackendSelector with model matching to find suitable backends
+   * @param {string|string[]} models - Model(s) required for the request
+   * @returns {Object|null} Next backend supporting the model or null if none available
+   */
+  getNextBackendForModel(models) {
+    return this.selector.selectBackend(this.backends, { models });
+  }
 
-      if (backend.healthy && backend.activeRequestCount < backend.maxConcurrency) {
-        return backend;
-      }
-
-      // Backend is unhealthy or at max concurrency, try next
-      i++;
-    }
-
-    return null;
+  /**
+   * Get all available backends sorted by priority (no model filtering)
+   * @returns {Array} Sorted array of available backends
+   */
+  getAvailableBackends() {
+    return this.selector.getAvailableBackends(this.backends);
   }
 
   /**
@@ -240,6 +227,23 @@ class Balancer {
    */
   hasHealthyBackends() {
     return this.backends.some(b => b.healthy);
+  }
+
+  /**
+   * Check if any backend supports the requested models and is available
+   * @param {string|string[]} models - Model(s) to check for
+   * @returns {boolean} True if at least one suitable backend exists
+   */
+  hasBackendForModel(models) {
+    return this.selector.hasAvailableBackend(this.backends, models);
+  }
+
+  /**
+   * Get statistics about model availability across backends
+   * @returns {Object} Statistics object with model information
+   */
+  getModelAvailabilityStats() {
+    return this.selector.getModelAvailabilityStats(this.backends);
   }
 
   /**
