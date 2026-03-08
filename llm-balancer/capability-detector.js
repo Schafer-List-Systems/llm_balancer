@@ -31,53 +31,52 @@ class CapabilityDetector {
   /**
    * Detect capabilities for a single backend URL
    * @param {string} url - Backend URL (http://host:port)
-   * @returns {Promise<Object>} Capability info with apiType and models
+   * @returns {Promise<Object>} Capability info with apiTypes array and models by API type
    */
   async detect(url) {
     console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Starting capability detection`);
 
+    const detectedApis = [];
+    const allModels = {};
+    const allEndpoints = {};
+
     for (const apiConfig of this.apiOrder) {
       try {
         const result = await this.checkAPI(url, apiConfig);
-        if (result.healthy && result.models.length > 0) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Detected API type: ${result.apiType}, models:`, result.models);
-          return {
-            apiType: result.apiType,
-            models: result.models,
-            endpoints: {
-              [result.apiType]: apiConfig.endpoint
-            },
-            detectedAt: new Date().toISOString()
-          };
+        if (result.healthy) {
+          detectedApis.push(result.apiType);
+          allEndpoints[result.apiType] = apiConfig.endpoint;
+          if (result.models && result.models.length > 0) {
+            allModels[result.apiType] = result.models;
+          }
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Detected ${result.apiType} API`);
         } else if (apiConfig.type === 'ollama' && this.shouldFallbackToOpenAI(result)) {
           console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Ollama check failed, trying OpenAI fallback`);
           continue;
         }
-
-        // API check failed and no fallback applicable
-        return {
-          apiType: 'unknown',
-          models: [],
-          error: result.error || 'API check failed'
-        };
       } catch (err) {
         console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: Error checking ${apiConfig.type} API:`, err.message);
         if (apiConfig.type === 'ollama') {
           continue; // Try OpenAI on Ollama error
         }
-        return {
-          apiType: 'unknown',
-          models: [],
-          error: err.message
-        };
       }
     }
 
-    console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: All API types failed`);
+    if (detectedApis.length === 0) {
+      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: All API types failed`);
+      return {
+        apiTypes: [],
+        models: {},
+        endpoints: {},
+        error: 'All API checks failed'
+      };
+    }
+
     return {
-      apiType: 'unknown',
-      models: [],
-      error: 'All API checks failed'
+      apiTypes: detectedApis,
+      models: allModels,
+      endpoints: allEndpoints,
+      detectedAt: new Date().toISOString()
     };
   }
 
@@ -239,8 +238,9 @@ class CapabilityDetector {
         capabilities[urls[index]] = result.value;
       } else {
         capabilities[urls[index]] = {
-          apiType: 'unknown',
-          models: [],
+          apiTypes: [],
+          models: {},
+          endpoints: {},
           error: result.reason.message
         };
       }

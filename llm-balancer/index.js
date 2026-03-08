@@ -421,19 +421,30 @@ app.get('/stats', (req, res) => {
  */
 app.get('/backends', (req, res) => {
   res.json({
-    backends: config.backends.map(b => ({
-      url: b.url,
-      priority: b.priority || 0,
-      healthy: b.healthy,
-      activeRequestCount: b.activeRequestCount,
-      maxConcurrency: b.maxConcurrency,
-      utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
-      failCount: b.failCount || 0,
-      requestCount: b.requestCount || 0,
-      errorCount: b.errorCount || 0,
-      models: b.capabilities?.models || [],
-      apiType: b.capabilities?.apiType || 'unknown'
-    }))
+    backends: config.backends.map(b => {
+      const caps = b.capabilities || {};
+      // Flatten models from all API types for backward compatibility
+      const allModels = Object.values(caps.models || {}).flat();
+      // Get first API type for backward compatibility
+      const firstApiType = Array.isArray(caps.apiTypes) && caps.apiTypes.length > 0
+        ? caps.apiTypes[0]
+        : caps.apiType || 'unknown';
+
+      return {
+        url: b.url,
+        priority: b.priority || 0,
+        healthy: b.healthy,
+        activeRequestCount: b.activeRequestCount,
+        maxConcurrency: b.maxConcurrency,
+        utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
+        failCount: b.failCount || 0,
+        requestCount: b.requestCount || 0,
+        errorCount: b.errorCount || 0,
+        apiTypes: Array.isArray(caps.apiTypes) ? caps.apiTypes : (caps.apiType ? [caps.apiType] : []),
+        models: allModels,
+        apiType: firstApiType
+      };
+    })
   });
 });
 

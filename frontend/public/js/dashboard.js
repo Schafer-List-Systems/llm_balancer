@@ -282,14 +282,21 @@ document.addEventListener('DOMContentLoaded', () => {
         'ollama': 'Ollama'
       };
 
-      const apiTypeBadge = backend.apiType && backend.apiType !== 'unknown' ? `
-            <div class="api-badge ${backend.apiType}">${apiTypeLabels[backend.apiType] || backend.apiType.toUpperCase()}</div>
-          ` : '';
+      // Support both array (multi-API) and single string (backward compatibility)
+      const apiTypes = Array.isArray(backend.apiTypes)
+        ? backend.apiTypes
+        : (backend.apiType && backend.apiType !== 'unknown' ? [backend.apiType] : []);
+
+      const apiBadges = apiTypes.length > 0
+        ? apiTypes.map(apiType => `
+            <div class="api-badge ${apiType}">${apiTypeLabels[apiType] || apiType.toUpperCase()}</div>
+          `).join('')
+        : '';
 
       return `
         <div class="backend-card">
           <div class="backend-url">${backend.url}</div>
-          ${apiTypeBadge}
+          ${apiBadges}
           <div class="backend-info">
             <div class="info-row">
               <span class="info-label">Health</span>

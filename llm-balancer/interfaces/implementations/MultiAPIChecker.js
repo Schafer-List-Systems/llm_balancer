@@ -39,50 +39,57 @@ class MultiAPIChecker extends IHealthCheck {
   }
 
   /**
-   * Check backend health by trying multiple APIs in priority order
-   * First successful API becomes the detected type for this backend
+   * Check backend health by trying multiple APIs
+   * Detects all available APIs on the backend
    * @param {Object} backend - Backend object with url property
-   * @returns {Promise<Object>} Health status result with detected apiType
+   * @returns {Promise<Object>} Health status result with detected apiTypes array
    */
   async check(backend) {
     const url = backend.url;
     console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Starting API detection`);
 
+    const detectedApis = [];
+    const allModels = {};
+    const allEndpoints = {};
+    let firstHealthyResult = null;
+
     for (const apiConfig of this.apiOrder) {
       try {
         const result = await this.checkAPI(url, apiConfig);
         if (result.healthy) {
-          console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Detected API type: ${result.apiType}`);
-
-          // Update backend capabilities with detected API and models
-          if (!backend.capabilities) {
-            backend.capabilities = {};
+          detectedApis.push(result.apiType);
+          allEndpoints[result.apiType] = apiConfig.endpoint;
+          if (result.models && result.models.length > 0) {
+            allModels[result.apiType] = result.models;
           }
-          backend.capabilities.apiType = result.apiType;
-          backend.capabilities.models = result.models || [];
-          backend.capabilities.endpoints = {
-            [result.apiType]: apiConfig.endpoint
-          };
-
-          return result;
+          if (!firstHealthyResult) {
+            firstHealthyResult = result;
+          }
+          console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Detected ${result.apiType} API`);
         } else if (apiConfig.type === 'ollama' && this.shouldFallbackToOpenAI(result)) {
-          // Ollama returned error but not connection refused - try OpenAI format
           console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Ollama failed, trying OpenAI fallback`);
           continue;
         }
-
-        // API check failed and no fallback applicable
-        return result;
       } catch (err) {
         console.warn(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Error checking ${apiConfig.type} API:`, err.message);
         if (apiConfig.type === 'ollama') {
-          continue; // Try OpenAI on Ollama error
+          continue;
         }
-        return { healthy: false, error: err.message, apiType: 'unknown' };
       }
     }
 
-    // All APIs failed
+    // Update backend capabilities with all detected APIs
+    if (!backend.capabilities) {
+      backend.capabilities = {};
+    }
+    backend.capabilities.apiTypes = detectedApis;
+    backend.capabilities.models = allModels;
+    backend.capabilities.endpoints = allEndpoints;
+
+    if (detectedApis.length > 0) {
+      return firstHealthyResult;
+    }
+
     console.warn(`[${getTimestamp()}] [MultiAPIChecker] ${url}: All API types failed`);
     return {
       healthy: false,
