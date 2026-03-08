@@ -17,12 +17,13 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Detailed statistics and monitoring
 - ✅ Graceful shutdown handling
 
-### API Capability Detection (v2.1)
+### API Capability Detection (v2.2)
 - ✅ **Automatic API type detection** - discovers which API each backend serves (OpenAI, Anthropic, Google Gemini, Ollama)
+- ✅ **Multi-API support** - detects and displays **all** APIs a backend supports (e.g., LiteLLM can serve both OpenAI and Anthropic)
 - ✅ **Model discovery on startup** - pre-populates available models before requests begin
 - ✅ **Interface-based architecture** - components interact through abstract interfaces for extensibility
-- ✅ **Multi-API fallback strategy** - tries multiple API endpoints in priority order, stops at first match
-- ✅ **Frontend API badges** - backend cards display detected API type with color-coded badges
+- ✅ **Comprehensive probing** - tries all API endpoints and collects successful detections
+- ✅ **Frontend API badges** - backend cards display all detected API types with color-coded badges
 
 ### Dashboard (v1.0)
 - ✅ Real-time monitoring of all backends

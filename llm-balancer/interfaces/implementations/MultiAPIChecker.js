@@ -19,14 +19,15 @@ class MultiAPIChecker extends IHealthCheck {
     // OpenAI-compatible includes: OpenAI, Mistral, Groq, Cohere (grouped together)
     this.apiOrder = [
       // OpenAI-compatible APIs (Mistral, Groq, Cohere grouped here)
-      { type: 'openai', endpoint: '/v1/models', format: 'data' },
+      { type: 'openai', endpoint: '/v1/models', format: 'data', method: 'GET' },
       // Anthropic - check messages endpoint first, then chat/completions for models
-      { type: 'anthropic', endpoint: '/v1/messages', format: null },
-      { type: 'anthropic', endpoint: '/chat/completions', format: 'data' },
+      // Note: Anthropic endpoints require POST requests
+      { type: 'anthropic', endpoint: '/v1/messages', format: null, method: 'POST' },
+      { type: 'anthropic', endpoint: '/chat/completions', format: 'data', method: 'POST' },
       // Google Gemini
-      { type: 'google', endpoint: '/v1beta/models', format: 'models' },
+      { type: 'google', endpoint: '/v1beta/models', format: 'models', method: 'GET' },
       // Ollama
-      { type: 'ollama', endpoint: '/api/tags', format: 'models' }
+      { type: 'ollama', endpoint: '/api/tags', format: 'models', method: 'GET' }
     ];
   }
 
@@ -57,7 +58,11 @@ class MultiAPIChecker extends IHealthCheck {
       try {
         const result = await this.checkAPI(url, apiConfig);
         if (result.healthy) {
-          detectedApis.push(result.apiType);
+          // Avoid duplicate API types (e.g., anthropic via /v1/messages and /chat/completions)
+          if (!detectedApis.includes(result.apiType)) {
+            detectedApis.push(result.apiType);
+            console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Detected ${result.apiType} API`);
+          }
           allEndpoints[result.apiType] = apiConfig.endpoint;
           if (result.models && result.models.length > 0) {
             allModels[result.apiType] = result.models;
@@ -65,7 +70,6 @@ class MultiAPIChecker extends IHealthCheck {
           if (!firstHealthyResult) {
             firstHealthyResult = result;
           }
-          console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Detected ${result.apiType} API`);
         } else if (apiConfig.type === 'ollama' && this.shouldFallbackToOpenAI(result)) {
           console.log(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Ollama failed, trying OpenAI fallback`);
           continue;
@@ -112,7 +116,7 @@ class MultiAPIChecker extends IHealthCheck {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || 11434,
         path: apiConfig.endpoint,
-        method: 'GET',
+        method: apiConfig.method || 'GET',
         timeout: this.timeout
       };
 
@@ -155,7 +159,9 @@ class MultiAPIChecker extends IHealthCheck {
       // Handle endpoints without model lists (e.g., /v1/messages)
       const modelsKey = apiConfig.format;
       if (modelsKey === null) {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
+        // For endpoints like /v1/messages, any response means the endpoint exists
+        // Even validation errors (400) mean the API is available
+        if (res.statusCode >= 200 && res.statusCode < 500) {
           console.log(`[${getTimestamp()}] [MultiAPIChecker] ${res.req.path}: ${apiConfig.type} endpoint available (no model list)`);
           return {
             healthy: true,
@@ -184,6 +190,18 @@ class MultiAPIChecker extends IHealthCheck {
           statusCode: res.statusCode
         };
       } else {
+        // For endpoints like /chat/completions, any response (even error) means the endpoint exists
+        // A 400 validation error means the API is available but missing required params
+        if (res.statusCode >= 200 && res.statusCode < 500) {
+          console.log(`[${getTimestamp()}] [MultiAPIChecker] ${res.req.path}: ${apiConfig.type} endpoint available (validation error means API exists)`);
+          return {
+            healthy: true,
+            apiType: apiConfig.type,
+            models: [],
+            statusCode: res.statusCode
+          };
+        }
+
         console.warn(`[${getTimestamp()}] [MultiAPIChecker] ${res.req.path}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
 
         // If Ollama returned error message, suggest OpenAI fallback

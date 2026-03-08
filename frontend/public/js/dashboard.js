@@ -294,15 +294,13 @@ document.addEventListener('DOMContentLoaded', () => {
         : '';
 
       return `
-        <div class="backend-card">
+        <div class="backend-card ${healthClass}">
           <div class="backend-url">${backend.url}</div>
           ${apiBadges}
           <div class="backend-info">
             <div class="info-row">
               <span class="info-label">Health</span>
-              <span class="health-indicator ${healthClass}">
-                ${backend.healthy ? '✓' : '✗'} ${healthText}
-              </span>
+              <span class="info-value ${healthClass}">${healthText}</span>
             </div>
             <div class="info-row">
               <span class="info-label">Status</span>

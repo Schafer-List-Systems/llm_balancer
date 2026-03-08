@@ -306,7 +306,15 @@ body {
   border-radius: 0.5rem;
   padding: 1rem;
   box-shadow: var(--shadow);
-  border: 1px solid var(--border-color);
+  border: 2px solid var(--border-color);
+}
+
+.backend-card.healthy {
+  border-color: #10b981;
+}
+
+.backend-card.unhealthy {
+  border-color: #ef4444;
 }
 
 .backend-url {
@@ -381,7 +389,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
-  margin: 0.5rem 0;
+  padding-left: 0;
+  margin-bottom: 0.75rem;
 }
 
 .api-badge {
@@ -391,6 +400,7 @@ body {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
+  margin: 0;
 }
 
 .api-badge.openai {
@@ -411,6 +421,17 @@ body {
 .api-badge.ollama {
   background-color: #f59e0b;
   color: white;
+}
+
+/* Health value styling */
+.info-value.healthy {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.info-value.unhealthy {
+  color: #ef4444;
+  font-weight: 600;
 }
 
 /* Health Indicator */

@@ -17,14 +17,15 @@ class CapabilityDetector {
     // OpenAI-compatible includes: OpenAI, Mistral, Groq, Cohere (grouped together)
     this.apiOrder = [
       // OpenAI-compatible APIs (Mistral, Groq, Cohere grouped here)
-      { type: 'openai', endpoint: '/v1/models', formatKey: 'data' },
+      { type: 'openai', endpoint: '/v1/models', formatKey: 'data', method: 'GET' },
       // Anthropic - check messages endpoint first, then chat/completions for models
-      { type: 'anthropic', endpoint: '/v1/messages', formatKey: null },
-      { type: 'anthropic', endpoint: '/chat/completions', formatKey: 'data' },
+      // Note: Anthropic endpoints require POST requests
+      { type: 'anthropic', endpoint: '/v1/messages', formatKey: null, method: 'POST' },
+      { type: 'anthropic', endpoint: '/chat/completions', formatKey: 'data', method: 'POST' },
       // Google Gemini
-      { type: 'google', endpoint: '/v1beta/models', formatKey: 'models' },
+      { type: 'google', endpoint: '/v1beta/models', formatKey: 'models', method: 'GET' },
       // Ollama
-      { type: 'ollama', endpoint: '/api/tags', formatKey: 'models' }
+      { type: 'ollama', endpoint: '/api/tags', formatKey: 'models', method: 'GET' }
     ];
   }
 
@@ -94,7 +95,7 @@ class CapabilityDetector {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || 11434,
         path: apiConfig.endpoint,
-        method: 'GET',
+        method: apiConfig.method || 'GET',
         timeout: this.timeout
       };
 
@@ -137,8 +138,9 @@ class CapabilityDetector {
       // Handle endpoints without model lists (e.g., /v1/messages)
       const formatKey = apiConfig.formatKey;
       if (formatKey === null) {
-        // Just check if endpoint exists and returns 200
-        if (res.statusCode >= 200 && res.statusCode < 300) {
+        // For endpoints like /v1/messages, any response means the endpoint exists
+        // Even validation errors (400) mean the API is available
+        if (res.statusCode >= 200 && res.statusCode < 500) {
           console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (no model list)`);
           return {
             healthy: true,
@@ -175,6 +177,18 @@ class CapabilityDetector {
           statusCode: res.statusCode
         };
       } else {
+        // For endpoints like /chat/completions, any response (even error) means the endpoint exists
+        // A 400 validation error means the API is available but missing required params
+        if (res.statusCode >= 200 && res.statusCode < 500) {
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (validation error means API exists)`);
+          return {
+            healthy: true,
+            apiType: apiConfig.type,
+            models: [],
+            statusCode: res.statusCode
+          };
+        }
+
         console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
 
         // If Ollama returned error message, suggest OpenAI fallback
