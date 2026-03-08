@@ -6,8 +6,8 @@ describe('Rapid Request Arrival Queue Issue', () => {
 
   beforeEach(() => {
     backends = [
-      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 },
+      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 }
     ];
     balancer = new Balancer(backends);
   });
@@ -15,53 +15,87 @@ describe('Rapid Request Arrival Queue Issue', () => {
   it('should handle rapid arrival when backends become available', async () => {
     console.log('\n=== Test: Rapid arrival with backend availability ===\n');
 
+    // First, set both backends to max concurrency to force queueing
+    console.log('1. Setting backends to max concurrency (simulating busy backends)');
+    backends[0].activeRequestCount = 1;
+    backends[1].activeRequestCount = 1;
+
     const requests = [];
 
-    // Start all three requests quickly
-    console.log('1. Starting 3 requests rapidly');
+    // Start all three requests quickly - they will be queued
+    console.log('2. Starting 3 requests rapidly');
     requests.push(balancer.queueRequest());
     requests.push(balancer.queueRequest());
     requests.push(balancer.queueRequest());
 
-    // Wait a bit for backends to start processing
+    // Wait a bit for requests to be queued
     await new Promise(resolve => setTimeout(resolve, 20));
 
     // All backends should be busy
     const stats = balancer.getQueueStats();
-    console.log(`2. Queue stats: ${stats.depth} requests`);
+    console.log(`3. Queue stats: ${stats.depth} requests`);
+    expect(stats.depth).toBe(3);
 
-    // The third request should be queued
-    // But with rapid arrival, it's possible the queue gets filled
-    // and then backend1 finishes before the queue is processed
-
-    // Now release backend1
-    console.log('3. Releasing backend1 (should pick up queued request)');
+    // Release backend1 - should pick up ONLY ONE queued request
+    console.log('4. Releasing backend1 (should pick up ONE queued request)');
     backends[0].activeRequestCount = 0;
     balancer.notifyBackendAvailable();
 
     // Wait for request to process
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    console.log('4. Checking if queued request was processed');
+    console.log('5. Checking if ONE queued request was processed');
 
-    try {
-      const result = await requests[2];
-      console.log(`5. Request 3 resolved: ${result.backend.url}`);
-      expect(result).toBeDefined();
-    } catch (err) {
-      console.log(`5. Request 3 failed: ${err.message}`);
-      // If this happens, it's the bug we're looking for
-      fail('Queued request was never picked up');
-    }
+    // The FIRST queued request should resolve (FIFO order)
+    const result1 = await requests[0];
+    console.log(`6. Request 1 resolved: ${result1.url}`);
+    expect(result1).toBeDefined();
+
+    // Queue should still have 2 requests
+    const statsAfter = balancer.getQueueStats();
+    console.log(`7. Queue stats after 1 release: ${statsAfter.depth} requests`);
+    expect(statsAfter.depth).toBe(2);
+
+    // Release backend2 to pick up the second queued request
+    console.log('8. Releasing backend2 (should pick up second queued request)');
+    backends[1].activeRequestCount = 0;
+    balancer.notifyBackendAvailable();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const result2 = await requests[1];
+    console.log(`9. Request 2 resolved: ${result2.url}`);
+    expect(result2).toBeDefined();
+
+    // Queue should still have 1 request
+    const statsAfterSecond = balancer.getQueueStats();
+    console.log(`10. Queue stats after 2 releases: ${statsAfterSecond.depth} requests`);
+    expect(statsAfterSecond.depth).toBe(1);
+
+    // Release backend1 again to pick up the final queued request
+    console.log('11. Releasing backend1 again (should pick up final queued request)');
+    backends[0].activeRequestCount = 0;
+    balancer.notifyBackendAvailable();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const result3 = await requests[2];
+    console.log(`12. Request 3 resolved: ${result3.url}`);
+    expect(result3).toBeDefined();
   });
 
   it('should process all queued requests when multiple backends become available', async () => {
     console.log('\n=== Test: Multiple backend releases ===\n');
 
+    // Set both backends to max concurrency first
+    console.log('1. Setting backends to max concurrency');
+    backends[0].activeRequestCount = 1;
+    backends[1].activeRequestCount = 1;
+
     const requests = [];
 
     // Start multiple requests while backends are busy
-    console.log('1. Starting 4 requests');
+    console.log('2. Starting 4 requests');
     for (let i = 0; i < 4; i++) {
       requests.push(balancer.queueRequest());
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -69,14 +103,46 @@ describe('Rapid Request Arrival Queue Issue', () => {
 
     // Check queue
     const stats = balancer.getQueueStats();
-    console.log(`2. Queue stats: ${stats.depth} requests`);
+    console.log(`3. Queue stats: ${stats.depth} requests`);
+    expect(stats.depth).toBe(4);
 
-    // All requests should be processed eventually
-    console.log('3. Waiting for all requests to complete');
-    const results = await Promise.all(requests);
+    // Process requests one at a time by releasing backends
+    console.log('4. Processing requests one at a time');
 
-    console.log('4. All requests completed');
-    expect(results).toHaveLength(4);
+    // Release backend1 - should process ONE request
+    backends[0].activeRequestCount = 0;
+    balancer.notifyBackendAvailable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const result1 = await requests[0];
+    console.log(`5. Request 1 resolved: ${result1.url}`);
+    expect(result1).toBeDefined();
+
+    // Release backend2 - should process ONE more request
+    backends[1].activeRequestCount = 0;
+    balancer.notifyBackendAvailable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const result2 = await requests[1];
+    console.log(`6. Request 2 resolved: ${result2.url}`);
+    expect(result2).toBeDefined();
+
+    // Release backend1 again - should process another request
+    backends[0].activeRequestCount = 0;
+    balancer.notifyBackendAvailable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const result3 = await requests[2];
+    console.log(`7. Request 3 resolved: ${result3.url}`);
+    expect(result3).toBeDefined();
+
+    // Release backend2 again - should process final request
+    backends[1].activeRequestCount = 0;
+    balancer.notifyBackendAvailable();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const result4 = await requests[3];
+    console.log(`8. Request 4 resolved: ${result4.url}`);
+    expect(result4).toBeDefined();
+
+    console.log('9. All requests completed');
+    expect(requests.length).toBe(4);
   });
 
   it('should not lose requests when queue is filled and processed', async () => {

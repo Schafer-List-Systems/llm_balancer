@@ -85,7 +85,8 @@ class Balancer {
             console.log(`[${getTimestamp()}] [Balancer] Direct assignment to backend ${backend.url}`);
             return Promise.resolve(backend);
         } else {
-            console.log(`[${getTimestamp()}] [Balancer] No available backend found`);
+            console.log(`[${getTimestamp()}] [Balancer] No available backend found, queuing request`);
+            // Fall through to queueing logic below
         }
     }
 
@@ -113,35 +114,51 @@ class Balancer {
 
   /**
    * Notify that a backend is available (called when a backend becomes idle)
-   * This will wake up queued requests from the single global queue
+   * This will wake up ONE queued request from the single global queue
+   *
+   * ★ Insight ─────────────────────────────────────
+   * When a backend becomes available, only ONE request should be dequeued.
+   * The while loop that processed ALL requests was the bug: getNextBackend()
+   * filters by activeRequestCount < maxConcurrency, but since activeRequestCount
+   * is only incremented later in processRequest(), the same backend could be
+   * selected multiple times in rapid succession, causing activeRequestCount to
+   * exceed maxConcurrency.
+   *
+   * By processing only one request per notification, we ensure proper capacity
+   * tracking and allow other backends to receive queued requests when they
+   * become available.
+   * ──────────────────────────────────────────────────
    */
   notifyBackendAvailable() {
     const queue = this.queue;
-    if (!queue || queue.length === 0) return;
+    if (!queue || queue.length === 0) {
+      console.log(`[${getTimestamp()}] [Balancer] notifyBackendAvailable() called but queue is empty (${queue ? queue.length : 'undefined'})`);
+      return;
+    }
 
-    console.log(`[${getTimestamp()}] [Balancer] Backend available, processing ${queue.length} queued request(s)`);
+    console.log(`[${getTimestamp()}] [Balancer] Backend available, processing 1 queued request`);
+    console.log(`[${getTimestamp()}] [Balancer] Backend availability: ${this.backends.map(b => `${b.url}: ${b.activeRequestCount}/${b.maxConcurrency}`).join(', ')}`);
 
-    // Process all pending requests from the single queue
-    while (queue.length > 0) {
-      const request = queue[0];
-      clearTimeout(request.timeout);
+    // Process ONLY ONE pending request from the single queue
+    const request = queue[0];
+    clearTimeout(request.timeout);
 
-      const backend = this.getNextBackend();
+    const backend = this.getNextBackend();
+    console.log(`[${getTimestamp()}] [Balancer] getNextBackend() returned: ${backend ? backend.url : 'null'}`);
 
-      if (backend) {
-        // Increment request count for this backend
-        // Note: activeRequestCount is incremented in processRequest() after this resolves
-        backend.requestCount = (backend.requestCount || 0) + 1;
-        this.requestCount.set(backend.url,
-          (this.requestCount.get(backend.url) || 0) + 1);
+    if (backend) {
+      // Increment request count for this backend
+      // Note: activeRequestCount is incremented in processRequest() after this resolves
+      backend.requestCount = (backend.requestCount || 0) + 1;
+      this.requestCount.set(backend.url,
+        (this.requestCount.get(backend.url) || 0) + 1);
 
-        queue.shift();  // Remove from queue
-        console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
-        request.resolve(backend);
-      } else {
-        // No available backend, stop processing for now
-        break;
-      }
+      queue.shift();  // Remove from queue
+      console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
+      request.resolve(backend);
+    } else {
+      // No available backend, request stays in queue
+      console.log(`[${getTimestamp()}] [Balancer] No available backend, request remains queued`);
     }
   }
 
@@ -271,6 +288,43 @@ class Balancer {
       })),
       requestCounts: Object.fromEntries(this.requestCount)
     };
+  }
+
+  /**
+   * Testing helper: Simulate a request being processed by a backend
+   * This increments activeRequestCount and returns a release function
+   * Use this in tests to properly simulate the request lifecycle
+   * @param {string} backendUrl - URL of the backend to simulate request on
+   * @returns {Function} Release function to call when request completes
+   */
+  simulateRequestStart(backendUrl) {
+    const backend = this.backends.find(b => b.url === backendUrl);
+    if (!backend) {
+      throw new Error(`Backend not found: ${backendUrl}`);
+    }
+    if (backend.activeRequestCount >= (backend.maxConcurrency || 1)) {
+      throw new Error(`Backend ${backendUrl} is already at max concurrency`);
+    }
+    backend.activeRequestCount++;
+    return () => this.simulateRequestEnd(backendUrl);
+  }
+
+  /**
+   * Testing helper: Simulate a request completing on a backend
+   * This decrements activeRequestCount and notifies the queue
+   * @param {string} backendUrl - URL of the backend
+   */
+  simulateRequestEnd(backendUrl) {
+    const backend = this.backends.find(b => b.url === backendUrl);
+    if (!backend) {
+      throw new Error(`Backend not found: ${backendUrl}`);
+    }
+    if (backend.activeRequestCount > 0) {
+      backend.activeRequestCount--;
+      if (backend.activeRequestCount < (backend.maxConcurrency || 1)) {
+        this.notifyBackendAvailable();
+      }
+    }
   }
 
   /**

@@ -150,7 +150,7 @@ class MultiAPIChecker extends IHealthCheck {
           statusCode: res.statusCode
         };
       } else {
-        console.warn(`[${getTimestamp()}] [MultiAPIChecker] ${url}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
+        console.warn(`[${getTimestamp()}] [MultiAPIChecker] ${res.req.path}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
 
         // If Ollama returned error message, suggest OpenAI fallback
         if (apiConfig.type === 'ollama' && data.error) {

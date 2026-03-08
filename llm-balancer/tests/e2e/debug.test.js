@@ -7,8 +7,8 @@ describe('Debug Test', () => {
   beforeEach(() => {
     console.log('Before each - creating balancer');
     backends = [
-      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 },
+      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 }
     ];
     balancer = new Balancer(backends);
     console.log('Before each - balancer created');

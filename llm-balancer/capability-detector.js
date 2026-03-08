@@ -147,7 +147,7 @@ class CapabilityDetector {
           statusCode: res.statusCode
         };
       } else {
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
+        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
 
         // If Ollama returned error message, suggest OpenAI fallback
         if (apiConfig.type === 'ollama' && data.error) {
@@ -170,7 +170,7 @@ class CapabilityDetector {
         };
       }
     } catch (e) {
-      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: Failed to parse ${apiConfig.type} response:`, e.message);
+      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: Failed to parse ${apiConfig.type} response:`, e.message);
       return {
         healthy: false,
         error: `Parse error: ${e.message}`,

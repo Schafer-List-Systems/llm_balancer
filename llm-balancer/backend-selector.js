@@ -155,7 +155,7 @@ class BackendSelector {
   _filterByHealthAndAvailability(backends) {
     return backends.filter(b =>
       b.healthy === true &&
-      b.activeRequestCount < b.maxConcurrency
+      (b.activeRequestCount || 0) < (b.maxConcurrency || 1)
     );
   }
 
