@@ -20,7 +20,7 @@ Edit the `.env` file in the root directory:
 
 ```bash
 # Backend URLs
-OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+BACKENDS="http://host1:11434,http://host2:11434"
 
 # Server port
 LB_PORT=3001
@@ -73,7 +73,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - OLLAMA_BACKENDS=${OLLAMA_BACKENDS}
+      - BACKENDS=${BACKENDS}
       - LB_PORT=3001
       - HEALTH_CHECK_INTERVAL=30000
     restart: unless-stopped

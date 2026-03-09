@@ -262,7 +262,7 @@ it('should maintain correct activeRequestCount', async () => {
 
 ```bash
 # For tests requiring specific config
-export OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+export BACKENDS="http://host1:11434,http://host2:11434"
 export LB_PORT=3001
 export DEBUG=true
 ```

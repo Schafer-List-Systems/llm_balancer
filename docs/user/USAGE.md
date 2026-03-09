@@ -50,10 +50,10 @@ Configure your Ollama backend URLs:
 
 ```bash
 # Single backend
-OLLAMA_BACKENDS="http://localhost:11434"
+BACKENDS="http://localhost:11434"
 
 # Multiple backends
-OLLAMA_BACKENDS="http://host1:11434,http://host2:11434,http://host3:11434"
+BACKENDS="http://host1:11434,http://host2:11434,http://host3:11434"
 ```
 
 ### Priority-Based Load Balancing
@@ -64,7 +64,7 @@ Configure priority levels for each backend to prioritize specific servers:
 
 ```bash
 # Backend 0 - Priority 100 (highest)
-OLLAMA_BACKENDS="http://fast-server:11434,http://medium-server:11434,http://slow-server:11434"
+BACKENDS="http://fast-server:11434,http://medium-server:11434,http://slow-server:11434"
 BACKEND_PRIORITY_0=100
 
 # Backend 1 - Priority 50 (medium)
@@ -204,7 +204,7 @@ curl http://localhost:3001/api/tags
 
 ```bash
 # Primary high-performance server
-OLLAMA_BACKENDS="http://gpu-server:11434,http://cpu-server:11434"
+BACKENDS="http://gpu-server:11434,http://cpu-server:11434"
 BACKEND_PRIORITY_0=100
 BACKEND_PRIORITY_1=10
 ```
@@ -215,7 +215,7 @@ Requests will always prefer the GPU server. When it's busy or unavailable, reque
 
 ```bash
 # Three servers with different capacities
-OLLAMA_BACKENDS="http://fast-1:11434,http://fast-2:11434,http://slow-1:11434"
+BACKENDS="http://fast-1:11434,http://fast-2:11434,http://slow-1:11434"
 BACKEND_CONCURRENCY_0=10
 BACKEND_CONCURRENCY_1=10
 BACKEND_CONCURRENCY_2=5
@@ -227,7 +227,7 @@ Fast servers handle more concurrent requests. The slow server is used as a backu
 
 ```bash
 # Mix of expensive and cheap backends
-OLLAMA_BACKENDS="http://premium-1:11434,http://standard-1:11434,http://economy-1:11434"
+BACKENDS="http://premium-1:11434,http://standard-1:11434,http://economy-1:11434"
 BACKEND_PRIORITY_0=100
 BACKEND_PRIORITY_1=50
 BACKEND_PRIORITY_2=0

@@ -51,7 +51,7 @@ cp .env.example .env
 Edit `.env` with your backend URLs:
 
 ```bash
-OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+BACKENDS="http://host1:11434,http://host2:11434"
 LB_PORT=3001
 ```
 
@@ -158,7 +158,7 @@ curl http://localhost:3001/backends
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BACKENDS` | None | Comma-separated list of backend URLs (required) |
+| `BACKENDS` | None | Comma-separated list of backend URLs (required) |
 | `LB_PORT` | 3001 | Server port |
 | `HEALTH_CHECK_INTERVAL` | 30000ms | Health check interval (30 seconds) |
 | `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout (5 seconds) |

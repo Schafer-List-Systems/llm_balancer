@@ -453,7 +453,7 @@ The balancer itself is stateless and can be scaled horizontally:
 ### Backend Scaling
 
 Add more backends without downtime:
-- Update `OLLAMA_BACKENDS` environment variable
+- Update `BACKENDS` environment variable
 - Restart balancer (graceful shutdown handles in-flight requests)
 
 ### Performance Optimization

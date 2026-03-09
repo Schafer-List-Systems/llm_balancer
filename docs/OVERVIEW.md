@@ -260,7 +260,7 @@ Debug endpoints:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BACKENDS` | None | Comma-separated list of backend URLs |
+| `BACKENDS` | None | Comma-separated list of backend URLs |
 | `LB_PORT` | 3001 | Server port |
 | `HEALTH_CHECK_INTERVAL` | 30000 | Health check interval (ms) |
 | `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout (ms) |

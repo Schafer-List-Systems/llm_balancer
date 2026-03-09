@@ -8,7 +8,7 @@ Configuration options specific to the balancer component.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BACKENDS` | None | Comma-separated backend URLs |
+| `BACKENDS` | None | Comma-separated backend URLs |
 | `BACKEND_PRIORITY_N` | 1 | Priority for backend at index N |
 | `BACKEND_CONCURRENCY_N` | 1 | Max concurrency for backend at index N |
 
@@ -98,7 +98,7 @@ QUEUE_TIMEOUT=30000
 ### Development
 
 ```bash
-OLLAMA_BACKENDS="http://localhost:11434"
+BACKENDS="http://localhost:11434"
 LB_PORT=3001
 HEALTH_CHECK_INTERVAL=10000
 DEBUG=true
@@ -107,7 +107,7 @@ DEBUG=true
 ### Production
 
 ```bash
-OLLAMA_BACKENDS="http://fast-1:11434,http://fast-2:11434,http://slow-1:11434"
+BACKENDS="http://fast-1:11434,http://fast-2:11434,http://slow-1:11434"
 BACKEND_PRIORITY_0=100
 BACKEND_PRIORITY_1=100
 BACKEND_PRIORITY_2=10

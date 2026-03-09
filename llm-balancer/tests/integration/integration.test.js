@@ -3,7 +3,7 @@
  * These tests require real backend servers running (e.g., Ollama on localhost:11434)
  *
  * To run these tests, ensure:
- * 1. Ollama is running on localhost:11434 or configured via OLLAMA_BACKENDS env var
+ * 1. Ollama is running on localhost:11434 or configured via BACKENDS env var
  * 2. At least one model is available on the backend(s)
  *
  * Example:
@@ -20,14 +20,14 @@ describe('Integration Tests - Requires Real Backends', () => {
 
   // Skip all tests in this suite if no backends are configured
   beforeAll(() => {
-    const backendUrls = process.env.OLLAMA_BACKENDS || '';
+    const backendUrls = process.env.BACKENDS || '';
     if (!backendUrls) {
-      console.warn('Integration tests skipped: OLLAMA_BACKENDS not configured');
+      console.warn('Integration tests skipped: BACKENDS not configured');
     }
   });
 
   beforeEach(() => {
-    const backendUrls = process.env.OLLAMA_BACKENDS || 'http://localhost:11434';
+    const backendUrls = process.env.BACKENDS || 'http://localhost:11434';
     const backendArray = backendUrls.split(',').map(url => url.trim()).filter(url => url);
 
     backends = backendArray.map((url, index) => ({

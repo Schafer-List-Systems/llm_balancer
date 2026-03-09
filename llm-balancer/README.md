@@ -35,7 +35,7 @@ Edit `.env` with your configuration:
 LB_PORT=3001
 
 # Comma-separated list of backend Ollama server URLs
-OLLAMA_BACKENDS=http://host1:11434,http://host2:11434
+BACKENDS=http://host1:11434,http://host2:11434
 
 # Health check interval in milliseconds
 HEALTH_CHECK_INTERVAL=30000
@@ -58,7 +58,7 @@ npm start
 Or with custom configuration:
 
 ```bash
-OLLAMA_BACKENDS="http://host1:11434,http://host2:11434" LB_PORT=3001 npm start
+BACKENDS="http://host1:11434,http://host2:11434" LB_PORT=3001 npm start
 ```
 
 ### Check health
@@ -176,7 +176,7 @@ The `/stats` endpoint provides detailed information:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LB_PORT` | 3001 | Server port |
-| `OLLAMA_BACKENDS` | `http://host1:11434` | Comma-separated backend URLs |
+| `BACKENDS` | `http://host1:11434` | Comma-separated backend URLs |
 | `HEALTH_CHECK_INTERVAL` | 30000 | Health check interval in ms |
 | `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout in ms |
 | `MAX_RETRIES` | 3 | Maximum retry attempts per request |

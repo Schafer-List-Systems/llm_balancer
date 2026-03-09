@@ -32,8 +32,8 @@ Docker provides isolated environments and simplifies deployment.
 2. **Configure environment variables**:
    ```bash
    # The docker-compose.yml reads from the root .env file
-   # Edit the OLLAMA_BACKENDS variable:
-   OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+   # Edit the BACKENDS variable:
+   BACKENDS="http://host1:11434,http://host2:11434"
    ```
 
 3. **Build and start services**:
@@ -92,7 +92,7 @@ Install directly on your development or production system.
 4. **Edit the `.env` file**:
    ```bash
    # Backend URLs (comma-separated)
-   OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+   BACKENDS="http://host1:11434,http://host2:11434"
 
    # Server port (default: 3001)
    LB_PORT=3001
@@ -161,7 +161,7 @@ For development and testing purposes.
 
 2. **Set environment variables**:
    ```bash
-   export OLLAMA_BACKENDS="http://host1:11434,http://host2:11434"
+   export BACKENDS="http://host1:11434,http://host2:11434"
    export LB_PORT=3001
    ```
 
@@ -198,7 +198,7 @@ The frontend will rebuild automatically when source files change.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BACKENDS` | None | Comma-separated list of backend URLs |
+| `BACKENDS` | None | Comma-separated list of backend URLs |
 | `LB_PORT` | 3001 | Server port |
 | `HEALTH_CHECK_INTERVAL` | 30000 | Health check interval (ms) |
 | `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout (ms) |

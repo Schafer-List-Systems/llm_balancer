@@ -24,7 +24,7 @@ ollama serve
 **2. Incorrect backend URLs**
 ```bash
 # Verify URLs in .env file
-cat llm-balancer/.env | grep OLLAMA_BACKENDS
+cat llm-balancer/.env | grep BACKENDS
 
 # Test connectivity directly
 curl http://correct-host:11434/api/tags

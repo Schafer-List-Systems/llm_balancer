@@ -68,9 +68,9 @@ The frontend is optional and provides a monitoring dashboard.
 
 ### How do I add a new backend?
 
-1. Add the backend URL to `OLLAMA_BACKENDS`:
+1. Add the backend URL to `BACKENDS`:
    ```bash
-   OLLAMA_BACKENDS="http://host1:11434,http://host2:11434,http://host3:11434"
+   BACKENDS="http://host1:11434,http://host2:11434,http://host3:11434"
    ```
 
 2. Restart the balancer:
@@ -115,11 +115,11 @@ BACKEND_CONCURRENCY_1=2
 Both work:
 ```bash
 # Environment variable
-OLLAMA_BACKENDS="http://host1:11434" npm start
+BACKENDS="http://host1:11434" npm start
 
 # .env file
 # In llm-balancer/.env
-OLLAMA_BACKENDS="http://host1:11434"
+BACKENDS="http://host1:11434"
 ```
 
 The .env file is recommended for persistent configuration.
@@ -274,7 +274,7 @@ Yes, edit `docker-compose.yml`:
 services:
   llm-balancer:
     environment:
-      - OLLAMA_BACKENDS=http://host1:11434,http://host2:11434
+      - BACKENDS=http://host1:11434,http://host2:11434
 ```
 
 ### How do I update the Docker deployment?
