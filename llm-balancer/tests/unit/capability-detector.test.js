@@ -1,185 +1,121 @@
-const CapabilityDetector = require('../../capability-detector');
+const BackendInfo = require('../../capability-detector');
 
-describe('CapabilityDetector', () => {
+describe('BackendInfo', () => {
   let detector;
 
   beforeEach(() => {
-    detector = new CapabilityDetector(5000);
+    detector = new BackendInfo(5000);
   });
 
-  describe('parseResponse', () => {
-    it('should parse Ollama /api/tags response correctly', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 200
-      };
-      const mockBody = JSON.stringify({
-        models: [
-          { name: 'llama2:7b' },
-          { name: 'mistral:7b' }
-        ]
-      });
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
-
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
-
-      expect(result.healthy).toBe(true);
-      expect(result.apiType).toBe('ollama');
-      expect(result.models).toEqual(['llama2:7b', 'mistral:7b']);
-      expect(result.statusCode).toBe(200);
-    });
-
+  describe('extractModels', () => {
     it('should parse OpenAI /v1/models response correctly', () => {
-      const mockRes = {
-        req: { path: '/v1/models' },
-        statusCode: 200
-      };
-      const mockBody = JSON.stringify({
+      const mockBody = {
         data: [
           { id: 'gpt-3.5-turbo' },
           { id: 'gpt-4' }
         ]
-      });
-      const apiConfig = { type: 'openai', formatKey: 'data' };
+      };
 
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
+      const models = detector.extractModels(mockBody, 'data');
 
-      expect(result.healthy).toBe(true);
-      expect(result.apiType).toBe('openai');
-      expect(result.models).toEqual(['gpt-3.5-turbo', 'gpt-4']);
-      expect(result.statusCode).toBe(200);
+      expect(models).toEqual(['gpt-3.5-turbo', 'gpt-4']);
+    });
+
+    it('should parse Ollama /api/tags response correctly', () => {
+      const mockBody = {
+        models: [
+          { name: 'llama2:7b' },
+          { name: 'mistral:7b' }
+        ]
+      };
+
+      const models = detector.extractModels(mockBody, 'models');
+
+      expect(models).toEqual(['llama2:7b', 'mistral:7b']);
     });
 
     it('should handle string model entries', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 200
-      };
-      const mockBody = JSON.stringify({
+      const mockBody = {
         models: ['llama2:7b', 'mistral:7b']
-      });
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
+      };
 
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
+      const models = detector.extractModels(mockBody, 'models');
 
-      expect(result.models).toEqual(['llama2:7b', 'mistral:7b']);
+      expect(models).toEqual(['llama2:7b', 'mistral:7b']);
     });
 
     it('should handle empty models array', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 200
-      };
-      const mockBody = JSON.stringify({ models: [] });
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
+      const mockBody = { models: [] };
 
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
+      const models = detector.extractModels(mockBody, 'models');
 
-      expect(result.models).toEqual([]);
-      expect(result.healthy).toBe(true);
+      expect(models).toEqual([]);
     });
 
-    it('should handle unexpected response format gracefully', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 200
-      };
-      const mockBody = JSON.stringify({ unexpected: 'format' });
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
+    it('should handle missing jsonPath', () => {
+      const mockBody = { unexpected: 'format' };
 
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
+      const models = detector.extractModels(mockBody, 'models');
 
-      expect(result.healthy).toBe(true);
-      expect(result.models).toEqual([]);
-      expect(result.error).toBe('Unexpected response format');
+      expect(models).toEqual([]);
     });
 
-    it('should handle Ollama error response', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 200
-      };
-      const mockBody = JSON.stringify({
-        error: 'model "nonexistent" not found'
-      });
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
+    it('should handle null jsonPath', () => {
+      const mockBody = { data: [{ id: 'test' }] };
 
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
+      const models = detector.extractModels(mockBody, null);
 
-      expect(result.error).toBe('Ollama error: model "nonexistent" not found');
-      expect(result.shouldFallback).toBe(true);
-      expect(result.apiType).toBe('ollama');
-    });
-
-    it('should handle malformed JSON', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 200
-      };
-      const mockBody = 'not json';
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
-
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
-
-      expect(result.healthy).toBe(false);
-      expect(result.error).toContain('Parse error');
-      expect(result.apiType).toBe('ollama');
-    });
-
-    it('should handle HTTP error status codes', () => {
-      const mockRes = {
-        req: { path: '/api/tags' },
-        statusCode: 500
-      };
-      const mockBody = JSON.stringify({ error: 'server error' });
-      const apiConfig = { type: 'ollama', formatKey: 'models' };
-
-      const result = detector.parseResponse(mockRes, mockBody, apiConfig);
-
-      expect(result.healthy).toBe(false);
-      expect(result.statusCode).toBe(500);
+      expect(models).toEqual([]);
     });
   });
 
-  describe('shouldFallbackToOpenAI', () => {
-    it('should recommend fallback for Ollama 404 errors', () => {
-      const result = {
-        apiType: 'ollama',
-        statusCode: 404,
-        error: undefined
-      };
-
-      expect(detector.shouldFallbackToOpenAI(result)).toBe(true);
+  describe('getChatEndpoint', () => {
+    it('should return correct chat endpoint for openai', () => {
+      expect(detector.getChatEndpoint('openai')).toBe('/v1/chat/completions');
     });
 
-    it('should recommend fallback for Ollama error responses', () => {
-      const result = {
-        apiType: 'ollama',
-        statusCode: 200,
-        error: 'model not found'
-      };
-
-      expect(detector.shouldFallbackToOpenAI(result)).toBe(true);
+    it('should return correct chat endpoint for anthropic', () => {
+      expect(detector.getChatEndpoint('anthropic')).toBe('/v1/messages');
     });
 
-    it('should not fallback for connection errors', () => {
-      const result = {
-        apiType: 'ollama',
-        statusCode: 200,
-        error: 'Connection refused'
-      };
-
-      expect(detector.shouldFallbackToOpenAI(result)).toBe(false);
+    it('should return correct chat endpoint for google', () => {
+      expect(detector.getChatEndpoint('google')).toBe('/v1beta/models/{model}:generateContent');
     });
 
-    it('should not fallback for non-Ollama APIs', () => {
-      const result = {
-        apiType: 'openai',
-        statusCode: 404,
-        error: 'not found'
-      };
+    it('should return correct chat endpoint for ollama', () => {
+      expect(detector.getChatEndpoint('ollama')).toBe('/api/generate');
+    });
 
-      expect(detector.shouldFallbackToOpenAI(result)).toBe(false);
+    it('should return null for unknown api type', () => {
+      expect(detector.getChatEndpoint('unknown')).toBe(null);
+    });
+  });
+
+  describe('probes', () => {
+    it('should have openai model list probe', () => {
+      const probe = detector.probes.find(p => p.apiType === 'openai' && p.hasModels);
+      expect(probe).toBeDefined();
+      expect(probe.endpoint).toBe('/v1/models');
+      expect(probe.method).toBe('GET');
+    });
+
+    it('should have anthropic chat probe', () => {
+      const probe = detector.probes.find(p => p.apiType === 'anthropic' && !p.hasModels);
+      expect(probe).toBeDefined();
+      expect(probe.endpoint).toBe('/v1/messages');
+      expect(probe.method).toBe('POST');
+    });
+
+    it('should have google model list probe', () => {
+      const probe = detector.probes.find(p => p.apiType === 'google');
+      expect(probe).toBeDefined();
+      expect(probe.endpoint).toBe('/v1beta/models');
+    });
+
+    it('should have ollama model list probe', () => {
+      const probe = detector.probes.find(p => p.apiType === 'ollama');
+      expect(probe).toBeDefined();
+      expect(probe.endpoint).toBe('/api/tags');
     });
   });
 });

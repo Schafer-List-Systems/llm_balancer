@@ -1,6 +1,7 @@
 /**
- * Backend capability detector
- * Discovers API type and available models for each backend on startup
+ * BackendInfo - Comprehensive backend information collector
+ * Discovers API types, model lists, and endpoints for each backend
+ * Future extensions: prompt processing speed, token generation speed, network bandwidth
  */
 
 const http = require('http');
@@ -10,95 +11,120 @@ function getTimestamp() {
   return new Date().toISOString();
 }
 
-class CapabilityDetector {
+class BackendInfo {
   constructor(timeout = 5000) {
     this.timeout = timeout;
-    // Priority order: try OpenAI-compatible first, then Anthropic, Google, Ollama
-    // OpenAI-compatible includes: OpenAI, Mistral, Groq, Cohere (grouped together)
-    this.apiOrder = [
-      // OpenAI-compatible APIs (Mistral, Groq, Cohere grouped here)
-      { type: 'openai', endpoint: '/v1/models', formatKey: 'data', method: 'GET' },
-      // Anthropic - check messages endpoint first, then chat/completions
-      // Note: Anthropic endpoints require POST requests
-      { type: 'anthropic', endpoint: '/v1/messages', formatKey: null, method: 'POST' },
-      { type: 'anthropic', endpoint: '/v1/chat/completions', formatKey: 'data', method: 'POST' },
-      // Google Gemini
-      { type: 'google', endpoint: '/v1beta/models', formatKey: 'models', method: 'GET' },
-      // Ollama
-      { type: 'ollama', endpoint: '/api/tags', formatKey: 'models', method: 'GET' }
+
+    // Probe definitions for API detection
+    // Each probe defines how to test an endpoint and extract model information
+    this.probes = [
+      // Model list probes (GET requests that return model arrays)
+      {
+        apiType: 'openai',
+        endpoint: '/v1/models',
+        method: 'GET',
+        jsonPath: 'data',
+        hasModels: true
+      },
+      {
+        apiType: 'google',
+        endpoint: '/v1beta/models',
+        method: 'GET',
+        jsonPath: 'models',
+        hasModels: true
+      },
+      {
+        apiType: 'ollama',
+        endpoint: '/api/tags',
+        method: 'GET',
+        jsonPath: 'models',
+        hasModels: true
+      },
+      {
+        apiType: 'groq',
+        endpoint: '/openai/v1/models',
+        method: 'GET',
+        jsonPath: 'data',
+        hasModels: true
+      },
+
+      // Chat/message probes (POST requests, no model list)
+      {
+        apiType: 'anthropic',
+        endpoint: '/v1/messages',
+        method: 'POST',
+        jsonPath: null,
+        hasModels: false
+      },
+      {
+        apiType: 'openai',
+        endpoint: '/v1/chat/completions',
+        method: 'POST',
+        jsonPath: null,
+        hasModels: false
+      }
     ];
   }
 
   /**
-   * Detect capabilities for a single backend URL
-   * @param {string} url - Backend URL (http://host:port)
-   * @returns {Promise<Object>} Capability info with apiTypes array and models by API type
+   * Get chat endpoint for a given API type
+   * @param {string} apiType - API type identifier
+   * @returns {string} Chat endpoint path
    */
-  async detect(url) {
-    console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Starting capability detection`);
-
-    const detectedApis = [];
-    const allModels = {};
-    const allEndpoints = {};
-
-    for (const apiConfig of this.apiOrder) {
-      try {
-        const result = await this.checkAPI(url, apiConfig);
-        if (result.healthy) {
-          // Avoid duplicate API types (e.g., anthropic via /v1/messages and /v1/chat/completions)
-          if (!detectedApis.includes(result.apiType)) {
-            detectedApis.push(result.apiType);
-            console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Detected ${result.apiType} API`);
-          }
-          allEndpoints[result.apiType] = apiConfig.endpoint;
-          if (result.models && result.models.length > 0) {
-            allModels[result.apiType] = result.models;
-          }
-        } else if (apiConfig.type === 'ollama' && this.shouldFallbackToOpenAI(result)) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Ollama check failed, trying OpenAI fallback`);
-          continue;
-        }
-      } catch (err) {
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: Error checking ${apiConfig.type} API:`, err.message);
-        if (apiConfig.type === 'ollama') {
-          continue; // Try OpenAI on Ollama error
-        }
-      }
-    }
-
-    if (detectedApis.length === 0) {
-      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url}: All API types failed`);
-      return {
-        apiTypes: [],
-        models: {},
-        endpoints: {},
-        error: 'All API checks failed'
-      };
-    }
-
-    return {
-      apiTypes: detectedApis,
-      models: allModels,
-      endpoints: allEndpoints,
-      detectedAt: new Date().toISOString()
+  getChatEndpoint(apiType) {
+    const chatEndpoints = {
+      openai: '/v1/chat/completions',
+      anthropic: '/v1/messages',
+      google: '/v1beta/models/{model}:generateContent',
+      ollama: '/api/generate',
+      groq: '/openai/v1/chat/completions'
     };
+    return chatEndpoints[apiType] || null;
   }
 
   /**
-   * Check a specific API endpoint on the backend
-   * @param {string} url - Backend URL
-   * @param {Object} apiConfig - API configuration
-   * @returns {Promise<Object>} Health and model result
+   * Extract model names from response body using JSON path
+   * @param {Object} body - Parsed JSON response body
+   * @param {string} jsonPath - JSON path key (e.g., 'data', 'models')
+   * @returns {string[]} Array of model names
    */
-  async checkAPI(url, apiConfig) {
+  extractModels(body, jsonPath) {
+    if (!jsonPath || !body[jsonPath]) {
+      return [];
+    }
+
+    const modelsArray = body[jsonPath];
+    if (!Array.isArray(modelsArray)) {
+      return [];
+    }
+
+    return modelsArray
+      .map(m => {
+        // Handle different model object formats
+        if (typeof m === 'string') return m;
+        if (m && typeof m.name === 'string') return m.name;
+        if (m && typeof m.id === 'string') return m.id;
+        console.warn(`BackendInfo: Invalid model entry for ${jsonPath}:`, m);
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * Execute a single probe request
+   * @param {string} url - Backend URL
+   * @param {Object} probe - Probe configuration
+   * @returns {Promise<Object>} Probe result with success status and data
+   */
+  probe(url, probe) {
     const parsedUrl = new URL(url);
 
     return new Promise((resolve) => {
       const options = {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || 11434,
-        path: apiConfig.endpoint,
-        method: apiConfig.method || 'GET',
+        path: probe.endpoint,
+        method: probe.method,
         timeout: this.timeout
       };
 
@@ -106,26 +132,56 @@ class CapabilityDetector {
         let body = '';
         res.on('data', chunk => { body += chunk.toString(); });
         res.on('end', () => {
-          const result = this.parseResponse(res, body, apiConfig, url);
-          resolve(result);
+          let responseBody = null;
+          try {
+            responseBody = JSON.parse(body);
+          } catch (e) {
+            // Non-JSON response, treat as text
+            responseBody = { raw: body };
+          }
+
+          // Determine success based on status code
+          // 2xx = endpoint exists and works
+          // 400 = endpoint exists but request params wrong (API supported)
+          // 404 = endpoint doesn't exist (API not supported)
+          const isSupported = res.statusCode >= 200 && res.statusCode < 300 || res.statusCode === 400;
+
+          resolve({
+            success: isSupported,
+            statusCode: res.statusCode,
+            body: responseBody,
+            apiType: probe.apiType
+          });
         });
         res.resume();
       });
 
       req.on('error', (err) => {
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url} [${apiConfig.type}]: Connection error:`, err.message);
-        resolve({ healthy: false, error: err.message, apiType: apiConfig.type, models: [] });
+        console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: Connection error:`, err.message);
+        resolve({
+          success: false,
+          error: err.message,
+          apiType: probe.apiType
+        });
       });
 
       req.on('timeout', () => {
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url} [${apiConfig.type}]: Timeout`);
+        console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: Timeout`);
         req.destroy();
-        resolve({ healthy: false, error: 'Timeout', apiType: apiConfig.type, models: [] });
+        resolve({
+          success: false,
+          error: 'Timeout',
+          apiType: probe.apiType
+        });
       });
 
-      // Add POST body for Anthropic endpoints to avoid 415 errors
-      if (apiConfig.method === 'POST') {
-        const postBody = JSON.stringify({ model: 'test', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+      // Add POST body for POST requests
+      if (probe.method === 'POST') {
+        const postBody = JSON.stringify({
+          model: 'test',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }]
+        });
         req.setHeader('Content-Type', 'application/json');
         req.setHeader('Content-Length', Buffer.byteLength(postBody));
         req.write(postBody);
@@ -136,153 +192,91 @@ class CapabilityDetector {
   }
 
   /**
-   * Parse response and extract models based on API format
-   * @param {Object} res - HTTP response object
-   * @param {string} body - Response body as string
-   * @param {Object} apiConfig - API configuration
-   * @param {string} backendUrl - Backend URL for logging context
-   * @returns {Object} Parsed result with health status and models array
+   * Collect comprehensive information about a single backend
+   * @param {string} url - Backend URL
+   * @returns {Promise<Object>} Backend information object
    */
-  parseResponse(res, body, apiConfig, backendUrl) {
-    try {
-      const data = JSON.parse(body);
+  async getInfo(url) {
+    console.log(`[${getTimestamp()}] [BackendInfo] ${url}: Starting backend information collection`);
 
-      // Handle endpoints without model lists (e.g., /v1/messages)
-      const formatKey = apiConfig.formatKey;
-      if (formatKey === null) {
-        // For endpoints like /v1/messages, only 2xx means API is available
-        // 400 = validation error (API exists but params wrong), 404 = endpoint doesn't exist
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available`);
-          return {
-            healthy: true,
-            apiType: apiConfig.type,
-            models: [],
-            statusCode: res.statusCode
-          };
+    const info = {
+      url: url,
+      healthy: false,
+      apis: {},
+      models: {},
+      endpoints: {},
+      detectedAt: null,
+      // Future fields for performance metrics:
+      // latency: null,
+      // bandwidth: null,
+      // promptSpeed: null,
+      // generationSpeed: null
+    };
+
+    // Probe all API endpoints
+    for (const probe of this.probes) {
+      try {
+        const result = await this.probe(url, probe);
+
+        if (result.success) {
+          // Track supported API
+          if (!info.apis[probe.apiType]) {
+            info.apis[probe.apiType] = {
+              supported: true,
+              modelListEndpoint: probe.hasModels ? probe.endpoint : null,
+              chatEndpoint: this.getChatEndpoint(probe.apiType),
+              models: []
+            };
+            console.log(`[${getTimestamp()}] [BackendInfo] ${url}: Detected ${probe.apiType} API`);
+          }
+
+          // Track endpoint
+          info.endpoints[probe.apiType] = probe.endpoint;
+
+          // Extract models if this probe provides model list
+          if (probe.hasModels && result.body) {
+            const models = this.extractModels(result.body, probe.jsonPath);
+            info.apis[probe.apiType].models = models;
+            info.models[probe.apiType] = models;
+            console.log(`[${getTimestamp()}] [BackendInfo] ${url}: Found ${models.length} model(s) via ${probe.endpoint}`);
+          }
         }
-        // 400 validation error means endpoint exists but needs proper params
-        if (res.statusCode === 400 && data.error) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available (validation error)`);
-          return {
-            healthy: true,
-            apiType: apiConfig.type,
-            models: [],
-            statusCode: res.statusCode
-          };
-        }
-        // 404 or other errors mean endpoint doesn't exist
-        return {
-          healthy: false,
-          error: res.statusCode === 404 ? 'Endpoint not found' : 'Endpoint error',
-          apiType: apiConfig.type,
-          statusCode: res.statusCode,
-          models: []
-        };
+      } catch (err) {
+        console.warn(`[${getTimestamp()}] [BackendInfo] ${url}: Error probing ${probe.apiType}:`, err.message);
       }
-
-      // Extract models based on format key ('models' for Ollama, 'data' for OpenAI)
-      if (data[formatKey] && Array.isArray(data[formatKey])) {
-        const models = data[formatKey].map(m => {
-          if (typeof m === 'string') return m;
-          if (m && typeof m.name === 'string') return m.name;
-          if (m && typeof m.id === 'string') return m.id;
-          console.warn(`CapabilityDetector: Invalid model entry for ${apiConfig.type}:`, m);
-          return null;
-        }).filter(Boolean);
-
-        console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: Found ${models.length} model(s) via ${apiConfig.endpoint}`);
-
-        return {
-          healthy: res.statusCode >= 200 && res.statusCode < 300,
-          apiType: apiConfig.type,
-          models: models,
-          statusCode: res.statusCode
-        };
-      } else {
-        // Check for error responses even with 200 status (proxy behavior)
-        if (data.error) {
-          console.warn(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} not available (error: ${data.error})`);
-          return {
-            healthy: false,
-            error: data.error,
-            apiType: apiConfig.type,
-            statusCode: res.statusCode,
-            models: []
-          };
-        }
-        // For /chat/completions, 2xx means API available, 400 means endpoint exists but needs params
-        // 404 means endpoint doesn't exist
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available`);
-          return {
-            healthy: true,
-            apiType: apiConfig.type,
-            models: [],
-            statusCode: res.statusCode
-          };
-        }
-        if (res.statusCode === 400 && data.error) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available (validation error)`);
-          return {
-            healthy: true,
-            apiType: apiConfig.type,
-            models: [],
-            statusCode: res.statusCode
-          };
-        }
-        // 404 or other errors mean endpoint doesn't exist
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} not available (status ${res.statusCode})`);
-        return {
-          healthy: false,
-          error: res.statusCode === 404 ? 'Endpoint not found' : 'Endpoint error',
-          apiType: apiConfig.type,
-          statusCode: res.statusCode,
-          models: []
-        };
-      }
-    } catch (e) {
-      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: Failed to parse response:`, e.message);
-      return {
-        healthy: false,
-        error: `Parse error: ${e.message}`,
-        apiType: apiConfig.type,
-        statusCode: res.statusCode,
-        models: []
-      };
     }
+
+    // Backend is healthy if at least one API is supported
+    info.healthy = Object.keys(info.apis).length > 0;
+    info.detectedAt = new Date().toISOString();
+
+    if (!info.healthy) {
+      console.warn(`[${getTimestamp()}] [BackendInfo] ${url}: No APIs detected`);
+      info.error = 'No APIs detected';
+    }
+
+    return info;
   }
 
   /**
-   * Determine if we should fallback from Ollama to OpenAI format
-   * @param {Object} result - Previous API check result
-   * @returns {boolean} True if fallback is recommended
-   */
-  shouldFallbackToOpenAI(result) {
-    // Fallback on 404 or error response body (not connection errors)
-    return result.apiType === 'ollama' &&
-      (result.statusCode === 404 ||
-       (result.error && !result.error.includes('Connection') &&
-        !result.error.includes('refused')));
-  }
-
-  /**
-   * Detect capabilities for multiple backends in parallel
+   * Collect information about multiple backends in parallel
    * @param {Array<string>} urls - Array of backend URLs
-   * @returns {Promise<Object>} Map of URL to capability info
+   * @returns {Promise<Object>} Map of URL to backend information
    */
-  async detectAll(urls) {
+  async getInfoAll(urls) {
     const results = await Promise.allSettled(
-      urls.map(url => this.detect(url))
+      urls.map(url => this.getInfo(url))
     );
 
-    const capabilities = {};
+    const backendInfo = {};
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
-        capabilities[urls[index]] = result.value;
+        backendInfo[urls[index]] = result.value;
       } else {
-        capabilities[urls[index]] = {
-          apiTypes: [],
+        backendInfo[urls[index]] = {
+          url: urls[index],
+          healthy: false,
+          apis: {},
           models: {},
           endpoints: {},
           error: result.reason.message
@@ -290,8 +284,8 @@ class CapabilityDetector {
       }
     });
 
-    return capabilities;
+    return backendInfo;
   }
 }
 
-module.exports = CapabilityDetector;
+module.exports = BackendInfo;

@@ -21,9 +21,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize capability detector to discover API types before health checks
-const CapabilityDetector = require('./capability-detector');
-const capabilityDetector = new CapabilityDetector(config.healthCheckTimeout);
+// Initialize backend info collector to discover API types before health checks
+const BackendInfo = require('./capability-detector');
+const backendInfo = new BackendInfo(config.healthCheckTimeout);
 
 // Initialize load balancer and health checker
 const balancer = new Balancer(config.backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
@@ -708,26 +708,28 @@ async function startServer() {
 
   try {
     const urls = config.backends.map(b => b.url);
-    const capabilities = await capabilityDetector.detectAll(urls);
+    const backendInfoMap = await backendInfo.getInfoAll(urls);
 
-    // Store detected capabilities on backend objects immediately
-    for (const url in capabilities) {
-      const cap = capabilities[url];
+    // Store detected backend info on backend objects immediately
+    for (const url in backendInfoMap) {
+      const info = backendInfoMap[url];
       const backend = config.backends.find(b => b.url === url);
       if (backend && !backend.capabilities) {
         backend.capabilities = {};
       }
 
-      if (cap.apiTypes && cap.apiTypes.length > 0) {
-        console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API types: ${cap.apiTypes.join(', ')}, models:`, cap.models);
+      if (info.healthy && Object.keys(info.apis).length > 0) {
+        // Convert new format to backward-compatible format
+        const apiTypes = Object.keys(info.apis).filter(api => info.apis[api].supported);
+        console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API types: ${apiTypes.join(', ')}, models:`, info.models);
         if (backend && backend.capabilities) {
-          backend.capabilities.apiTypes = cap.apiTypes;
-          backend.capabilities.models = cap.models;
-          backend.capabilities.endpoints = cap.endpoints || {};
-          backend.capabilities.detectedAt = cap.detectedAt;
+          backend.capabilities.apiTypes = apiTypes;
+          backend.capabilities.models = Object.values(info.models).flat();
+          backend.capabilities.endpoints = info.endpoints;
+          backend.capabilities.detectedAt = info.detectedAt;
         }
-      } else if (cap.error) {
-        console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${cap.error}`);
+      } else if (info.error) {
+        console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${info.error}`);
       }
     }
 
@@ -745,10 +747,11 @@ async function startServer() {
       }
       console.log(`Backends (${config.backends.length}):`);
       config.backends.forEach((backend, i) => {
-        const apiType = backend.capabilities?.apiType || 'unknown';
+        const apiTypes = backend.capabilities?.apiTypes || [];
         const modelCount = backend.capabilities?.models?.length || 0;
         const status = backend.healthy ? '✓' : '✗';
-        console.log(`  ${i + 1}. ${backend.url} (${apiType}, ${modelCount} models) ${status}`);
+        const apiTypeStr = apiTypes.length > 0 ? apiTypes.join(', ') : 'none';
+        console.log(`  ${i + 1}. ${backend.url} (${apiTypeStr}, ${modelCount} models) ${status}`);
       });
       console.log(`\nRoutes:`);
       console.log(`  OpenAI API:     /v1/chat/completions*`);

@@ -8,6 +8,7 @@ A load balancer for Ollama API servers with health checking and automatic failov
 - ✅ Automatic health checking with recovery
 - ✅ Automatic failover when backends become unhealthy
 - ✅ Streaming and non-streaming request support
+- ✅ **API capability detection** - Automatically discovers supported APIs (OpenAI, Anthropic, Google, Ollama) and model lists
 - ✅ Health check endpoint with backend status
 - ✅ Detailed statistics and monitoring
 - ✅ Graceful shutdown handling
@@ -197,6 +198,17 @@ For development and troubleshooting, the load balancer provides debug endpoints:
 Enable debug mode by setting `DEBUG=true` in your `.env` file.
 
 For detailed documentation of debug endpoints, see [DEBUG_REQUESTS.md](DEBUG_REQUESTS.md).
+
+## API Detection
+
+The load balancer automatically detects which APIs each backend supports using a probe-based detection algorithm. See [BACKEND_INFO.md](BACKEND_INFO.md) for detailed documentation.
+
+Detected APIs include:
+- **OpenAI-compatible** - `/v1/models`, `/v1/chat/completions`
+- **Anthropic** - `/v1/messages`
+- **Google Gemini** - `/v1beta/models`
+- **Ollama** - `/api/tags`, `/api/generate`
+- **Groq** - `/openai/v1/models`
 
 ## Troubleshooting
 

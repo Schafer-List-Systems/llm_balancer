@@ -19,7 +19,7 @@ class HealthChecker {
     this.lastCheckTime = null;
 
     // Use SimpleHealthChecker for periodic health checks
-    // API detection is done once at startup by CapabilityDetector
+    // API detection is done once at startup by BackendInfo
     this.healthInterface = new SimpleHealthChecker(config.healthCheckTimeout);
   }
 
