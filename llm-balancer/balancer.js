@@ -3,7 +3,7 @@
  * Distributes requests among healthy backends by priority, then queues waiting requests
  */
 
-const { BackendSelector } = require('./backend-selector');
+const { BackendSelector, ModelMatcher } = require('./backend-selector');
 
 // Helper function to get formatted timestamp
 function getTimestamp() {
@@ -179,6 +179,24 @@ class Balancer {
    */
   getNextBackendForModel(models) {
     return this.selector.selectBackend(this.backends, { models });
+  }
+
+  /**
+   * Get the next backend with regex model matching and return matched model info
+   * Uses priority-first regex matching to find suitable backends
+   * @param {string|string[]} models - Model(s) required for the request (can include comma-separated regex patterns)
+   * @returns {{backend: Object|null, actualModel: string|null}} Backend and matched actual model name or null if none available
+   */
+  getNextBackendForModelWithMatch(models) {
+    const candidates = this.selector._filterByHealthAndAvailability(this.backends);
+
+    // Use priority-first regex matching
+    const result = ModelMatcher.findBestMatchAcrossBackends(models, candidates);
+
+    return {
+      backend: result.backend || null,
+      actualModel: result.actualModel || null
+    };
   }
 
   /**

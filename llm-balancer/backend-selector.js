@@ -54,6 +54,99 @@ class ModelMatcher {
     }
     return matches;
   }
+
+  /**
+   * Parse a model string into an array of regex patterns
+   * Comma-separated values are split and trimmed, preserving order for precedence
+   * @param {string} modelString - Model string (e.g., "llama3,qwen2.5,mistral" or "^llama.*|^qwen.*")
+   * @returns {string[]} Array of pattern strings in order of precedence
+   */
+  static parseModelString(modelString) {
+    if (!modelString || typeof modelString !== 'string') return [];
+
+    // Split by comma, trim whitespace, filter empty strings
+    const patterns = modelString.split(',').map(p => p.trim()).filter(p => p.length > 0);
+    return patterns;
+  }
+
+  /**
+   * Find the best match across all backends using priority-first regex matching
+   * Evaluates patterns in order (first pattern = highest precedence)
+   * For each pattern, checks ALL backends before moving to next pattern
+   * @param {string|string[]} requestedModels - Single model string with comma-separated patterns or array of such strings
+   * @param {Object[]} allBackends - Array of backend objects with getApiTypes() and getModels(apiType) methods
+   * @returns {{matched: boolean, backend: Object|null, actualModel: string|null, patternIndex: number}}
+   */
+  static findBestMatchAcrossBackends(requestedModels, allBackends) {
+    // Normalize to array - check explicitly for string type since strings are iterable
+    const modelList = typeof requestedModels === 'string' ? [requestedModels] : Array.isArray(requestedModels) ? requestedModels : [requestedModels];
+
+    if (modelList.length === 0 || !Array.isArray(allBackends)) {
+      return { matched: false, backend: null, actualModel: null, patternIndex: -1 };
+    }
+
+    // Flatten all patterns from all requested models in order
+    const allPatterns = [];
+    for (const model of modelList) {
+      if (!model || typeof model !== 'string') continue;
+      const patterns = this.parseModelString(model);
+      allPatterns.push(...patterns);
+    }
+
+    // Evaluate patterns in order (first = highest precedence)
+    for (let patternIndex = 0; patternIndex < allPatterns.length; patternIndex++) {
+      const pattern = allPatterns[patternIndex];
+
+      try {
+        const regex = new RegExp(pattern);
+
+        // Check ALL backends with this pattern before moving to next pattern
+        for (const backend of allBackends) {
+          if (!backend.healthy || !backend.getApiTypes || !backend.getModels) continue;
+
+          const apiTypes = backend.getApiTypes();
+          for (const apiType of apiTypes) {
+            const backendModels = backend.getModels(apiType);
+            // Find first model on this backend matching the pattern
+            for (const modelName of backendModels) {
+              if (regex.test(modelName)) {
+                return { matched: true, backend, actualModel: modelName, patternIndex };
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Invalid regex pattern "${pattern}":`, e.message);
+        continue; // Skip invalid patterns, try next
+      }
+    }
+
+    return { matched: false, backend: null, actualModel: null, patternIndex: -1 };
+  }
+
+  /**
+   * Check if a backend supports the requested models using exact string matching (backward compatible)
+   * @deprecated Use findBestMatchAcrossBackends for regex support. This method is kept for backward compatibility.
+   * @param {string|string[]} requestedModels - Single model string or array of model strings
+   * @param {string[]} availableModels - Array of models provided by the backend
+   * @returns {boolean} True if at least one requested model is supported
+   */
+  static matches(requestedModels, availableModels) {
+    // Normalize to arrays for consistent handling
+    const requestList = Array.isArray(requestedModels) ? requestedModels : [requestedModels];
+    const backendList = Array.isArray(availableModels) ? availableModels : [];
+
+    // Phase 1: Exact string matching (current implementation)
+    // Returns true if ANY requested model matches ANY backend model exactly
+    for (const requested of requestList) {
+      if (!requested || typeof requested !== 'string') continue;
+      if (backendList.includes(requested)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }
 
 /**
@@ -69,8 +162,8 @@ class BackendSelector {
    * Select a backend based on multiple criteria:
    * 1. Health status (must be healthy)
    * 2. Availability (activeRequestCount < maxConcurrency)
-   * 3. Model support (optional - filters by requested models)
-   * 4. Priority sorting (highest priority first)
+   * 3. Model support (optional - filters by requested models using priority-first regex matching)
+   * 4. Priority sorting (highest priority first among matched backends)
    *
    * @param {Array} backends - Array of backend objects
    * @param {Object} options - Selection options
@@ -83,12 +176,12 @@ class BackendSelector {
     // Step 1: Filter by health and availability
     let candidates = this._filterByHealthAndAvailability(backends);
 
-    // Step 2: Filter by model support (if models specified)
+    // Step 2: Use priority-first regex matching if models specified
     if (models && models.length > 0) {
-      candidates = this._filterByModel(candidates, models);
+      return this._selectBackendByPriorityFirst(candidates, models);
     }
 
-    // Step 3: Sort by priority and select best candidate
+    // Step 3: Sort by priority and select best candidate (no model filtering)
     return this._selectByPriority(candidates);
   }
 
@@ -105,15 +198,18 @@ class BackendSelector {
 
   /**
    * Check if any backend supports the requested models and is available
+   * Uses priority-first regex matching for flexible model name resolution
    * @param {Array} backends - Array of backend objects
-   * @param {string|string[]} models - Requested model(s)
+   * @param {string|string[]} models - Requested model(s) with optional comma-separated patterns
    * @returns {boolean} True if at least one suitable backend exists
    */
   hasAvailableBackend(backends, models) {
     const candidates = this._filterByHealthAndAvailability(backends);
 
     if (models && models.length > 0) {
-      return this._filterByModel(candidates, models).length > 0;
+      // Use priority-first matching instead of simple filter
+      const result = ModelMatcher.findBestMatchAcrossBackends(models, candidates);
+      return result.matched;
     }
 
     return candidates.length > 0;
@@ -161,7 +257,66 @@ class BackendSelector {
   }
 
   /**
-   * Private: Filter candidates by model support
+   * Private: Select backend using priority-first regex matching across all backends
+   * Evaluates patterns in order (first = highest precedence)
+   * For each pattern, checks ALL healthy/available backends before moving to next pattern
+   * Returns the first match found with highest-priority backend among those matching the same pattern
+   */
+  _selectBackendByPriorityFirst(candidates, models) {
+    // Find best match using priority-first regex matching
+    const result = ModelMatcher.findBestMatchAcrossBackends(models, candidates);
+
+    if (!result.matched) {
+      return null; // No backend matches any pattern
+    }
+
+    // Among backends that matched the same pattern, select by priority
+    const matchedPatternIndex = result.patternIndex;
+    const patterns = ModelMatcher.parseModelString(typeof models === 'string' ? models : models[0]);
+    const targetPattern = patterns[matchedPatternIndex];
+
+    try {
+      const regex = new RegExp(targetPattern);
+
+      // Find all backends that match this pattern
+      const patternMatches = [];
+      for (const backend of candidates) {
+        if (!backend.healthy || !backend.getApiTypes || !backend.getModels) continue;
+
+        const apiTypes = backend.getApiTypes();
+        for (const apiType of apiTypes) {
+          const backendModels = backend.getModels(apiType);
+          for (const modelName of backendModels) {
+            if (regex.test(modelName)) {
+              patternMatches.push({ backend, actualModel: modelName });
+              break; // Only need one match per backend
+            }
+          }
+        }
+      }
+
+      // Sort by priority and return best
+      if (patternMatches.length === 0) return null;
+
+      const sorted = patternMatches.sort((a, b) => {
+        const priorityA = a.backend.priority || 0;
+        const priorityB = b.backend.priority || 0;
+        if (priorityB !== priorityA) return priorityB - priorityA; // Higher priority first
+
+        // Tie-breaker: maintain original order
+        return candidates.indexOf(a.backend) - candidates.indexOf(b.backend);
+      });
+
+      return sorted[0].backend;
+    } catch (e) {
+      console.warn(`Invalid regex pattern "${targetPattern}":`, e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Private: Filter candidates by model support using exact string matching
+   * @deprecated Used only for backward compatibility when no regex patterns detected
    */
   _filterByModel(candidates, models) {
     if (!models) return candidates;

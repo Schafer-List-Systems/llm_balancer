@@ -4,6 +4,59 @@
 
 const requestProcessor = require('../../request-processor');
 
+describe('replaceModelInRequestBody', () => {
+  it('should replace string model field with actual model name', () => {
+    const originalBody = { model: 'llama3', messages: [] };
+    const result = requestProcessor.replaceModelInRequestBody(originalBody, 'Llama-3-70B');
+
+    expect(result.model).toBe('Llama-3-70B');
+    expect(result.messages).toEqual([]);
+  });
+
+  it('should not mutate the original body', () => {
+    const originalBody = { model: 'llama3', messages: [] };
+    requestProcessor.replaceModelInRequestBody(originalBody, 'Llama-3-70B');
+
+    expect(originalBody.model).toBe('llama3'); // Original unchanged
+  });
+
+  it('should replace first matching model in array or prepend at index 0', () => {
+    const originalBody = { model: ['llama3', 'mistral'], messages: [] };
+    const result = requestProcessor.replaceModelInRequestBody(originalBody, 'Llama-3-70B');
+
+    expect(result.model[0]).toBe('Llama-3-70B');
+    expect(result.model[1]).toBe('mistral'); // Second model preserved
+  });
+
+  it('should handle array with exact match replacement', () => {
+    const originalBody = { model: ['llama3', 'qwen'], messages: [] };
+    const result = requestProcessor.replaceModelInRequestBody(originalBody, 'Llama-3-70B');
+
+    expect(result.model[0]).toBe('Llama-3-70B');
+  });
+
+  it('should return body unchanged if model field is not a string or array', () => {
+    const originalBody = { model: 123, messages: [] };
+    const result = requestProcessor.replaceModelInRequestBody(originalBody, 'Llama-3-70B');
+
+    expect(result.model).toBe(123); // Unchanged
+  });
+
+  it('should handle null/undefined body', () => {
+    expect(requestProcessor.replaceModelInRequestBody(null, 'llama3')).toBeNull();
+    expect(requestProcessor.replaceModelInRequestBody(undefined, 'llama3')).toBeUndefined();
+  });
+
+  it('should preserve other fields in request body', () => {
+    const originalBody = { model: 'llama3', messages: [], temperature: 0.7 };
+    const result = requestProcessor.replaceModelInRequestBody(originalBody, 'Llama-3-70B');
+
+    expect(result.model).toBe('Llama-3-70B');
+    expect(result.messages).toEqual([]);
+    expect(result.temperature).toBe(0.7);
+  });
+});
+
 describe('Request Processor', () => {
   describe('releaseBackend', () => {
     it('should mark backend as not busy and notify balancer', () => {

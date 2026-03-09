@@ -18,7 +18,7 @@ const getFreshBackends = () => [
 ];
 
 describe('ModelMatcher', () => {
-  describe('matches() - Exact string matching', () => {
+  describe('matches() - Exact string matching (backward compatible)', () => {
     it('should return true when requested model exactly matches a backend model', () => {
       const result = ModelMatcher.matches('llama3', ['llama3', 'mistral']);
       expect(result).toBe(true);
@@ -61,7 +61,7 @@ describe('ModelMatcher', () => {
     });
   });
 
-  describe('findMatches() - Find all matching models', () => {
+  describe('findMatches() - Find all matching models (backward compatible)', () => {
     it('should return array of all matching model names', () => {
       const matches = ModelMatcher.findMatches(['llama3', 'gpt4'], ['llama3', 'mistral']);
       expect(matches).toEqual(['llama3']);
@@ -80,6 +80,163 @@ describe('ModelMatcher', () => {
     it('should handle single string model input', () => {
       const matches = ModelMatcher.findMatches('llama3', ['llama3', 'mistral']);
       expect(matches).toEqual(['llama3']);
+    });
+  });
+
+  describe('parseModelString() - Regex pattern parsing', () => {
+    it('should split comma-separated patterns and preserve order', () => {
+      const result = ModelMatcher.parseModelString('llama3,qwen2.5,mistral');
+      expect(result).toEqual(['llama3', 'qwen2.5', 'mistral']);
+    });
+
+    it('should trim whitespace from patterns', () => {
+      const result = ModelMatcher.parseModelString(' llama3 , qwen2.5 , mistral ');
+      expect(result).toEqual(['llama3', 'qwen2.5', 'mistral']);
+    });
+
+    it('should handle regex special characters', () => {
+      const result = ModelMatcher.parseModelString('^llama.*|^qwen.*,^mistral.*');
+      expect(result).toEqual(['^llama.*|^qwen.*', '^mistral.*']);
+    });
+
+    it('should filter empty strings after splitting', () => {
+      const result = ModelMatcher.parseModelString('llama3,,qwen2.5,,,mistral');
+      expect(result).toEqual(['llama3', 'qwen2.5', 'mistral']);
+    });
+
+    it('should return empty array for invalid input', () => {
+      expect(ModelMatcher.parseModelString(null)).toEqual([]);
+      expect(ModelMatcher.parseModelString(undefined)).toEqual([]);
+      expect(ModelMatcher.parseModelString('')).toEqual([]);
+    });
+  });
+
+  describe('findBestMatchAcrossBackends() - Priority-first regex matching', () => {
+    const createMockBackend = (url, healthy, priority, models) => ({
+      url,
+      healthy,
+      priority: priority || 0,
+      getApiTypes: () => ['openai'],
+      getModels: () => models || []
+    });
+
+    it('should find exact match using regex', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama3', 'mistral'])];
+      const result = ModelMatcher.findBestMatchAcrossBackends('llama3', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.backend.url).toBe('http://backend1:11434');
+      expect(result.actualModel).toBe('llama3');
+    });
+
+    it('should match using wildcard pattern', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['Llama-3-70B', 'mistral'])];
+      const result = ModelMatcher.findBestMatchAcrossBackends('.*', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('Llama-3-70B'); // First model in list
+    });
+
+    it('should match using prefix pattern', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama-3-8b', 'mistral'])];
+      const result = ModelMatcher.findBestMatchAcrossBackends('^llama.*', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('llama-3-8b');
+    });
+
+    it('should evaluate patterns in order (first pattern has highest precedence)', () => {
+      const backends = [
+        createMockBackend('http://backend1:11434', true, 1, ['qwen2.5']),
+        createMockBackend('http://backend2:11434', true, 5, ['llama3']) // Higher priority but lower precedence pattern
+      ];
+
+      // Request llama3 first (highest precedence), should match backend2 despite it having higher priority
+      const result = ModelMatcher.findBestMatchAcrossBackends('llama3,qwen2.5', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('llama3');
+    });
+
+    it('should prefer first pattern across all backends before trying second pattern', () => {
+      const backends = [
+        createMockBackend('http://backend1:11434', true, 5, ['qwen2.5']), // Higher priority
+        createMockBackend('http://backend2:11434', true, 1, ['llama3'])
+      ];
+
+      // Request llama3 first (highest precedence) - should match backend2 even though backend1 has higher priority
+      const result = ModelMatcher.findBestMatchAcrossBackends('llama3,qwen2.5', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('llama3'); // llama3 matched first pattern, not qwen2.5
+    });
+
+    it('should fall back to next pattern when first pattern matches no backends', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['qwen2.5'])];
+
+      // llama3 doesn't exist, should try qwen2.5 and succeed
+      const result = ModelMatcher.findBestMatchAcrossBackends('llama3,qwen2.5', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('qwen2.5');
+    });
+
+    it('should return first matched model on a backend when multiple models match pattern', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama-3-8b', 'llama-3-70b'])];
+
+      const result = ModelMatcher.findBestMatchAcrossBackends('^llama.*', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('llama-3-8b'); // First matching model in list
+    });
+
+    it('should handle invalid regex patterns gracefully (skip and continue)', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama3'])];
+
+      // Invalid regex pattern should be skipped, next valid pattern should work
+      const result = ModelMatcher.findBestMatchAcrossBackends('[invalid,llama3', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('llama3');
+    });
+
+    it('should return matched:false when no backend matches any pattern', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama3'])];
+
+      const result = ModelMatcher.findBestMatchAcrossBackends('nonexistent-model', backends);
+
+      expect(result.matched).toBe(false);
+      expect(result.backend).toBeNull();
+      expect(result.actualModel).toBeNull();
+    });
+
+    it('should handle empty backend array', () => {
+      const result = ModelMatcher.findBestMatchAcrossBackends('llama3', []);
+
+      expect(result.matched).toBe(false);
+      expect(result.backend).toBeNull();
+    });
+
+    it('should skip unhealthy backends', () => {
+      const backends = [
+        createMockBackend('http://backend1:11434', false, 5, ['llama3']), // Unhealthy
+        createMockBackend('http://backend2:11434', true, 1, ['mistral'])   // Healthy
+      ];
+
+      const result = ModelMatcher.findBestMatchAcrossBackends('.*', backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('mistral'); // Should skip unhealthy backend1
+    });
+
+    it('should handle multiple requested model strings with patterns', () => {
+      const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama3'])];
+
+      // Multiple strings should be flattened and evaluated in order
+      const result = ModelMatcher.findBestMatchAcrossBackends(['qwen.*', 'llama3'], backends);
+
+      expect(result.matched).toBe(true);
+      expect(result.actualModel).toBe('llama3');
     });
   });
 });

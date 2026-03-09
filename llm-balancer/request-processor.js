@@ -65,6 +65,39 @@ function extractModelsFromRequest(req) {
 }
 
 /**
+ * Replace the model field in request body with matched actual model name
+ * Handles both string and array formats for the model field
+ * @param {Object} originalBody - Original request body object
+ * @param {string} newModel - Actual model name to replace with
+ * @returns {Object} Modified request body with replaced model field
+ */
+function replaceModelInRequestBody(originalBody, newModel) {
+  if (!originalBody || typeof originalBody !== 'object') return originalBody;
+
+  // Deep copy to avoid mutating the original object
+  const modified = JSON.parse(JSON.stringify(originalBody));
+
+  if (Array.isArray(modified.model)) {
+    // Replace first matching model or prepend at index 0
+    let replaced = false;
+    for (let i = 0; i < modified.model.length; i++) {
+      if (modified.model[i] === originalBody.model[0]) {
+        modified.model[i] = newModel;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      modified.model.unshift(newModel);
+    }
+  } else if (typeof modified.model === 'string') {
+    modified.model = newModel;
+  }
+
+  return modified;
+}
+
+/**
  * Execute a proxy request to a backend
  * @param {Object} backend - Backend object with url, id, etc.
  * @param {Object} options - Request options (method, headers, path, etc.)
@@ -160,8 +193,9 @@ function releaseBackend(balancer, backend) {
  * @param {Object} res - Express response object
  * @param {Function} onRequestComplete - Callback when request is complete
  * @param {Object} config - Configuration object with requestTimeout
+ * @param {string} [matchedModel] - Actual model name from regex matching (optional)
  */
-function processRequest(balancer, backend, req, res, onRequestComplete, config) {
+function processRequest(balancer, backend, req, res, onRequestComplete, config, matchedModel = null) {
   console.debug(`[Gateway] processRequest called for backend ${backend.id} (${backend.url})`);
   console.debug(`[Gateway] req.is('raw'):`, req.is('raw'));
   console.debug(`[Gateway] req.headers['content-type']:`, req.headers['content-type']);
@@ -179,7 +213,23 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config) 
 
   // Capture request body for debug tracking
   let requestBody = null;
-  const originalBody = getRequestBody(req);
+  let originalBody = getRequestBody(req);
+
+  // Replace model field if matchedModel is provided
+  if (matchedModel && typeof originalBody === 'string') {
+    try {
+      const parsedBody = JSON.parse(originalBody);
+      const replacedBody = replaceModelInRequestBody(parsedBody, matchedModel);
+      originalBody = JSON.stringify(replacedBody);
+    } catch (e) {
+      console.warn(`Failed to parse request body for model replacement:`, e.message);
+    }
+  } else if (matchedModel && typeof originalBody === 'object' && !Buffer.isBuffer(originalBody)) {
+    // Handle object body directly
+    const replacedBody = replaceModelInRequestBody(originalBody, matchedModel);
+    originalBody = JSON.stringify(replacedBody);
+  }
+
   if (originalBody && typeof originalBody === 'string') {
     requestBody = originalBody;
   } else if (originalBody && Buffer.isBuffer(originalBody)) {
@@ -440,5 +490,6 @@ module.exports = {
   releaseBackend,
   executeProxyRequest,
   getRequestBody,
-  extractModelsFromRequest
+  extractModelsFromRequest,
+  replaceModelInRequestBody
 };

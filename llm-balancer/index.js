@@ -6,7 +6,7 @@ const configModule = require('./config');
 const Balancer = require('./balancer');
 const HealthChecker = require('./health-check');
 const Backend = require('./backends/Backend');
-const { processRequest, extractModelsFromRequest } = require('./request-processor');
+const { processRequest, extractModelsFromRequest, replaceModelInRequestBody } = require('./request-processor');
 
 // Health check implementations
 const OllamaHealthCheck = require('./interfaces/implementations/OllamaHealthCheck');
@@ -72,12 +72,16 @@ function getTimestamp() {
 
 /**
  * Forward request to an available backend
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Object} backend - Backend instance
+ * @param {string} [matchedModel] - Actual model name from regex matching (optional)
  */
-function forwardRequest(req, res, backend) {
-  // Process the request using the request processor module
+function forwardRequest(req, res, backend, matchedModel = null) {
+  // Process the request using the request processor module with optional model replacement
   processRequest(balancer, backend, req, res, () => {
     // Request completed
-  }, config);
+  }, config, matchedModel);
 }
 
 /**
@@ -90,17 +94,23 @@ app.all('/v1/chat/completions*', async (req, res) => {
 
     // Select backend based on model if specified, otherwise use default selection
     let backend;
+    let matchedModel = null;
+
     // Check: models must be truthy AND have at least one valid entry (not empty array)
     if (models && (Array.isArray(models) ? models.length > 0 : true)) {
-      backend = balancer.getNextBackendForModel(models);
+      // Use priority-first regex matching to get both backend and matched model name
+      const result = balancer.getNextBackendForModelWithMatch(models);
+      backend = result.backend;
+      matchedModel = result.actualModel;
 
       // If no backend supports the requested model(s), try any available backend
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        // Model matched - logging handled above
-        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+        // Model matched - logging handled above with actual model name if regex was used
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
     } else {
       // No model specified in request or empty models array - use default selection
@@ -125,11 +135,12 @@ app.all('/v1/chat/completions*', async (req, res) => {
         priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : [])
+        models: Array.isArray(models) ? models : (models ? [models] : []),
+        matchedModel: matchedModel
       }
     );
 
-    forwardRequest(req, res, backend);
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -150,17 +161,23 @@ app.all('/v1/messages*', async (req, res) => {
 
     // Select backend based on model if specified, otherwise use default selection
     let backend;
+    let matchedModel = null;
+
     // Check: models must be truthy AND have at least one valid entry (not empty array)
     if (models && (Array.isArray(models) ? models.length > 0 : true)) {
-      backend = balancer.getNextBackendForModel(models);
+      // Use priority-first regex matching to get both backend and matched model name
+      const result = balancer.getNextBackendForModelWithMatch(models);
+      backend = result.backend;
+      matchedModel = result.actualModel;
 
       // If no backend supports the requested model(s), try any available backend
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        // Model matched - logging handled above
-        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+        // Model matched - logging handled above with actual model name if regex was used
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
     } else {
       // No model specified in request or empty models array - use default selection
@@ -185,11 +202,12 @@ app.all('/v1/messages*', async (req, res) => {
         priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : [])
+        models: Array.isArray(models) ? models : (models ? [models] : []),
+        matchedModel: matchedModel
       }
     );
 
-    forwardRequest(req, res, backend);
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -210,17 +228,23 @@ app.all('/api/*', async (req, res) => {
 
     // Select backend based on model if specified, otherwise use default selection
     let backend;
+    let matchedModel = null;
+
     // Check: models must be truthy AND have at least one valid entry (not empty array)
     if (models && (Array.isArray(models) ? models.length > 0 : true)) {
-      backend = balancer.getNextBackendForModel(models);
+      // Use priority-first regex matching to get both backend and matched model name
+      const result = balancer.getNextBackendForModelWithMatch(models);
+      backend = result.backend;
+      matchedModel = result.actualModel;
 
       // If no backend supports the requested model(s), try any available backend
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        // Model matched - logging handled above
-        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+        // Model matched - logging handled above with actual model name if regex was used
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
     } else {
       // No model specified in request or empty models array - use default selection
@@ -245,11 +269,12 @@ app.all('/api/*', async (req, res) => {
         priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : [])
+        models: Array.isArray(models) ? models : (models ? [models] : []),
+        matchedModel: matchedModel
       }
     );
 
-    forwardRequest(req, res, backend);
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -277,14 +302,20 @@ app.all('/models*', async (req, res) => {
     const models = extractModelsFromRequest(req);
 
     let backend;
+    let matchedModel = null;
+
     if (models) {
-      backend = balancer.getNextBackendForModel(models);
+      // Use priority-first regex matching to get both backend and matched model name
+      const result = balancer.getNextBackendForModelWithMatch(models);
+      backend = result.backend;
+      matchedModel = result.actualModel;
 
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${Array.isArray(models) ? models.join(', ') : models}`);
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
     } else {
       backend = await balancer.queueRequest();
@@ -308,11 +339,12 @@ app.all('/models*', async (req, res) => {
         priority: backend.priority || 0,
         backendId: backend.id,
         backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : [])
+        models: Array.isArray(models) ? models : (models ? [models] : []),
+        matchedModel: matchedModel
       }
     );
 
-    forwardRequest(req, res, backend);
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
