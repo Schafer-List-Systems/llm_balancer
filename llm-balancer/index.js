@@ -29,7 +29,7 @@ app.use((req, res, next) => {
 });
 
 // Initialize backend info collector to discover API types before health checks
-const BackendInfo = require('./capability-detector');
+const BackendInfo = require('./backend-info');
 const backendInfo = new BackendInfo(config.healthCheckTimeout);
 
 // ★ Insight ─────────────────────────────────────────────────────

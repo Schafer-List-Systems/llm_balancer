@@ -6,6 +6,7 @@ node_modules/
 *.swo
 .vscode/
 .idea/
+.claude/
 frontend/public/js/dist
 CLAUDE.md
 coverage/

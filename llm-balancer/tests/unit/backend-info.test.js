@@ -1,4 +1,4 @@
-const BackendInfo = require('../../capability-detector');
+const BackendInfo = require('../../backend-info');
 
 describe('BackendInfo', () => {
   let detector;

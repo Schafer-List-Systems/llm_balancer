@@ -212,7 +212,7 @@ detector.getChatEndpoint('ollama');    // '/api/generate'
 ## Usage Example
 
 ```javascript
-const BackendInfo = require('./capability-detector');
+const BackendInfo = require('./backend-info');
 
 const backendInfo = new BackendInfo(5000); // 5 second timeout
 
@@ -272,7 +272,7 @@ The class is designed to be extended with performance metrics:
 All tests pass (15 tests):
 
 ```bash
-npm test -- capability-detector.test.js
+npm test -- backend-info.test.js
 ```
 
 **Test coverage**:
@@ -291,7 +291,7 @@ npm test -- capability-detector.test.js
    const detector = new CapabilityDetector(timeout);
 
    // New
-   const BackendInfo = require('./capability-detector');
+   const BackendInfo = require('./backend-info');
    const backendInfo = new BackendInfo(timeout);
    ```
 

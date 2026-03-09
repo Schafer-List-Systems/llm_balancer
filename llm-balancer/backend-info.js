@@ -183,7 +183,7 @@ class BackendInfo {
     return new Promise((resolve) => {
       const options = {
         hostname: parsedUrl.hostname,
-        port: parsedUrl.port || 11434,
+        port: parsedUrl.port,
         path: probe.endpoint,
         method: probe.method,
         timeout: this.timeout
@@ -401,7 +401,7 @@ class BackendInfo {
 
           // Track model list endpoint only (for health checks)
           // Chat endpoints are stored separately in info.apis[apiType].chatEndpoint
-          if (probe.hasModels) {
+          if (probe.hasModels && result.success) {
             info.endpoints[probe.apiType] = probe.endpoint;
           }
 
@@ -429,6 +429,7 @@ class BackendInfo {
       info.error = 'No APIs detected';
     }
 
+    console.debug(`[${getTimestamp()}] [DEBUG] ${url}: info: ${info}`);
     return info;
   }
 
