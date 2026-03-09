@@ -18,10 +18,10 @@ class CapabilityDetector {
     this.apiOrder = [
       // OpenAI-compatible APIs (Mistral, Groq, Cohere grouped here)
       { type: 'openai', endpoint: '/v1/models', formatKey: 'data', method: 'GET' },
-      // Anthropic - check messages endpoint first, then chat/completions for models
+      // Anthropic - check messages endpoint first, then chat/completions
       // Note: Anthropic endpoints require POST requests
       { type: 'anthropic', endpoint: '/v1/messages', formatKey: null, method: 'POST' },
-      { type: 'anthropic', endpoint: '/chat/completions', formatKey: 'data', method: 'POST' },
+      { type: 'anthropic', endpoint: '/v1/chat/completions', formatKey: 'data', method: 'POST' },
       // Google Gemini
       { type: 'google', endpoint: '/v1beta/models', formatKey: 'models', method: 'GET' },
       // Ollama
@@ -45,12 +45,15 @@ class CapabilityDetector {
       try {
         const result = await this.checkAPI(url, apiConfig);
         if (result.healthy) {
-          detectedApis.push(result.apiType);
+          // Avoid duplicate API types (e.g., anthropic via /v1/messages and /v1/chat/completions)
+          if (!detectedApis.includes(result.apiType)) {
+            detectedApis.push(result.apiType);
+            console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Detected ${result.apiType} API`);
+          }
           allEndpoints[result.apiType] = apiConfig.endpoint;
           if (result.models && result.models.length > 0) {
             allModels[result.apiType] = result.models;
           }
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Detected ${result.apiType} API`);
         } else if (apiConfig.type === 'ollama' && this.shouldFallbackToOpenAI(result)) {
           console.log(`[${getTimestamp()}] [CapabilityDetector] ${url}: Ollama check failed, trying OpenAI fallback`);
           continue;
@@ -103,22 +106,30 @@ class CapabilityDetector {
         let body = '';
         res.on('data', chunk => { body += chunk.toString(); });
         res.on('end', () => {
-          const result = this.parseResponse(res, body, apiConfig);
+          const result = this.parseResponse(res, body, apiConfig, url);
           resolve(result);
         });
         res.resume();
       });
 
       req.on('error', (err) => {
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url} (${apiConfig.type}): Connection error:`, err.message);
+        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url} [${apiConfig.type}]: Connection error:`, err.message);
         resolve({ healthy: false, error: err.message, apiType: apiConfig.type, models: [] });
       });
 
       req.on('timeout', () => {
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url} (${apiConfig.type}): Timeout`);
+        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${url} [${apiConfig.type}]: Timeout`);
         req.destroy();
         resolve({ healthy: false, error: 'Timeout', apiType: apiConfig.type, models: [] });
       });
+
+      // Add POST body for Anthropic endpoints to avoid 415 errors
+      if (apiConfig.method === 'POST') {
+        const postBody = JSON.stringify({ model: 'test', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+        req.setHeader('Content-Type', 'application/json');
+        req.setHeader('Content-Length', Buffer.byteLength(postBody));
+        req.write(postBody);
+      }
 
       req.end();
     });
@@ -129,9 +140,10 @@ class CapabilityDetector {
    * @param {Object} res - HTTP response object
    * @param {string} body - Response body as string
    * @param {Object} apiConfig - API configuration
+   * @param {string} backendUrl - Backend URL for logging context
    * @returns {Object} Parsed result with health status and models array
    */
-  parseResponse(res, body, apiConfig) {
+  parseResponse(res, body, apiConfig, backendUrl) {
     try {
       const data = JSON.parse(body);
 
@@ -141,7 +153,7 @@ class CapabilityDetector {
         // For endpoints like /v1/messages, only 2xx means API is available
         // 400 = validation error (API exists but params wrong), 404 = endpoint doesn't exist
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available`);
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available`);
           return {
             healthy: true,
             apiType: apiConfig.type,
@@ -151,7 +163,7 @@ class CapabilityDetector {
         }
         // 400 validation error means endpoint exists but needs proper params
         if (res.statusCode === 400 && data.error) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (validation error)`);
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available (validation error)`);
           return {
             healthy: true,
             apiType: apiConfig.type,
@@ -179,7 +191,7 @@ class CapabilityDetector {
           return null;
         }).filter(Boolean);
 
-        console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: Found ${models.length} model(s) via ${apiConfig.type}`);
+        console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: Found ${models.length} model(s) via ${apiConfig.endpoint}`);
 
         return {
           healthy: res.statusCode >= 200 && res.statusCode < 300,
@@ -190,7 +202,7 @@ class CapabilityDetector {
       } else {
         // Check for error responses even with 200 status (proxy behavior)
         if (data.error) {
-          console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint not available (error: ${data.error})`);
+          console.warn(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} not available (error: ${data.error})`);
           return {
             healthy: false,
             error: data.error,
@@ -202,7 +214,7 @@ class CapabilityDetector {
         // For /chat/completions, 2xx means API available, 400 means endpoint exists but needs params
         // 404 means endpoint doesn't exist
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available`);
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available`);
           return {
             healthy: true,
             apiType: apiConfig.type,
@@ -211,7 +223,7 @@ class CapabilityDetector {
           };
         }
         if (res.statusCode === 400 && data.error) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (validation error)`);
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} available (validation error)`);
           return {
             healthy: true,
             apiType: apiConfig.type,
@@ -220,7 +232,7 @@ class CapabilityDetector {
           };
         }
         // 404 or other errors mean endpoint doesn't exist
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint not available (status ${res.statusCode})`);
+        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: ${apiConfig.endpoint} not available (status ${res.statusCode})`);
         return {
           healthy: false,
           error: res.statusCode === 404 ? 'Endpoint not found' : 'Endpoint error',
@@ -230,7 +242,7 @@ class CapabilityDetector {
         };
       }
     } catch (e) {
-      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: Failed to parse ${apiConfig.type} response:`, e.message);
+      console.warn(`[${getTimestamp()}] [CapabilityDetector] ${backendUrl} [${apiConfig.type}]: Failed to parse response:`, e.message);
       return {
         healthy: false,
         error: `Parse error: ${e.message}`,

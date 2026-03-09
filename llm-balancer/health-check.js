@@ -4,7 +4,7 @@
  * Uses interface pattern to support multiple API types (Ollama, LiteLLM, OpenAI)
  */
 
-const MultiAPIChecker = require('./interfaces/implementations/MultiAPIChecker');
+const SimpleHealthChecker = require('./interfaces/implementations/SimpleHealthChecker');
 
 // Helper function to get formatted timestamp
 function getTimestamp() {
@@ -18,8 +18,9 @@ class HealthChecker {
     this.healthCheckIntervalId = null;
     this.lastCheckTime = null;
 
-    // Create health check interface instance (uses MultiAPIChecker for auto-detection)
-    this.healthInterface = new MultiAPIChecker(config.healthCheckTimeout);
+    // Use SimpleHealthChecker for periodic health checks
+    // API detection is done once at startup by CapabilityDetector
+    this.healthInterface = new SimpleHealthChecker(config.healthCheckTimeout);
   }
 
   /**

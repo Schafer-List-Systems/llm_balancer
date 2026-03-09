@@ -718,10 +718,10 @@ async function startServer() {
         backend.capabilities = {};
       }
 
-      if (cap.apiType !== 'unknown') {
-        console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API type: ${cap.apiType}, models:`, cap.models);
+      if (cap.apiTypes && cap.apiTypes.length > 0) {
+        console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API types: ${cap.apiTypes.join(', ')}, models:`, cap.models);
         if (backend && backend.capabilities) {
-          backend.capabilities.apiType = cap.apiType;
+          backend.capabilities.apiTypes = cap.apiTypes;
           backend.capabilities.models = cap.models;
           backend.capabilities.endpoints = cap.endpoints || {};
           backend.capabilities.detectedAt = cap.detectedAt;
