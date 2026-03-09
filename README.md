@@ -1,10 +1,10 @@
 # LLM Balancer
 
-A load balancer for LLM servers with health checking and automatic failover.
+A load balancer for LLM servers with health checking and automatic failover. Supports OpenAI, Anthropic, Google Gemini, and Ollama APIs.
 
 ## Overview
 
-The LLM Balancer provides priority-based load balancing across multiple backend Ollama instances with:
+The LLM Balancer provides priority-based load balancing across multiple backend LLM servers with:
 
 - **Multi-API Support**: Auto-detects OpenAI, Anthropic, Google Gemini, and Ollama APIs
 - **Priority-Based Selection**: Configurable priority levels for backend servers
@@ -12,6 +12,23 @@ The LLM Balancer provides priority-based load balancing across multiple backend 
 - **Health Monitoring**: Automatic failure detection and recovery
 - **Request Queuing**: FIFO queueing when backends are at capacity
 - **Real-Time Monitoring**: Dashboard for tracking backend status and statistics
+
+## Documentation
+
+**New to the LLM Balancer?** Start here:
+
+1. **[DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md)** - Find documentation by your role:
+   - **User**: Installation, configuration, usage, troubleshooting
+   - **API User**: API reference, request/response formats, integration
+   - **Developer**: Architecture, classes, testing, contributing
+
+2. **[docs/OVERVIEW.md](docs/OVERVIEW.md)** - System architecture and high-level design
+
+3. **[docs/user/INSTALLATION.md](docs/user/INSTALLATION.md)** - Installation options (Docker, manual, development)
+
+4. **[docs/user/USAGE.md](docs/user/USAGE.md)** - Complete usage guide with configuration examples
+
+For quick reference, see the sections below.
 
 ## Quick Start
 
@@ -141,7 +158,7 @@ curl http://localhost:3001/backends
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BACKENDS` | `http://host1:11434` | Comma-separated list of backend URLs |
+| `OLLAMA_BACKENDS` | None | Comma-separated list of backend URLs (required) |
 | `LB_PORT` | 3001 | Server port |
 | `HEALTH_CHECK_INTERVAL` | 30000ms | Health check interval (30 seconds) |
 | `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout (5 seconds) |
@@ -151,17 +168,20 @@ curl http://localhost:3001/backends
 | `BACKEND_CONCURRENCY_N` | 1 | Maximum concurrent requests for backend at index N |
 | `SHUTDOWN_TIMEOUT` | 60000ms | Graceful shutdown timeout |
 
-## Documentation
+## API Reference
 
-For comprehensive documentation, see:
+For complete API documentation, see **[docs/api/ENDPOINTS.md](docs/api/ENDPOINTS.md)**.
 
-- **[DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md)** - Find documentation by role (User, API User, Developer)
-- **[docs/OVERVIEW.md](docs/OVERVIEW.md)** - System architecture and overview
-- **[docs/user/INSTALLATION.md](docs/user/INSTALLATION.md)** - Installation instructions
-- **[docs/user/USAGE.md](docs/user/USAGE.md)** - Usage guide and configuration
-- **[docs/api/ENDPOINTS.md](docs/api/ENDPOINTS.md)** - API reference
-- **[docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md)** - Detailed architecture
-- **[docs/developer/CONTRIBUTING.md](docs/developer/CONTRIBUTING.md)** - Contribution guidelines
+Quick reference for common endpoints:
+
+| Route | Description |
+|-------|-------------|
+| `/v1/messages*` | Anthropic API format |
+| `/api/*` | Ollama API format |
+| `/models*` | Model list endpoint |
+| `/health` | Health check |
+| `/backends` | Backend statistics |
+| `/stats` | System statistics |
 
 ## Project Structure
 
@@ -200,7 +220,7 @@ llm_balancer/
 
 For common issues and solutions, see [docs/user/TROUBLESHOOTING.md](docs/user/TROUBLESHOOTING.md).
 
-### Ensure Ollama servers are running
+### Ensure backend servers are running
 
 ```bash
 # Check each backend
