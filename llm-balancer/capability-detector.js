@@ -114,6 +114,64 @@ class BackendInfo {
   }
 
   /**
+   * Validate response body to distinguish between valid data and error messages
+   * @param {Object} body - Parsed JSON response body
+   * @param {Object} probe - Probe configuration
+   * @param {number} statusCode - HTTP status code
+   * @returns {{valid: boolean, reason: string}} Validation result
+   */
+  validateResponse(body, probe, statusCode) {
+    // 500 status code always indicates failure
+    if (statusCode === 500) {
+      return { valid: false, reason: 'Server error (500)' };
+    }
+
+    // For GET model list probes, check for error patterns in body
+    if (probe.hasModels) {
+      // Check for error response patterns
+      if (body.error || body.detail || body.type === 'error') {
+        const errorMsg = body.error?.message || body.detail || body.error || 'Error response';
+        return { valid: false, reason: `Error response: ${errorMsg}` };
+      }
+
+      // For model list endpoints, verify we have actual model data
+      if (probe.jsonPath && body[probe.jsonPath]) {
+        const modelsArray = body[probe.jsonPath];
+        if (!Array.isArray(modelsArray)) {
+          return { valid: false, reason: `Invalid format: ${probe.jsonPath} is not an array` };
+        }
+        if (modelsArray.length === 0) {
+          return { valid: false, reason: `${probe.jsonPath} array is empty` };
+        }
+        // Verify at least one model entry has id or name
+        const hasValidModel = modelsArray.some(m => m && (m.id || m.name));
+        if (!hasValidModel) {
+          return { valid: false, reason: `${probe.jsonPath} array has no valid model entries` };
+        }
+      }
+    }
+
+    // For POST chat probes, 200 or 400 with valid response is success
+    if (!probe.hasModels) {
+      if (statusCode === 200) {
+        // Verify response looks like a valid chat response, not an error
+        if (body.error || body.detail || body.type === 'error') {
+          return { valid: false, reason: 'Error response in 200 status' };
+        }
+        // Check for valid chat response indicators
+        if (body.id || body.choices || body.content || body.type === 'message') {
+          return { valid: true, reason: 'Valid chat response' };
+        }
+      }
+      if (statusCode === 400) {
+        return { valid: true, reason: 'Validation error (endpoint exists)' };
+      }
+    }
+
+    return { valid: true, reason: 'Status code OK' };
+  }
+
+  /**
    * Execute a single probe request
    * @param {string} url - Backend URL
    * @param {Object} probe - Probe configuration
@@ -143,11 +201,27 @@ class BackendInfo {
             responseBody = { raw: body };
           }
 
+          // Validate response body for GET model list probes
+          if (probe.hasModels) {
+            const validation = this.validateResponse(responseBody, probe, res.statusCode);
+            if (!validation.valid) {
+              console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: ${validation.reason} - API not supported`);
+              resolve({
+                success: false,
+                statusCode: res.statusCode,
+                body: responseBody,
+                apiType: probe.apiType,
+                validation: validation
+              });
+              return;
+            }
+          }
+
           // Determine success based on status code
           // 2xx = endpoint exists and works
           // 400 = endpoint exists but request params wrong (API supported)
           // 404 = endpoint doesn't exist (API not supported)
-          // For POST requests, 404 could also mean "model not found" - we need to handle this
+          // 500 = server error (API not supported)
           let isSupported = res.statusCode >= 200 && res.statusCode < 300 || res.statusCode === 400;
 
           // If 404 on POST, try with a real model from discovered models
@@ -236,8 +310,13 @@ class BackendInfo {
           responseBody = { raw: body };
         }
 
-        // For POST probes, 2xx or 400 means API is supported
-        const isSupported = res.statusCode >= 200 && res.statusCode < 300 || res.statusCode === 400;
+        // Validate POST response
+        const validation = this.validateResponse(responseBody, probe, res.statusCode);
+        const isSupported = validation.valid;
+
+        if (!validation.valid) {
+          console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: ${validation.reason} - API not supported`);
+        }
 
         callback({
           success: isSupported,
