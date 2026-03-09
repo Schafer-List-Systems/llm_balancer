@@ -230,8 +230,11 @@ class BackendInfo {
             console.log(`[${getTimestamp()}] [BackendInfo] ${url}: Detected ${probe.apiType} API`);
           }
 
-          // Track endpoint
-          info.endpoints[probe.apiType] = probe.endpoint;
+          // Track model list endpoint only (for health checks)
+          // Chat endpoints are stored separately in info.apis[apiType].chatEndpoint
+          if (probe.hasModels) {
+            info.endpoints[probe.apiType] = probe.endpoint;
+          }
 
           // Extract models if this probe provides model list
           if (probe.hasModels && result.body) {
