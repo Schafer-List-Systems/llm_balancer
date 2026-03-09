@@ -1,0 +1,507 @@
+# System Architecture
+
+This document describes the system architecture, design patterns, and component interactions.
+
+---
+
+## Overview
+
+The LLM Balancer is built using a modular, interface-based architecture that emphasizes:
+
+- **Separation of Concerns**: Each component has a single, well-defined responsibility
+- **Interface-Based Design**: Components interact through abstract interfaces
+- **Delegation Pattern**: Backend class delegates health checking to specialized handlers
+- **Composability**: Components can be combined and extended easily
+
+---
+
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              Client                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         LLM Balancer (Port 3001)                         │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │                    API Server (index.js)                           │  │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────────┐  │  │
+│  │  │ Route Router│ │ Error Handler│ │ Middleware (CORS, Body)     │  │  │
+│  │  └─────────────┘ └─────────────┘ └─────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│  │                                                                       │
+│  │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
+│  │  │   Balancer      │◄───│  Backend        │    │  Health         │  │
+│  │  │   (balancer.js) │    │  (Backend.js)   │    │  Checker        │  │
+│  │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
+│  │         │                     │                     │                │
+│  │         │                     │                     │                │
+│  │         ▼                     ▼                     ▼                │
+│  │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
+│  │  │   Request       │    │  BackendInfo    │    │  API-Specific   │  │
+│  │  │   Processor     │    │  (capability    │    │  Health         │  │
+│  │  │ (request-       │    │   detector)     │    │  Checkers       │  │
+│  │  │  processor.js)  │    │                 │    │  (IHealthCheck) │  │
+│  │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Backend Servers                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │
+│  │ Backend 1       │  │ Backend 2       │  │ Backend 3       │         │
+│  │ (OpenAI API)    │  │ (Anthropic API) │  │ (Ollama API)    │         │
+│  │ http://host1:   │  │ http://host2:   │  │ http://host3:   │         │
+│  │ 11434           │  │ 11434           │  │ 11434           │         │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Core Components
+
+### 1. Configuration Module
+
+**File**: `llm-balancer/config.js`
+
+**Responsibilities**:
+- Parse environment variables
+- Validate configuration values
+- Create backend objects with initial state
+- Load priority and concurrency settings
+
+**Key Functions**:
+```javascript
+parseBackendUrls(urls) -> BackendInfo[]
+loadConfig() -> ConfigObject
+```
+
+---
+
+### 2. Balancer Class
+
+**File**: `llm-balancer/balancer.js`
+
+**Responsibilities**:
+- Priority-based backend selection
+- Request queue management
+- Backend availability notifications
+- Statistics tracking
+
+**Key Methods**:
+```javascript
+queueRequest(req) -> Promise<Backend>
+getNextBackend() -> Backend|null
+notifyBackendAvailable(backend) -> void
+markFailed(backendUrl) -> void
+markHealthy(backendUrl) -> void
+getStats() -> BalancerStats
+```
+
+**Selection Algorithm**:
+1. Filter healthy, available backends
+2. Sort by priority (descending)
+3. Select first available backend
+4. If none available, queue request
+
+---
+
+### 3. Backend Class
+
+**File**: `llm-balancer/backends/Backend.js`
+
+**Responsibilities**:
+- Encapsulate backend state and configuration
+- Provide capability information
+- Delegate health checking
+
+**Properties**:
+```javascript
+{
+  url: string,
+  maxConcurrency: number,
+  healthy: boolean,
+  busy: boolean,
+  backendInfo: BackendInfo,
+  healthChecker: IHealthCheck
+}
+```
+
+**Key Methods**:
+```javascript
+checkHealth() -> Promise<boolean>
+getApiTypes() -> string[]
+getModels(apiType) -> string[]
+getEndpoint(apiType) -> string
+supportsApi(apiType) -> boolean
+```
+
+---
+
+### 4. BackendInfo Class
+
+**File**: `llm-balancer/backends/BackendInfo.js`
+
+**Responsibilities**:
+- Detect API capabilities of backends
+- Discover available models
+- Track endpoint information
+
+**Detection Order**:
+1. OpenAI-compatible (`/v1/models`)
+2. Anthropic (`/v1/messages`)
+3. Google Gemini (`/v1beta/models`)
+4. Ollama (`/api/tags`)
+
+---
+
+### 5. Health Checker
+
+**File**: `llm-balancer/health-check.js`
+
+**Responsibilities**:
+- Periodic health monitoring
+- Failure detection
+- Recovery tracking
+
+**Key Methods**:
+```javascript
+start() -> void
+stop() -> void
+checkBackend(backend) -> Promise<boolean>
+getStats() -> HealthStats
+```
+
+---
+
+### 6. Request Processor
+
+**File**: `llm-balancer/request-processor.js`
+
+**Responsibilities**:
+- Forward requests to backends
+- Handle streaming responses
+- Manage active request counting
+- Filter hop-by-hop headers
+
+**Key Functions**:
+```javascript
+forwardRequest(balancer, backend, req, res) -> void
+processRequest(balancer, backend, req, res) -> void
+releaseBackend(balancer, backend) -> void
+```
+
+---
+
+### 7. API Server
+
+**File**: `llm-balancer/index.js`
+
+**Responsibilities**:
+- Expose HTTP endpoints
+- Route requests to balancer
+- Handle errors and responses
+- Manage graceful shutdown
+
+**Endpoints**:
+- `/v1/messages*` - Anthropic API
+- `/api/*` - Ollama API
+- `/models*` - Model list
+- `/health` - Health status
+- `/stats` - System statistics
+- `/backends` - Backend list
+- `/debug/*` - Debug endpoints
+
+---
+
+## Interface-Based Design
+
+### IHealthCheck Interface
+
+```javascript
+interface IHealthCheck {
+  check(backend: Backend): Promise<boolean>
+  getEndpoint(): string
+}
+```
+
+**Implementations**:
+- `OllamaHealthCheck` - Checks `/api/tags`
+- `OpenAIHealthCheck` - Checks `/v1/models`
+- `AnthropicHealthCheck` - Checks `/v1/messages`
+- `GoogleHealthCheck` - Checks `/v1beta/models`
+
+### IModelList Interface
+
+```javascript
+interface IModelList {
+  getModels(apiType: string): string[]
+  getEndpoint(apiType: string): string
+}
+```
+
+---
+
+## Design Patterns
+
+### Delegation Pattern
+
+The Backend class delegates health checking to specialized handlers:
+
+```
+Backend.checkHealth()
+    └─> healthChecker.check(this)
+        └─> Specific API health check
+```
+
+**Benefits**:
+- Separation of concerns
+- Easy to add new API types
+- Backend doesn't need to know health check details
+
+### Factory Pattern
+
+Health checkers are created based on primary API type:
+
+```javascript
+function createHealthChecker(apiType) {
+  switch (apiType) {
+    case 'ollama': return new OllamaHealthCheck()
+    case 'openai': return new OpenAIHealthCheck()
+    case 'anthropic': return new AnthropicHealthCheck()
+    case 'google': return new GoogleHealthCheck()
+  }
+}
+```
+
+### Strategy Pattern
+
+Different load balancing strategies can be implemented:
+
+```javascript
+interface LoadBalancingStrategy {
+  selectBackend(backends: Backend[]): Backend
+}
+
+class PriorityStrategy implements LoadBalancingStrategy {
+  selectBackend(backends) {
+    // Priority-based selection
+  }
+}
+
+class RoundRobinStrategy implements LoadBalancingStrategy {
+  selectBackend(backends) {
+    // Round-robin selection
+  }
+}
+```
+
+---
+
+## Data Flow
+
+### Request Processing Flow
+
+```
+1. Client Request
+   └─> API Server (index.js)
+       └─> Route Router
+           └─> Balancer.queueRequest()
+               ├─> If queue empty + backend available
+               │   └─> Return backend immediately
+               └─> If queue full or no backend
+                   └─> Queue request + return Promise
+                       └─> When backend available
+                           └─> Resolve Promise with backend
+                               └─> Request Processor.forwardRequest()
+                                   └─> HTTP request to backend
+                                       └─> Response to client
+```
+
+### Health Check Flow
+
+```
+1. Health Checker Timer
+   └─> For each backend
+       └─> healthChecker.check(backend)
+           └─> HTTP request to API endpoint
+               ├─> Success (2xx)
+               │   └─> Mark healthy, update models
+               └─> Failure (timeout/error)
+                   └─> Mark unhealthy, increment failCount
+                       └─> balancer.markFailed()
+```
+
+---
+
+## State Management
+
+### Backend State Machine
+
+```
+         ┌─────────┐
+         │ Healthy │
+         └────┬────┘
+              │ health check fails
+              ▼
+         ┌──────────┐
+         │ Unhealthy│◄──────┐
+         └────┬─────┘       │
+              │ health       │ health check succeeds
+              │ check        │
+              ▼              │
+         ┌─────────┐        │
+         │ Recovered│───────┘
+         └─────────┘
+```
+
+### Queue State
+
+```
+┌─────────────────────────────────────────────────┐
+│ Queue                                           │
+│ ┌─────────┐ ┌─────────┐ ┌─────────┐            │
+│ │ Request │ │ Request │ │ Request │ ...        │
+│ │   1     │ │   2     │ │   3     │            │
+│ └────┬────┘ └────┬────┘ └────┬────┘            │
+│      │           │           │                  │
+│      ▼           ▼           ▼                  │
+│  ┌─────────────────────────────────────┐       │
+│  │ Backend Available → Process Queue   │       │
+│  └─────────────────────────────────────┘       │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## Concurrency Model
+
+### Active Request Counting
+
+```javascript
+// Request starts
+backend.activeRequestCount++
+
+// Request completes
+backend.activeRequestCount--
+
+// Check availability
+if (backend.activeRequestCount < backend.maxConcurrency) {
+  // Can accept new request
+}
+```
+
+### Queue Processing
+
+```javascript
+// When backend becomes available
+function notifyBackendAvailable(backend) {
+  while (queue.length > 0) {
+    const nextBackend = getNextBackend()
+    if (!nextBackend) break
+
+    const queuedRequest = queue.shift()
+    queuedRequest.resolve(nextBackend)
+  }
+}
+```
+
+---
+
+## Error Handling
+
+### Error Hierarchy
+
+```
+Error
+├─> BalancerError
+│   ├─> QueueFullError
+│   ├─> NoHealthyBackendsError
+│   └─> TimeoutError
+├─> BackendError
+│   ├─> ConnectionError
+│   ├─> TimeoutError
+│   └─> HTTPError
+└─> ConfigurationError
+```
+
+### Error Propagation
+
+```
+Client Request
+    └─> API Server
+        ├─> ConfigurationError → 500
+        ├─> NoHealthyBackendsError → 503
+        ├─> QueueFullError → 503
+        └─> BackendError → 502
+```
+
+---
+
+## Scalability Considerations
+
+### Horizontal Scaling
+
+The balancer itself is stateless and can be scaled horizontally:
+- Use shared queue (Redis) for multiple balancer instances
+- Use consistent hashing for backend assignment
+
+### Backend Scaling
+
+Add more backends without downtime:
+- Update `OLLAMA_BACKENDS` environment variable
+- Restart balancer (graceful shutdown handles in-flight requests)
+
+### Performance Optimization
+
+- Reduce health check frequency for large deployments
+- Disable debug mode in production
+- Use connection pooling for backend requests
+
+---
+
+## Security Considerations
+
+### Current Security Model
+
+- No authentication required
+- CORS enabled for all origins
+- Payload size limits configured
+
+### Production Recommendations
+
+- Use reverse proxy with authentication
+- Restrict access via firewall
+- Enable debug mode only for troubleshooting
+- Use HTTPS in production
+
+---
+
+## Future Architecture Enhancements
+
+### Planned Features
+
+1. **Circuit Breaker Pattern**: Prevent cascading failures
+2. **Metrics Export**: Prometheus metrics endpoint
+3. **Config Reload**: Dynamic configuration without restart
+4. **Rate Limiting**: Per-client rate limiting
+5. **Request Priority**: Priority-based request queuing
+
+### Potential Refactorings
+
+1. **Plugin System**: Extensible health checkers
+2. **Event Bus**: Decoupled component communication
+3. **Configuration Schema**: JSON Schema validation
+
+---
+
+## Related Documentation
+
+- [Class Hierarchy](CLASSES.md) - Detailed class documentation
+- [Data Flow](DATA_FLOW.md) - Request processing details
+- [Testing Guide](TESTING.md) - Testing architecture
+- [Debugging Guide](DEBUGGING.md) - Debug features
