@@ -5,7 +5,7 @@
 
 function loadConfig() {
   // Parse backend URLs from environment variable
-  const backendUrls = process.env.OLLAMA_BACKENDS || 'http://localhost:11434';
+  const backendUrls = process.env.BACKENDS || 'http://localhost:11434';
   const backendArray = backendUrls.split(',').map(url => url.trim()).filter(url => url);
 
   // Parse port configuration

@@ -8,13 +8,14 @@
  */
 
 const { BackendSelector, ModelMatcher } = require('../../backend-selector');
+const { createTestBackendWithPriority } = require('./helpers/backend-factory');
 
-// Helper function to create fresh backend copies for testing with capabilities structure
-const getFreshBackends = () => JSON.parse(JSON.stringify([
-  { url: 'http://backend1:11434', id: 1, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, capabilities: { models: ['llama3', 'mistral'], apiType: 'ollama' } },
-  { url: 'http://backend2:11434', id: 2, priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['gemma', 'qwen'], apiType: 'ollama' } },
-  { url: 'http://backend3:11434', id: 3, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, capabilities: { models: ['llama3', 'phi3'], apiType: 'ollama' } }
-]));
+// Helper function to create fresh backend copies for testing with backendInfo structure
+const getFreshBackends = () => [
+  createTestBackendWithPriority('http://backend1:11434', 'ollama', ['llama3', 'mistral'], 1, 2),
+  createTestBackendWithPriority('http://backend2:11434', 'ollama', ['gemma', 'qwen'], 2, 1),
+  createTestBackendWithPriority('http://backend3:11434', 'ollama', ['llama3', 'phi3'], 1, 2)
+];
 
 describe('ModelMatcher', () => {
   describe('matches() - Exact string matching', () => {
@@ -101,7 +102,7 @@ describe('BackendSelector', () => {
     it('should filter by model and return matching backend', () => {
       const result = selector.selectBackend(backends, { models: 'llama3' });
       expect(result).not.toBeNull();
-      expect(result.capabilities?.models).toContain('llama3');
+      expect(result.backendInfo?.models?.ollama).toContain('llama3');
     });
 
     it('should select highest priority among model-matching backends', () => {
@@ -114,7 +115,9 @@ describe('BackendSelector', () => {
     it('should fall back to any available backend when model not found', () => {
       // Remove all backends with the requested model
       const noMatchBackends = getFreshBackends();
-      noMatchBackends.forEach(b => b.capabilities.models = ['nonexistent']);
+      noMatchBackends.forEach(b => {
+        b.backendInfo.models.ollama = ['nonexistent'];
+      });
 
       const result = selector.selectBackend(noMatchBackends, { models: 'llama3' });
       expect(result).toBeNull(); // No backend matches the model filter
@@ -152,14 +155,16 @@ describe('BackendSelector', () => {
       // If we request llama3, should get backend1 or backend3 (priority 1)
       const result = selector.selectBackend(backends, { models: 'llama3' });
       expect(result).not.toBeNull();
-      expect(result.capabilities?.models).toContain('llama3');
+      expect(result.backendInfo?.models?.ollama).toContain('llama3');
     });
 
     it('should use availability as tie-breaker when priorities are equal', () => {
       const testBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 2, maxConcurrency: 2, capabilities: { models: ['llama3'] } }, // Full
-        { url: 'http://backend2:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 2, capabilities: { models: ['llama3'] } }    // Available
+        createTestBackendWithPriority('http://backend1:11434', 'ollama', ['llama3'], 1, 2), // Full
+        createTestBackendWithPriority('http://backend2:11434', 'ollama', ['llama3'], 1, 2)    // Available
       ];
+      // Set backend1 to max concurrency to simulate it being full
+      testBackends[0].activeRequestCount = 2;
 
       const result = selector.selectBackend(testBackends, { models: 'llama3' });
       expect(result.url).toBe('http://backend2:11434'); // Should skip full backend1
@@ -271,7 +276,7 @@ describe('BackendSelector', () => {
 
     it('should handle backends with no models configured', () => {
       const testBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: [] } }
+        createTestBackendWithPriority('http://backend1:11434', 'ollama', [], 1, 1)
       ];
 
       const stats = selector.getModelAvailabilityStats(testBackends);
@@ -283,8 +288,8 @@ describe('BackendSelector', () => {
   describe('Integration with priority sorting', () => {
     it('should select highest priority backend that matches model criteria', () => {
       const testBackends = [
-        { url: 'http://low-prio:11434', id: 1, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['model-a'] } },
-        { url: 'http://high-prio:11434', id: 2, priority: 5, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['model-a'] } }
+        createTestBackendWithPriority('http://low-prio:11434', 'ollama', ['model-a'], 1, 1),
+        createTestBackendWithPriority('http://high-prio:11434', 'ollama', ['model-a'], 5, 1)
       ];
 
       const result = selector.selectBackend(testBackends, { models: 'model-a' });
@@ -293,8 +298,8 @@ describe('BackendSelector', () => {
 
     it('should skip backends at max concurrency even if highest priority', () => {
       const testBackends = [
-        { url: 'http://busy-high-prio:11434', id: 1, priority: 5, healthy: true, activeRequestCount: 1, maxConcurrency: 1, capabilities: { models: ['model-a'] } },
-        { url: 'http://idle-low-prio:11434', id: 2, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['model-a'] } }
+        (() => { const b = createTestBackendWithPriority('http://busy-high-prio:11434', 'ollama', ['model-a'], 5, 1); b.activeRequestCount = 1; return b; })(),
+        createTestBackendWithPriority('http://idle-low-prio:11434', 'ollama', ['model-a'], 1, 1)
       ];
 
       const result = selector.selectBackend(testBackends, { models: 'model-a' });
@@ -303,8 +308,8 @@ describe('BackendSelector', () => {
 
     it('should handle negative priorities correctly', () => {
       const testBackends = [
-        { url: 'http://neg-prio:11434', id: 1, priority: -5, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['model-a'] } },
-        { url: 'http://zero-prio:11434', id: 2, priority: 0, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['model-a'] } }
+        (() => { const b = createTestBackendWithPriority('http://neg-prio:11434', 'ollama', ['model-a'], -5, 1); return b; })(),
+        createTestBackendWithPriority('http://zero-prio:11434', 'ollama', ['model-a'], 0, 1)
       ];
 
       const result = selector.selectBackend(testBackends, { models: 'model-a' });
@@ -315,7 +320,7 @@ describe('BackendSelector', () => {
   describe('Edge cases and error handling', () => {
     it('should handle backends with undefined priority', () => {
       const testBackends = [
-        { url: 'http://backend1:11434', healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['model-a'] } }
+        (() => { const b = createTestBackendWithPriority('http://backend1:11434', 'ollama', ['model-a'], 1, 1); delete b.priority; return b; })()
         // No priority field - should default to 0
       ];
 
@@ -325,7 +330,7 @@ describe('BackendSelector', () => {
 
     it('should handle backends with undefined models array', () => {
       const testBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1 }
+        (() => { const b = createTestBackendWithPriority('http://backend1:11434', 'ollama', [], 1, 1); return b; })()
         // No models field - should default to empty array
       ];
 
@@ -335,7 +340,7 @@ describe('BackendSelector', () => {
 
     it('should handle mixed valid/invalid model values in arrays', () => {
       const testBackends = [
-        { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, capabilities: { models: ['valid-model'] } }
+        createTestBackendWithPriority('http://backend1:11434', 'ollama', ['valid-model'], 1, 1)
       ];
 
       // Should handle null/undefined entries gracefully

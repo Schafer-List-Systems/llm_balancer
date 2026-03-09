@@ -172,9 +172,8 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config) 
 
   // Also increment the processed request counter here
   // This ensures the counter is tracked when the request actually starts processing
+  // In the new architecture, Backend tracks its own requestCount (separation of concerns)
   backend.requestCount = (backend.requestCount || 0) + 1;
-  balancer.requestCount.set(backend.url,
-    (balancer.requestCount.get(backend.url) || 0) + 1);
 
   const targetUrl = new URL(req.url, backend.url);
 

@@ -4,6 +4,8 @@
 
 const config = require('../../config');
 const HealthChecker = require('../../health-check');
+const Backend = require('../../backends/Backend');
+const OpenAIHealthCheck = require('../../interfaces/implementations/OpenAIHealthCheck');
 
 describe('HealthChecker Configuration', () => {
   test('should load health check interval from environment', () => {
@@ -22,7 +24,12 @@ describe('HealthChecker Configuration', () => {
 
   test('HealthChecker should receive correct config values', () => {
     const cfg = config.loadConfig();
-    const backends = cfg.backends.slice(0, 2); // Use first 2 backends for test
+    // Convert config backends to Backend instances
+    const backends = cfg.backends.slice(0, 2).map(b => {
+      const backend = new Backend(b.url, b.maxConcurrency);
+      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheckTimeout);
+      return backend;
+    });
     const healthChecker = new HealthChecker(backends, cfg);
 
     expect(healthChecker.config.healthCheckInterval).toBe(cfg.healthCheckInterval);
@@ -31,7 +38,12 @@ describe('HealthChecker Configuration', () => {
 
   test('should use healthCheckInterval for setInterval', () => {
     const cfg = config.loadConfig();
-    const backends = cfg.backends.slice(0, 2);
+    // Convert config backends to Backend instances
+    const backends = cfg.backends.slice(0, 2).map(b => {
+      const backend = new Backend(b.url, b.maxConcurrency);
+      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheckTimeout);
+      return backend;
+    });
 
     // Create HealthChecker and start it
     const healthChecker = new HealthChecker(backends, cfg);
@@ -46,7 +58,12 @@ describe('HealthChecker Configuration', () => {
 
   test('should use healthCheckTimeout in HTTP request options', () => {
     const cfg = config.loadConfig();
-    const backends = cfg.backends.slice(0, 2);
+    // Convert config backends to Backend instances
+    const backends = cfg.backends.slice(0, 2).map(b => {
+      const backend = new Backend(b.url, b.maxConcurrency);
+      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheckTimeout);
+      return backend;
+    });
 
     const healthChecker = new HealthChecker(backends, cfg);
 

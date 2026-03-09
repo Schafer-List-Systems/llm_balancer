@@ -21,6 +21,9 @@ const GoogleHealthCheck = require('../../../interfaces/implementations/GoogleHea
 function createTestBackend(url, apiType = 'ollama', models = ['model1'], maxConcurrency = 10, healthCheckTimeout = 5000) {
   const backend = new Backend(url, maxConcurrency);
 
+  // Set activeRequestCount to 0 by default (no active requests)
+  backend.activeRequestCount = 0;
+
   // Determine health endpoint based on API type
   const healthEndpoint = getHealthEndpoint(apiType);
   const chatEndpoint = getChatEndpoint(apiType);
@@ -41,6 +44,10 @@ function createTestBackend(url, apiType = 'ollama', models = ['model1'], maxConc
     endpoints: { [apiType]: healthEndpoint },
     detectedAt: new Date().toISOString()
   };
+
+  // Set backend.healthy to match backendInfo.healthy
+  // This is required because backend-selector.js checks backend.healthy directly
+  backend.healthy = true;
 
   // Assign appropriate health checker
   backend.healthChecker = getHealthChecker(apiType, healthCheckTimeout);

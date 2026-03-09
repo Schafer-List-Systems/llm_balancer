@@ -1,10 +1,21 @@
 /**
  * Health checker for backend servers
  * Periodically checks backend health and marks as failed/recovered
- * Uses interface pattern to support multiple API types (Ollama, LiteLLM, OpenAI)
+ * Uses Backend class with API-specific health checkers
+ *
+ * ★ Insight ─────────────────────────────────────────────────────
+ * Delegation Pattern: HealthChecker.checkBackend() calls
+ * backend.checkHealth() which delegates to the assigned
+ * healthChecker.check(this). This keeps health logic separate
+ * from backend state management.
+ *
+ * API-Centric Design: Each backend has a healthChecker assigned
+ * based on its primary API type (ollama, openai, anthropic, google).
+ * This ensures correct endpoint/port usage during health checks.
+ * ──────────────────────────────────────────────────────────────────
  */
 
-const SimpleHealthChecker = require('./interfaces/implementations/SimpleHealthChecker');
+const Backend = require('./backends/Backend');
 
 // Helper function to get formatted timestamp
 function getTimestamp() {
@@ -17,10 +28,6 @@ class HealthChecker {
     this.config = config;
     this.healthCheckIntervalId = null;
     this.lastCheckTime = null;
-
-    // Use SimpleHealthChecker for periodic health checks
-    // API detection is done once at startup by BackendInfo
-    this.healthInterface = new SimpleHealthChecker(config.healthCheckTimeout);
   }
 
   /**
@@ -79,48 +86,41 @@ class HealthChecker {
   }
 
   /**
-   * Check a single backend's health using the interface pattern
-   * The interface knows how to detect API type and extract models
-   * @param {Object} backend - Backend object with url property
+   * Check a single backend's health using backend.checkHealth()
+   * Delegates to backend.healthChecker.check(this)
+   * @param {Backend} backend - Backend instance with healthChecker assigned
    */
   async checkBackend(backend) {
     const url = backend.url;
     console.log(`[${getTimestamp()}] [HealthChecker] Checking ${url}`);
 
     try {
-      // Use the health interface to check backend and update its capabilities
-      const result = await this.healthInterface.check(backend);
+      // ★ Insight ───────────────────────────────────────────────────
+      // Use backend's own checkHealth method which delegates to the
+      // assigned healthChecker. This ensures we use the correct
+      // endpoint/port discovered at startup.
+      // ──────────────────────────────────────────────────────────────
+      const result = await backend.checkHealth();
 
       if (result.healthy) {
-        // Update backend state from interface result
+        // Update backend state from check result
         backend.healthy = true;
         backend.failCount = 0;
 
         // Log with detected API types and models
-        const apiTypes = backend.capabilities?.apiTypes || [];
-        console.log(`[${getTimestamp()}] [HealthChecker] Backend healthy: ${url} (${apiTypes.join(', ')}) - models:`, result.models);
+        const apiTypes = backend.getApiTypes();
+        console.log(`[${getTimestamp()}] [HealthChecker] Backend healthy: ${url} (${apiTypes.join(', ')}) - models:`, result.models || []);
       } else {
         if (process.env.NODE_ENV !== 'test') {
           console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (${result.error || 'unknown error'})`);
         }
         backend.healthy = false;
         backend.failCount = (backend.failCount || 0) + 1;
-
-        // Clear models for unhealthy backends
-        if (!backend.capabilities) {
-          backend.capabilities = {};
-        }
-        backend.capabilities.models = [];
       }
     } catch (err) {
       console.error(`[${getTimestamp()}] [HealthChecker] Error checking ${url}:`, err.message);
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
-
-      if (!backend.capabilities) {
-        backend.capabilities = {};
-      }
-      backend.capabilities.models = [];
     }
   }
 

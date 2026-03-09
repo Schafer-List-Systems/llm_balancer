@@ -120,6 +120,7 @@ describe('Request Processor', () => {
     let mockBackend;
     let mockReq;
     let mockRes;
+    let mockConfig;
 
     beforeEach(() => {
       // Create mock balancer
@@ -137,6 +138,11 @@ describe('Request Processor', () => {
         priority: 5,
         activeRequestCount: 0,
         maxConcurrency: 10
+      };
+
+      // Create mock config
+      mockConfig = {
+        requestTimeout: 5000
       };
 
       // Create mock request
@@ -163,7 +169,7 @@ describe('Request Processor', () => {
     });
 
     it('should mark backend as busy before processing', () => {
-      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, jest.fn());
+      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, jest.fn(), mockConfig);
 
       // After processRequest, activeRequestCount is incremented by 1 (not set to maxConcurrency)
       expect(mockBackend.activeRequestCount).toBe(1);
@@ -173,7 +179,7 @@ describe('Request Processor', () => {
       mockReq.is = () => false;
 
       const onComplete = jest.fn();
-      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete);
+      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete, mockConfig);
 
       // After processRequest, activeRequestCount is incremented by 1
       expect(mockBackend.activeRequestCount).toBe(1);
@@ -184,7 +190,7 @@ describe('Request Processor', () => {
       mockReq.headers['content-type'] = 'application/json/stream';
 
       const onComplete = jest.fn();
-      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete);
+      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete, mockConfig);
 
       // After processRequest, activeRequestCount is incremented by 1
       expect(mockBackend.activeRequestCount).toBe(1);
@@ -213,7 +219,7 @@ describe('Request Processor', () => {
         onEnd();
       });
 
-      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, jest.fn());
+      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, jest.fn(), mockConfig);
 
       // Wait for trackDebugRequest to be called
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -283,9 +289,12 @@ describe('Request Processor', () => {
       };
 
       const onComplete = jest.fn();
+      const mockConfig = {
+        requestTimeout: 5000
+      };
 
       // Start the request
-      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete);
+      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete, mockConfig);
 
       // Wait for the request to complete
       setTimeout(() => {

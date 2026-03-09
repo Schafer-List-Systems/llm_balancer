@@ -5,7 +5,14 @@ const { URL } = require('url');
 const configModule = require('./config');
 const Balancer = require('./balancer');
 const HealthChecker = require('./health-check');
+const Backend = require('./backends/Backend');
 const { processRequest, extractModelsFromRequest } = require('./request-processor');
+
+// Health check implementations
+const OllamaHealthCheck = require('./interfaces/implementations/OllamaHealthCheck');
+const OpenAIHealthCheck = require('./interfaces/implementations/OpenAIHealthCheck');
+const AnthropicHealthCheck = require('./interfaces/implementations/AnthropicHealthCheck');
+const GoogleHealthCheck = require('./interfaces/implementations/GoogleHealthCheck');
 
 const app = express();
 const config = configModule.loadConfig();
@@ -25,9 +32,19 @@ app.use((req, res, next) => {
 const BackendInfo = require('./capability-detector');
 const backendInfo = new BackendInfo(config.healthCheckTimeout);
 
-// Initialize load balancer and health checker
-const balancer = new Balancer(config.backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
-const healthChecker = new HealthChecker(config.backends, config);
+// ★ Insight ─────────────────────────────────────────────────────
+// Convert config backends to Backend instances
+// Each Backend contains: url, state, backendInfo, and healthChecker
+// This follows composition over duplication - BackendInfo is attached
+// directly to Backend rather than copied to capabilities.
+// ──────────────────────────────────────────────────────────────────
+const backends = config.backends.map(backendConfig => {
+  return new Backend(backendConfig.url, backendConfig.maxConcurrency);
+});
+
+// Initialize load balancer and health checker with Backend instances
+const balancer = new Balancer(backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
+const healthChecker = new HealthChecker(backends, config);
 
 // Middleware to parse JSON bodies
 app.use(express.json({
@@ -315,20 +332,20 @@ app.get('/', (req, res) => {
 
   res.json({
     service: 'LLM Balancer',
-    version: '2.0.0',
+    version: config.version,
     status: 'running',
     port: config.port,
     backends: stats.totalBackends,
     healthy: stats.healthyBackends,
     unhealthy: stats.unhealthyBackends,
-    busyBackends: config.backends.filter(b => b.activeRequestCount > 0).length,
-    idleBackends: config.backends.filter(b => b.activeRequestCount === 0).length,
-    backendUrls: config.backends.map(b => b.url),
+    busyBackends: backends.filter(b => b.activeRequestCount > 0).length,
+    idleBackends: backends.filter(b => b.activeRequestCount === 0).length,
+    backendUrls: backends.map(b => b.url),
     healthCheckInterval: config.healthCheckInterval,
-    overloadedBackends: config.backends.filter(
+    overloadedBackends: backends.filter(
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
-    availableBackends: config.backends.filter(
+    availableBackends: backends.filter(
       b => b.healthy && b.activeRequestCount < b.maxConcurrency
     ).length,
     routes: {
@@ -363,14 +380,14 @@ app.get('/health', (req, res) => {
     backends: healthStats.backends,
     hasHealthyBackends: balancer.hasHealthyBackends(),
     // Add: Backend concurrency information
-    overloadedBackends: config.backends.filter(
+    overloadedBackends: backends.filter(
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
-    availableBackends: config.backends.filter(
+    availableBackends: backends.filter(
       b => b.healthy && b.activeRequestCount < b.maxConcurrency
     ).length,
-    busyBackends: config.backends.filter(b => b.activeRequestCount > 0).length,
-    idleBackends: config.backends.filter(b => b.activeRequestCount === 0).length
+    busyBackends: backends.filter(b => b.activeRequestCount > 0).length,
+    idleBackends: backends.filter(b => b.activeRequestCount === 0).length
   });
 });
 
@@ -393,15 +410,15 @@ app.get('/stats', (req, res) => {
       queueTimeout: config.queueTimeout
     },
     // Add: Backend concurrency counts
-    overloadedBackends: config.backends.filter(
+    overloadedBackends: backends.filter(
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
-    availableBackends: config.backends.filter(
+    availableBackends: backends.filter(
       b => b.healthy && b.activeRequestCount < b.maxConcurrency
     ).length,
-    busyBackends: config.backends.filter(b => b.activeRequestCount > 0).length,
-    idleBackends: config.backends.filter(b => b.activeRequestCount === 0).length,
-    backendDetails: config.backends.map(b => ({
+    busyBackends: backends.filter(b => b.activeRequestCount > 0).length,
+    idleBackends: backends.filter(b => b.activeRequestCount === 0).length,
+    backendDetails: backends.map(b => ({
       url: b.url,
       priority: b.priority || 0,
       healthy: b.healthy,
@@ -409,7 +426,9 @@ app.get('/stats', (req, res) => {
       maxConcurrency: b.maxConcurrency,
       utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
       requestCount: b.requestCount,
-      errorCount: b.errorCount
+      errorCount: b.errorCount,
+      apiTypes: b.getApiTypes(),
+      primaryApiType: b.getPrimaryApiType()
     })),
     // Add: Queue statistics
     queueStats: balancer.getAllQueueStats()
@@ -421,11 +440,9 @@ app.get('/stats', (req, res) => {
  */
 app.get('/backends', (req, res) => {
   res.json({
-    backends: config.backends.map(b => {
-      const caps = b.capabilities || {};
-      // Flatten models from all API types
-      const allModels = Object.values(caps.models || {}).flat();
-      const apiTypes = Array.isArray(caps.apiTypes) ? caps.apiTypes : (caps.apiType ? [caps.apiType] : []);
+    backends: backends.map(b => {
+      const apiTypes = b.getApiTypes();
+      const allModels = Object.values(b.getAllModels()).flat();
 
       return {
         url: b.url,
@@ -438,7 +455,13 @@ app.get('/backends', (req, res) => {
         requestCount: b.requestCount || 0,
         errorCount: b.errorCount || 0,
         apiTypes: apiTypes,
-        models: allModels
+        models: allModels,
+        primaryApiType: b.getPrimaryApiType(),
+        backendInfo: b.backendInfo ? {
+          endpoints: b.backendInfo.endpoints,
+          models: b.backendInfo.models,
+          detectedAt: b.backendInfo.detectedAt
+        } : null
       };
     })
   });
@@ -529,11 +552,13 @@ app.get('/models/check', (req, res) => {
   const backendSupports = {};
   for (const model of requestedModels) {
     const supportingBackends = [];
-    for (const backend of config.backends) {
-      if (backend.healthy && (backend.capabilities?.models || []).includes(model)) {
+    for (const backend of backends) {
+      if (backend.healthy && backend.getModels('openai').includes(model) ||
+          backend.getModels('ollama').includes(model) ||
+          backend.getModels('google').includes(model)) {
         supportingBackends.push({
           url: backend.url,
-          id: backend.id,
+          id: backend.url, // Backend doesn't have id field, use URL
           priority: backend.priority || 0
         });
       }
@@ -623,7 +648,7 @@ app.post('/debug/clear', (req, res) => {
  */
 app.get('/health/:backendUrl', (req, res) => {
   const { backendUrl } = req.params;
-  const backend = config.backends.find(b => b.url === backendUrl);
+  const backend = backends.find(b => b.url === backendUrl);
 
   if (!backend) {
     return res.status(404).json({
@@ -632,46 +657,38 @@ app.get('/health/:backendUrl', (req, res) => {
     });
   }
 
-  // Perform single health check
-  const { URL } = require('url');
-  const parsedUrl = new URL(backendUrl);
-  const options = {
-    hostname: parsedUrl.hostname,
-    port: parsedUrl.port || 11434,
-    path: '/api/tags',
-    method: 'GET'
-  };
-
-  http.request(options, (res) => {
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      backend.healthy = true;
-      backend.failCount = 0;
-      res.json({
-        backend: backendUrl,
-        healthy: true,
-        status: res.statusCode
-      });
-    } else {
+  // Perform single health check using backend.checkHealth()
+  backend.checkHealth()
+    .then(result => {
+      if (result.healthy) {
+        backend.healthy = true;
+        backend.failCount = 0;
+        res.json({
+          backend: backendUrl,
+          healthy: true,
+          status: result.statusCode,
+          models: result.models || []
+        });
+      } else {
+        backend.healthy = false;
+        backend.failCount = (backend.failCount || 0) + 1;
+        res.status(502).json({
+          backend: backendUrl,
+          healthy: false,
+          status: result.statusCode,
+          error: result.error
+        });
+      }
+    })
+    .catch(err => {
       backend.healthy = false;
       backend.failCount = (backend.failCount || 0) + 1;
       res.status(502).json({
         backend: backendUrl,
         healthy: false,
-        status: res.statusCode
+        error: err.message
       });
-    }
-    res.resume();
-  })
-  .on('error', (err) => {
-    backend.healthy = false;
-    backend.failCount = (backend.failCount || 0) + 1;
-    res.status(502).json({
-      backend: backendUrl,
-      healthy: false,
-      error: err.message
     });
-  })
-  .end();
 });
 
 /**
@@ -700,36 +717,77 @@ app.use((err, req, res, next) => {
  */
 async function startServer() {
   // Phase 1: Detect backend capabilities before health checks begin
-  console.debug(`[${getTimestamp()}] [Startup] Starting capability detection for ${config.backends.length} backends...`);
+  console.debug(`[${getTimestamp()}] [Startup] Starting capability detection for ${backends.length} backends...`);
 
   try {
-    const urls = config.backends.map(b => b.url);
+    const urls = backends.map(b => b.url);
     const backendInfoMap = await backendInfo.getInfoAll(urls);
 
-    // Store detected backend info on backend objects immediately
+    // ★ Insight ───────────────────────────────────────────────────
+    // Attach BackendInfo directly to Backend instances
+    // Then assign health checker based on primary API type
+    // This follows the delegation pattern - Backend delegates health
+    // checking to its assigned healthChecker
+    // ──────────────────────────────────────────────────────────────
     for (const url in backendInfoMap) {
-      const info = backendInfoMap[url];
-      const backend = config.backends.find(b => b.url === url);
-      if (backend && !backend.capabilities) {
-        backend.capabilities = {};
+      const backendInfo = backendInfoMap[url];
+      const backend = backends.find(b => b.url === url);
+
+      if (!backend) {
+        console.warn(`[${getTimestamp()}] [Startup] Backend not found for URL: ${url}`);
+        continue;
       }
 
-      if (info.healthy && Object.keys(info.apis).length > 0) {
-        // Convert new format to backward-compatible format
-        const apiTypes = Object.keys(info.apis).filter(api => info.apis[api].supported);
-        console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API types: ${apiTypes.join(', ')}, models:`, info.models);
-        if (backend && backend.capabilities) {
-          backend.capabilities.apiTypes = apiTypes;
-          backend.capabilities.models = Object.values(info.models).flat();
-          backend.capabilities.endpoints = info.endpoints;
-          backend.capabilities.detectedAt = info.detectedAt;
+      // Attach BackendInfo directly to backend instance (composition)
+      backend.backendInfo = backendInfo;
+
+      if (backendInfo.healthy && Object.keys(backendInfo.apis).length > 0) {
+        // Find supported API types
+        const supportedApiTypes = Object.keys(backendInfo.apis).filter(
+          api => backendInfo.apis[api].supported
+        );
+
+        console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Detected API types: ${supportedApiTypes.join(', ')}, models:`, backendInfo.models);
+
+        // ★ Insight ───────────────────────────────────────────────────
+        // Primary API Selection: When a backend supports multiple APIs,
+        // choose the first supported API as the primary. This simplifies
+        // health checker assignment while ensuring accurate health checks.
+        // ──────────────────────────────────────────────────────────────
+        const primaryApiType = supportedApiTypes[0];
+
+        // Assign health checker based on primary API type
+        switch (primaryApiType) {
+          case 'ollama':
+            backend.healthChecker = new OllamaHealthCheck(config.healthCheckTimeout);
+            console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OllamaHealthCheck`);
+            break;
+          case 'openai':
+          case 'groq':
+            backend.healthChecker = new OpenAIHealthCheck(config.healthCheckTimeout);
+            console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OpenAIHealthCheck`);
+            break;
+          case 'anthropic':
+            backend.healthChecker = new AnthropicHealthCheck(config.healthCheckTimeout);
+            console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned AnthropicHealthCheck`);
+            break;
+          case 'google':
+            backend.healthChecker = new GoogleHealthCheck(config.healthCheckTimeout);
+            console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned GoogleHealthCheck`);
+            break;
+          default:
+            // Fallback to OpenAI health check if unknown API type
+            backend.healthChecker = new OpenAIHealthCheck(config.healthCheckTimeout);
+            console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Unknown primary API ${primaryApiType}, using OpenAIHealthCheck`);
         }
-      } else if (info.error) {
-        console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${info.error}`);
+      } else if (backendInfo.error) {
+        console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${backendInfo.error}`);
+        // Still assign a health checker for potential recovery
+        backend.healthChecker = new OpenAIHealthCheck(config.healthCheckTimeout);
       }
     }
 
-    // Phase 2: Start health checker with pre-populated capabilities
+    // Phase 2: Start health checker with assigned health checkers
     console.debug(`[${getTimestamp()}] [Startup] Starting health checker...`);
     healthChecker.start();
 
@@ -741,13 +799,14 @@ async function startServer() {
       if (config.debug) {
         console.log(`[Balancer] In DEBUG mode`);
       }
-      console.log(`Backends (${config.backends.length}):`);
-      config.backends.forEach((backend, i) => {
-        const apiTypes = backend.capabilities?.apiTypes || [];
-        const modelCount = backend.capabilities?.models?.length || 0;
+      console.log(`Backends (${backends.length}):`);
+      backends.forEach((backend, i) => {
+        const apiTypes = backend.getApiTypes();
+        const modelCount = Object.values(backend.getAllModels()).flat().length;
         const status = backend.healthy ? '✓' : '✗';
         const apiTypeStr = apiTypes.length > 0 ? apiTypes.join(', ') : 'none';
-        console.log(`  ${i + 1}. ${backend.url} (${apiTypeStr}, ${modelCount} models) ${status}`);
+        const primaryApi = backend.getPrimaryApiType() || 'none';
+        console.log(`  ${i + 1}. ${backend.url} (${apiTypeStr}, ${modelCount} models, primary: ${primaryApi}) ${status}`);
       });
       console.log(`\nRoutes:`);
       console.log(`  OpenAI API:     /v1/chat/completions*`);

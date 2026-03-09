@@ -137,7 +137,8 @@ class BackendSelector {
 
       stats.healthyBackends++;
 
-      const backendModels = backend.capabilities?.models || [];
+      const apiTypes = backend.getApiTypes();
+      const backendModels = apiTypes.length > 0 ? backend.getModels(apiTypes[0]) : [];
       stats.modelsPerBackend[backend.url] = backendModels;
 
       for (const model of backendModels) {
@@ -169,7 +170,8 @@ class BackendSelector {
     const modelList = typeof models === 'string' ? [models] : Array.isArray(models) ? models : [models];
 
     return candidates.filter(backend => {
-      const backendModels = backend.capabilities?.models || [];
+      const apiTypes = backend.getApiTypes();
+      const backendModels = apiTypes.length > 0 ? backend.getModels(apiTypes[0]) : [];
       return ModelMatcher.matches(modelList, backendModels);
     });
   }
