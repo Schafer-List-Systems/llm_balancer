@@ -132,24 +132,14 @@ class HealthChecker {
     const healthyBackends = this.backends.filter(b => b.healthy);
     const unhealthyBackends = this.backends.filter(b => !b.healthy);
 
-    // Add API type info to backend stats if available
-    const backendsWithInfo = this.backends.map(b => {
-      const caps = b.capabilities || {};
-      const apiTypes = Array.isArray(caps.apiTypes) ? caps.apiTypes : (caps.apiType ? [caps.apiType] : []);
-      const allModels = Object.values(caps.models || {}).flat();
-      const firstApiType = apiTypes.length > 0 ? apiTypes[0] : 'unknown';
-
-      return {
-        url: b.url,
-        healthy: b.healthy,
-        apiType: firstApiType,
-        apiTypes: apiTypes,
-        models: allModels,
-        activeRequestCount: b.activeRequestCount,
-        maxConcurrency: b.maxConcurrency,
-        failCount: b.failCount || 0
-      };
-    });
+    // Health-only backend info
+    const backendsWithStats = this.backends.map(b => ({
+      url: b.url,
+      healthy: b.healthy,
+      activeRequestCount: b.activeRequestCount,
+      maxConcurrency: b.maxConcurrency,
+      failCount: b.failCount || 0
+    }));
 
     return {
       totalBackends: this.backends.length,
@@ -158,7 +148,7 @@ class HealthChecker {
       lastCheck: this.lastCheckTime,
       interval: this.config.healthCheckInterval,
       timeout: this.config.healthCheckTimeout,
-      backends: backendsWithInfo
+      backends: backendsWithStats
     };
   }
 

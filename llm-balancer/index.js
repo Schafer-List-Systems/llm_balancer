@@ -350,7 +350,7 @@ app.get('/', (req, res) => {
  * Route: Health check with backend status
  */
 app.get('/health', (req, res) => {
-  const stats = balancer.getStats();
+  const healthStats = healthChecker.getStats();
 
   res.json({
     status: 'ok',
@@ -358,9 +358,9 @@ app.get('/health', (req, res) => {
     port: config.port,
     maxPayloadSize: config.maxPayloadSize,
     maxPayloadSizeMB: config.maxPayloadSizeMB,
-    healthyBackends: stats.healthyBackends,
-    totalBackends: stats.totalBackends,
-    backends: stats.backends,
+    healthyBackends: healthStats.healthyBackends,
+    totalBackends: healthStats.totalBackends,
+    backends: healthStats.backends,
     hasHealthyBackends: balancer.hasHealthyBackends(),
     // Add: Backend concurrency information
     overloadedBackends: config.backends.filter(
@@ -423,12 +423,9 @@ app.get('/backends', (req, res) => {
   res.json({
     backends: config.backends.map(b => {
       const caps = b.capabilities || {};
-      // Flatten models from all API types for backward compatibility
+      // Flatten models from all API types
       const allModels = Object.values(caps.models || {}).flat();
-      // Get first API type for backward compatibility
-      const firstApiType = Array.isArray(caps.apiTypes) && caps.apiTypes.length > 0
-        ? caps.apiTypes[0]
-        : caps.apiType || 'unknown';
+      const apiTypes = Array.isArray(caps.apiTypes) ? caps.apiTypes : (caps.apiType ? [caps.apiType] : []);
 
       return {
         url: b.url,
@@ -440,9 +437,8 @@ app.get('/backends', (req, res) => {
         failCount: b.failCount || 0,
         requestCount: b.requestCount || 0,
         errorCount: b.errorCount || 0,
-        apiTypes: Array.isArray(caps.apiTypes) ? caps.apiTypes : (caps.apiType ? [caps.apiType] : []),
-        models: allModels,
-        apiType: firstApiType
+        apiTypes: apiTypes,
+        models: allModels
       };
     })
   });
