@@ -138,10 +138,10 @@ class CapabilityDetector {
       // Handle endpoints without model lists (e.g., /v1/messages)
       const formatKey = apiConfig.formatKey;
       if (formatKey === null) {
-        // For endpoints like /v1/messages, any response means the endpoint exists
-        // Even validation errors (400) mean the API is available
-        if (res.statusCode >= 200 && res.statusCode < 500) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (no model list)`);
+        // For endpoints like /v1/messages, only 2xx means API is available
+        // 400 = validation error (API exists but params wrong), 404 = endpoint doesn't exist
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available`);
           return {
             healthy: true,
             apiType: apiConfig.type,
@@ -149,9 +149,20 @@ class CapabilityDetector {
             statusCode: res.statusCode
           };
         }
+        // 400 validation error means endpoint exists but needs proper params
+        if (res.statusCode === 400 && data.error) {
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (validation error)`);
+          return {
+            healthy: true,
+            apiType: apiConfig.type,
+            models: [],
+            statusCode: res.statusCode
+          };
+        }
+        // 404 or other errors mean endpoint doesn't exist
         return {
           healthy: false,
-          error: 'Endpoint not available',
+          error: res.statusCode === 404 ? 'Endpoint not found' : 'Endpoint error',
           apiType: apiConfig.type,
           statusCode: res.statusCode,
           models: []
@@ -177,10 +188,21 @@ class CapabilityDetector {
           statusCode: res.statusCode
         };
       } else {
-        // For endpoints like /chat/completions, any response (even error) means the endpoint exists
-        // A 400 validation error means the API is available but missing required params
-        if (res.statusCode >= 200 && res.statusCode < 500) {
-          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (validation error means API exists)`);
+        // Check for error responses even with 200 status (proxy behavior)
+        if (data.error) {
+          console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint not available (error: ${data.error})`);
+          return {
+            healthy: false,
+            error: data.error,
+            apiType: apiConfig.type,
+            statusCode: res.statusCode,
+            models: []
+          };
+        }
+        // For /chat/completions, 2xx means API available, 400 means endpoint exists but needs params
+        // 404 means endpoint doesn't exist
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available`);
           return {
             healthy: true,
             apiType: apiConfig.type,
@@ -188,24 +210,20 @@ class CapabilityDetector {
             statusCode: res.statusCode
           };
         }
-
-        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: Unexpected response format for ${apiConfig.type}. Body keys:`, Object.keys(data));
-
-        // If Ollama returned error message, suggest OpenAI fallback
-        if (apiConfig.type === 'ollama' && data.error) {
+        if (res.statusCode === 400 && data.error) {
+          console.log(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint available (validation error)`);
           return {
-            healthy: false,
-            error: `Ollama error: ${data.error}`,
-            apiType: 'ollama',
-            statusCode: res.statusCode,
-            shouldFallback: true,
-            models: []
+            healthy: true,
+            apiType: apiConfig.type,
+            models: [],
+            statusCode: res.statusCode
           };
         }
-
+        // 404 or other errors mean endpoint doesn't exist
+        console.warn(`[${getTimestamp()}] [CapabilityDetector] ${res.req.path}: ${apiConfig.type} endpoint not available (status ${res.statusCode})`);
         return {
-          healthy: res.statusCode >= 200 && res.statusCode < 300,
-          error: 'Unexpected response format',
+          healthy: false,
+          error: res.statusCode === 404 ? 'Endpoint not found' : 'Endpoint error',
           apiType: apiConfig.type,
           statusCode: res.statusCode,
           models: []
