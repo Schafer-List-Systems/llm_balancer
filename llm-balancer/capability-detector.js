@@ -64,6 +64,9 @@ class BackendInfo {
         hasModels: false
       }
     ];
+
+    // Store discovered models for use in POST probes
+    this.discoveredModels = {};
   }
 
   /**
@@ -144,7 +147,20 @@ class BackendInfo {
           // 2xx = endpoint exists and works
           // 400 = endpoint exists but request params wrong (API supported)
           // 404 = endpoint doesn't exist (API not supported)
-          const isSupported = res.statusCode >= 200 && res.statusCode < 300 || res.statusCode === 400;
+          // For POST requests, 404 could also mean "model not found" - we need to handle this
+          let isSupported = res.statusCode >= 200 && res.statusCode < 300 || res.statusCode === 400;
+
+          // If 404 on POST, try with a real model from discovered models
+          if (res.statusCode === 404 && probe.method === 'POST') {
+            const models = this.discoveredModels[url] || [];
+            if (models.length > 0) {
+              console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: 404 on POST, retrying with real model: ${models[0]}`);
+              this.probeWithModel(url, probe, models[0], (retryResult) => {
+                resolve(retryResult);
+              });
+              return;
+            }
+          }
 
           resolve({
             success: isSupported,
@@ -189,6 +205,80 @@ class BackendInfo {
 
       req.end();
     });
+  }
+
+  /**
+   * Retry POST probe with a real model name
+   * @param {string} url - Backend URL
+   * @param {Object} probe - Probe configuration
+   * @param {string} model - Real model name to use
+   * @param {Function} callback - Callback with result
+   */
+  probeWithModel(url, probe, model, callback) {
+    const parsedUrl = new URL(url);
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || 11434,
+      path: probe.endpoint,
+      method: probe.method,
+      timeout: this.timeout
+    };
+
+    const req = http.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => { body += chunk.toString(); });
+      res.on('end', () => {
+        let responseBody = null;
+        try {
+          responseBody = JSON.parse(body);
+        } catch (e) {
+          responseBody = { raw: body };
+        }
+
+        // For POST probes, 2xx or 400 means API is supported
+        const isSupported = res.statusCode >= 200 && res.statusCode < 300 || res.statusCode === 400;
+
+        callback({
+          success: isSupported,
+          statusCode: res.statusCode,
+          body: responseBody,
+          apiType: probe.apiType
+        });
+      });
+      res.resume();
+    });
+
+    req.on('error', (err) => {
+      console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: Retry connection error:`, err.message);
+      callback({
+        success: false,
+        error: err.message,
+        apiType: probe.apiType
+      });
+    });
+
+    req.on('timeout', () => {
+      console.warn(`[${getTimestamp()}] [BackendInfo] ${url} [${probe.apiType}]: Retry timeout`);
+      req.destroy();
+      callback({
+        success: false,
+        error: 'Timeout',
+        apiType: probe.apiType
+      });
+    });
+
+    // Add POST body with real model
+    const postBody = JSON.stringify({
+      model: model,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'hi' }]
+    });
+    req.setHeader('Content-Type', 'application/json');
+    req.setHeader('Content-Length', Buffer.byteLength(postBody));
+    req.write(postBody);
+
+    req.end();
   }
 
   /**
@@ -241,6 +331,8 @@ class BackendInfo {
             const models = this.extractModels(result.body, probe.jsonPath);
             info.apis[probe.apiType].models = models;
             info.models[probe.apiType] = models;
+            // Store discovered models for use in POST probes
+            this.discoveredModels[url] = models;
             console.log(`[${getTimestamp()}] [BackendInfo] ${url}: Found ${models.length} model(s) via ${probe.endpoint}`);
           }
         }
