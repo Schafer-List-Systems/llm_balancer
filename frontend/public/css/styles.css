@@ -423,6 +423,11 @@ body {
   color: white;
 }
 
+.api-badge.groq {
+  background-color: #06b6d4;
+  color: white;
+}
+
 /* Health value styling */
 .info-value.healthy {
   color: #10b981;

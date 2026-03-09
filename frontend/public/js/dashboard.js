@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="card-icon" style="background-color: #d1fae5; color: #065f46;">✅</div>
             <div class="card-content">
               <span class="card-title" id="availableBackends">-</span>
-              <span class="card-subtitle">Available</span>
+              <span class="card-subtitle">Ready for Requests</span>
             </div>
           </div>
         </section>
@@ -243,7 +243,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('healthyBackends').textContent = healthData.healthyBackends || 0;
     document.getElementById('unhealthyBackends').textContent = healthData.totalBackends - (healthData.healthyBackends || 0);
     document.getElementById('busyBackends').textContent = healthData.busyBackends || 0;
-    document.getElementById('availableBackends').textContent = healthData.idleBackends || 0;
+    // Available = healthy backends that can still take requests (not at max concurrency)
+    document.getElementById('availableBackends').textContent = healthData.availableBackends || healthData.healthyBackends || 0;
 
     // Update connection status
     const connectionStatus = document.getElementById('connectionStatus');
