@@ -123,30 +123,6 @@ class ModelMatcher {
 
     return { matched: false, backend: null, actualModel: null, patternIndex: -1 };
   }
-
-  /**
-   * Check if a backend supports the requested models using exact string matching (backward compatible)
-   * @deprecated Use findBestMatchAcrossBackends for regex support. This method is kept for backward compatibility.
-   * @param {string|string[]} requestedModels - Single model string or array of model strings
-   * @param {string[]} availableModels - Array of models provided by the backend
-   * @returns {boolean} True if at least one requested model is supported
-   */
-  static matches(requestedModels, availableModels) {
-    // Normalize to arrays for consistent handling
-    const requestList = Array.isArray(requestedModels) ? requestedModels : [requestedModels];
-    const backendList = Array.isArray(availableModels) ? availableModels : [];
-
-    // Phase 1: Exact string matching (current implementation)
-    // Returns true if ANY requested model matches ANY backend model exactly
-    for (const requested of requestList) {
-      if (!requested || typeof requested !== 'string') continue;
-      if (backendList.includes(requested)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
 }
 
 /**
