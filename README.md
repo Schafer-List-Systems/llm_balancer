@@ -8,6 +8,7 @@ The LLM Balancer provides priority-based load balancing across multiple backend 
 
 - **Multi-API Support**: Auto-detects OpenAI, Anthropic, Google Gemini, and Ollama APIs
 - **Priority-Based Selection**: Configurable priority levels for backend servers
+- **Flexible Model Matching**: Regex patterns for matching models across backends with different naming conventions
 - **Concurrency Limiting**: Configurable max parallel requests per backend
 - **Health Monitoring**: Automatic failure detection and recovery
 - **Request Queuing**: FIFO queueing when backends are at capacity

@@ -83,6 +83,132 @@ BACKEND_PRIORITY_2=0
 3. Requests are first routed to the highest priority tier
 4. If no backend is available in a tier, immediately fall back to the next lower tier
 
+---
+
+### Model Matching with Regular Expressions
+
+The balancer supports flexible model name matching using regular expressions. This is particularly useful when different backends provide models with different naming conventions (e.g., `llama3` vs `llama-3`, `qwen2.5` vs `qwen-2.5`).
+
+#### How Model Matching Works
+
+By default, the balancer uses **exact string matching** for model names. When you request a specific model, only backends that have an exact match are considered. With regex patterns, you can specify flexible matching criteria using comma-separated patterns:
+
+```bash
+# Request any llama3 variant OR qwen2.5 variant
+"model": "llama3,qwen2.5"
+
+# Use regex patterns for broader matching
+"model": "^llama.*|^qwen.*"
+
+# Wildcard to match any available model
+"model": ".*"
+```
+
+#### Pattern Precedence Rules
+
+Patterns are evaluated in **order of precedence** (first pattern = highest priority):
+
+1. The balancer evaluates patterns from left to right
+2. For each pattern, it checks ALL healthy backends before moving to the next pattern
+3. The first pattern that matches any backend wins, regardless of backend priority
+4. Only if no backends match a pattern does it proceed to the next one
+
+**Example:** Requesting `"llama3,qwen2.5"`:
+- First, check all backends for models matching `llama3`
+- If found, route to that backend (even if qwen2.5 backend has higher priority)
+- Only if no llama3 match is found, try matching `qwen2.5`
+
+#### Regex Pattern Syntax
+
+The balancer uses standard JavaScript regular expressions:
+
+| Pattern | Description | Example Match |
+|---------|-------------|---------------|
+| `exact` | Exact model name match | `llama3` → only "llama3" |
+| `.*` | Wildcard (any characters) | `.*` → any model name |
+| `^prefix.*` | Starts with prefix | `^llama.*` → llama3, llama-3-8b, Llama-2 |
+| `.*suffix$` | Ends with suffix | `.*70B$` → llama-3-70b, mistral-7b-70B |
+| `pattern1\|pattern2` | Alternation (OR) | `llama.*\|^qwen.*` → any llama OR qwen models |
+
+#### Practical Scenarios
+
+**Scenario 1: Handling Different Naming Conventions**
+
+Different backends may use different naming for the same model family:
+- Backend A has: `Llama-3-70B`, `Mistral-7B-v0.3`
+- Backend B has: `llama3`, `mistral`
+
+Use flexible patterns to match all variants:
+
+```bash
+# Match both naming styles for llama and mistral
+"model": "llama.*|^Llama.*,mistral.*|^Mistral.*"
+```
+
+**Scenario 2: Primary and Fallback Models**
+
+Specify preferred models with fallback options:
+
+```javascript
+// Prefer llama3 variants, fall back to qwen if no llama available
+{
+  "model": "^llama.*",
+  "messages": [...]
+}
+```
+
+If no backend has a model matching `^llama.*`, the balancer can try additional patterns.
+
+**Scenario 3: Catch-All for Any Available Model**
+
+When you don't care which specific model is used, just want any available one:
+
+```javascript
+{
+  "model": ".*",
+  "messages": [...]
+}
+// Routes to highest priority backend with any model
+```
+
+#### Request Body Handling
+
+When a regex pattern matches a backend's model, the balancer **automatically replaces** the requested model string with the actual model name from that backend:
+
+**Request:**
+```json
+{
+  "model": "^llama.*",
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+```
+
+**Forwarded to Backend (if llama-3-8b matched):**
+```json
+{
+  "model": "llama-3-8b",
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+```
+
+This ensures the backend receives a valid model name it actually supports.
+
+#### Invalid Pattern Handling
+
+If an invalid regex pattern is provided, the balancer:
+1. Logs a warning with the error message
+2. Skips that pattern and tries the next one
+3. Continues until a valid match is found or all patterns are exhausted
+
+**Example:**
+```bash
+# Invalid pattern (unclosed bracket) - will be skipped gracefully
+"model": "[invalid,llama3"
+# Falls back to matching "llama3" as exact string
+```
+
+---
+
 ### Concurrency-Based Load Limiting
 
 Configure maximum parallel requests per backend:

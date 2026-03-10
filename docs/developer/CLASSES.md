@@ -140,6 +140,198 @@ apis: {
 
 ---
 
+### ModelMatcher Class
+
+**File**: `llm-balancer/backend-selector.js`
+
+**Purpose**: Provides flexible model name matching using regular expressions with priority-first evaluation across all backends. Enables routing based on pattern matching rather than exact string matches only.
+
+**Key Features:**
+- Parses comma-separated regex patterns preserving order of precedence
+- Evaluates patterns globally across all healthy backends before moving to next pattern
+- Returns first matched model with backend reference and pattern index
+- Gracefully handles invalid regex patterns by skipping them
+- Maintains backward compatibility with exact string matching
+
+**Static Methods:**
+
+| Method | Parameters | Returns | Description |
+|--------|------------|---------|-------------|
+| `parseModelString()` | `modelString: string` | `string[]` | Split comma-separated patterns into ordered array |
+| `findBestMatchAcrossBackends()` | `requestedModels: string\|string[], allBackends: Backend[]` | `{ matched, backend, actualModel, patternIndex }` | Find best matching model using priority-first regex evaluation |
+| `matches()` | `requestList: string\|string[], backendList: string[]` | `boolean` | Check if any requested models match (exact or via regex) |
+
+#### parseModelString(modelString)
+
+Parses a comma-separated model string into an ordered array of patterns.
+
+**Input Examples:**
+```javascript
+parseModelString('llama3,qwen2.5,mistral')
+// Returns: ['llama3', 'qwen2.5', 'mistral']
+
+parseModelString('^llama.*|^qwen.*,^mistral.*')
+// Returns: ['^llama.*|^qwen.*', '^mistral.*']  // Alternation preserved within pattern
+
+parseModelString(' llama3 , qwen2.5 ')
+// Returns: ['llama3', 'qwen2.5']  // Whitespace trimmed
+```
+
+**Behavior:**
+- Splits string by comma delimiter
+- Trims whitespace from each pattern
+- Filters out empty strings
+- Preserves order (index = precedence level)
+- Returns empty array for invalid input (null, undefined, empty string)
+
+#### findBestMatchAcrossBackends(requestedModels, allBackends)
+
+Core matching algorithm using priority-first evaluation.
+
+**Parameters:**
+- `requestedModels`: String or array of strings containing regex patterns
+- `allBackends`: Array of backend objects with `.healthy`, `.getApiTypes()`, and `.getModels(apiType)` methods
+
+**Return Value Structure:**
+```javascript
+{
+  matched: boolean,      // true if any pattern matched any backend model
+  backend: Backend|null, // The backend object that provided the match (null if no match)
+  actualModel: string|null, // The actual model name from backend (null if no match)
+  patternIndex: number   // Which pattern index matched (-1 if no match)
+}
+```
+
+**Priority-First Algorithm:**
+```javascript
+static findBestMatchAcrossBackends(requestedModels, allBackends) {
+  // 1. Normalize input to array of model strings
+  const modelList = typeof requestedModels === 'string'
+    ? [requestedModels]
+    : Array.isArray(requestedModels)
+      ? requestedModels
+      : [requestedModels];
+
+  if (modelList.length === 0 || !Array.isArray(allBackends)) {
+    return { matched: false, backend: null, actualModel: null, patternIndex: -1 };
+  }
+
+  // 2. Flatten all patterns from all requested models in order
+  const allPatterns = [];
+  for (const model of modelList) {
+    if (!model || typeof model !== 'string') continue;
+    const patterns = this.parseModelString(model);
+    allPatterns.push(...patterns);
+  }
+
+  // 3. Evaluate patterns in order (first = highest precedence)
+  for (let patternIndex = 0; patternIndex < allPatterns.length; patternIndex++) {
+    const pattern = allPatterns[patternIndex];
+
+    try {
+      const regex = new RegExp(pattern);
+
+      // 4. Check ALL backends with this pattern before moving to next pattern
+      for (const backend of allBackends) {
+        if (!backend.healthy || !backend.getApiTypes || !backend.getModels) continue;
+
+        const apiTypes = backend.getApiTypes();
+        for (const apiType of apiTypes) {
+          const backendModels = backend.getModels(apiType);
+
+          // 5. Find first model on this backend matching the pattern
+          for (const modelName of backendModels) {
+            if (regex.test(modelName)) {
+              return {
+                matched: true,
+                backend,
+                actualModel: modelName,
+                patternIndex
+              };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Invalid regex pattern "${pattern}":`, e.message);
+      continue; // Skip invalid patterns, try next
+    }
+  }
+
+  return { matched: false, backend: null, actualModel: null, patternIndex: -1 };
+}
+```
+
+**Key Behavior:**
+- **Pattern order overrides backend priority**: If pattern 0 matches any backend, it wins even if a later-pattern-matching backend has higher priority
+- **Global evaluation**: All backends are checked against each pattern before moving to the next pattern
+- **First match wins**: Returns immediately when first model matching current pattern is found
+- **Health filtering**: Only healthy backends with valid methods are considered
+- **Graceful error handling**: Invalid regex patterns are logged and skipped
+
+**Example Usage:**
+```javascript
+const backends = [
+  { url: 'http://backend1:11434', healthy: true, priority: 5, getApiTypes: () => ['openai'], getModels: (t) => ['qwen2.5'] },
+  { url: 'http://backend2:11434', healthy: true, priority: 10, getApiTypes: () => ['openai'], getModels: (t) => ['llama-3-8b'] }
+];
+
+// Request llama first, but qwen backend has higher priority
+const result = ModelMatcher.findBestMatchAcrossBackends('llama-.*', backends);
+// Returns: { matched: true, backend: <backend2>, actualModel: 'llama-3-8b', patternIndex: 0 }
+// Note: llama matched despite qwen backend having higher priority (pattern order wins)
+
+// No match scenario
+const result2 = ModelMatcher.findBestMatchAcrossBackends('nonexistent.*', backends);
+// Returns: { matched: false, backend: null, actualModel: null, patternIndex: -1 }
+```
+
+#### matches(requestList, backendList)
+
+Checks if any requested models match any backend model. Used for quick boolean matching without detailed result.
+
+**Parameters:**
+- `requestList`: String or array of request strings (exact names or patterns)
+- `backendList`: Array of model names available on the backend
+
+**Returns:** `boolean` - true if at least one requested model matches at least one backend model
+
+**Behavior:**
+- For each requested model, checks if it exists in the backend's model list
+- Uses exact string matching (backward compatible)
+- Returns true if ANY match found, false otherwise
+
+#### Integration with BackendSelector
+
+The `ModelMatcher` class is used by `BackendSelector.selectBackend()` when model filtering is required:
+
+```javascript
+// In BackendSelector.selectBackend()
+if (options.models) {
+  return this._selectBackendByPriorityFirst(candidates, options.models);
+}
+
+// _selectBackendByPriorityFirst uses ModelMatcher.findBestMatchAcrossBackends()
+static async _selectBackendByPriorityFirst(backends, models) {
+  const allPatterns = [];
+  for (const model of Array.isArray(models) ? models : [models]) {
+    allPatterns.push(...this.parseModelString(model));
+  }
+
+  // For each pattern in order...
+  for (const pattern of allPatterns) {
+    const match = ModelMatcher.findBestMatchAcrossBackends(pattern, backends);
+    if (match.matched) {
+      return this._getHighestPriorityBackendMatchingPattern(backends, pattern);
+    }
+  }
+
+  return null;
+}
+```
+
+---
+
 ### Balancer Class
 
 **File**: `llm-balancer/balancer.js`

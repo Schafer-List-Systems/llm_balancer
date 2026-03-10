@@ -312,6 +312,90 @@ Tracked request in debug history.
 
 ---
 
+### Model Matching with Regex Patterns
+
+The balancer supports flexible model name matching using regular expressions in the `model` field. This allows requests to match models across backends with different naming conventions.
+
+#### Regex Pattern Format
+
+Specify one or more regex patterns as comma-separated values:
+
+**Single Exact Match (backward compatible):**
+```json
+{
+  "model": "llama3",
+  "messages": [...]
+}
+// Routes only to backends with exact "llama3" model
+```
+
+**Multiple Patterns with Precedence:**
+```json
+{
+  "model": "llama3,qwen2.5,mistral",
+  "messages": [...]
+}
+// First tries to match "llama3", then "qwen2.5", then "mistral"
+// Pattern order determines precedence (first = highest priority)
+```
+
+**Regular Expression Patterns:**
+```json
+{
+  "model": "^llama.*|^qwen.*",
+  "messages": [...]
+}
+// Matches any model starting with "llama" OR "qwen"
+// First matching pattern wins across all backends
+```
+
+**Wildcard for Any Model:**
+```json
+{
+  "model": ".*",
+  "messages": [...]
+}
+// Routes to highest priority available backend with any model
+```
+
+#### Model Name Replacement Behavior
+
+When a regex pattern matches a backend's model, the balancer **automatically replaces** the requested pattern with the actual model name before forwarding:
+
+**Request Sent to Balancer:**
+```json
+{
+  "model": "^llama.*",
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+```
+
+**Forwarded to Backend (if llama-3-8b matched):**
+```json
+{
+  "model": "llama-3-8b",
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+```
+
+This ensures the backend receives a valid model name it actually supports.
+
+#### Array Model Fields
+
+When `model` is an array, patterns are evaluated in order:
+
+**Request:**
+```json
+{
+  "model": ["llama3", "qwen2.5"],
+  "messages": [...]
+}
+```
+
+The balancer evaluates both patterns and routes to the first backend that matches either pattern (prioritizing llama3). The forwarded request will have the actual matched model name in place of the pattern.
+
+---
+
 ## Response Formats
 
 ### Anthropic API Message Response
