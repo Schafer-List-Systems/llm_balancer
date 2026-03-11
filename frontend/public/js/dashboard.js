@@ -320,6 +320,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return rounded;
       }
 
+      function formatTokens(tokens) {
+        if (tokens === null || tokens === undefined || isNaN(tokens)) return 'N/A';
+        return Math.round(tokens);
+      }
+
       // Build performance metrics HTML with new comprehensive stats
       let performanceMetricsHtml = '';
 
@@ -332,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hasTimeStats) {
         performanceMetricsHtml += `
           <div class="perf-section">
-            <div class="perf-section-title">⏱️ Time Metrics</div>
+            <div class="perf-section-title">⏱️ Avg Time Metrics</div>
             <div class="perf-metric-row">
               <span class="perf-metric-label">Total Time</span>
               <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
@@ -356,25 +361,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         rateStats.generationRate?.count > 0;
 
       if (hasAnyRate) {
+        const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nTotal Rate: ${rateStats.totalRate?.count || 0} samples\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples`;
         performanceMetricsHtml += `
           <div class="perf-section">
-            <div class="perf-section-title">⚡ Token Rates</div>
+            <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⚡ Avg Token Rates (tokens/sec)</div>
             ${rateStats.totalRate?.count > 0 ? `
               <div class="perf-metric-row">
-                <span class="perf-metric-label">Total Rate<span class="unit">(tokens/sec)</span></span>
-                <span class="perf-metric-value">${formatRate(rateStats.totalRate)} (${rateStats.totalRate.count})</span>
+                <span class="perf-metric-label">Total Rate</span>
+                <span class="perf-metric-value">${formatRate(rateStats.totalRate)}</span>
               </div>
             ` : ''}
             ${rateStats.promptRate?.count > 0 ? `
               <div class="perf-metric-row">
-                <span class="perf-metric-label">Prompt Rate<span class="unit">(tokens/sec)</span></span>
-                <span class="perf-metric-value">${formatRate(rateStats.promptRate)} (${rateStats.promptRate.count})</span>
+                <span class="perf-metric-label">Prompt Rate</span>
+                <span class="perf-metric-value">${formatRate(rateStats.promptRate)}</span>
               </div>
             ` : ''}
             ${rateStats.generationRate?.count > 0 ? `
               <div class="perf-metric-row">
-                <span class="perf-metric-label">Generation Rate<span class="unit">(tokens/sec)</span></span>
-                <span class="perf-metric-value">${formatRate(rateStats.generationRate)} (${rateStats.generationRate.count})</span>
+                <span class="perf-metric-label">Generation Rate</span>
+                <span class="perf-metric-value">${formatRate(rateStats.generationRate)}</span>
               </div>
             ` : ''}
           </div>
@@ -390,23 +396,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hasTokenStats) {
         performanceMetricsHtml += `
           <div class="perf-section">
-            <div class="perf-section-title">📊 Tokens Processed</div>
+            <div class="perf-section-title">📊 Avg Tokens Processed</div>
             ${tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined ? `
               <div class="perf-metric-row">
                 <span class="perf-metric-label">Prompt</span>
-                <span class="perf-metric-value">${tokenStats.avgPromptTokens}</span>
+                <span class="perf-metric-value">${tokenStats.avgPromptTokens.toFixed(1)}</span>
               </div>
             ` : ''}
             ${tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ? `
               <div class="perf-metric-row">
                 <span class="perf-metric-label">Completion</span>
-                <span class="perf-metric-value">${tokenStats.avgCompletionTokens}</span>
+                <span class="perf-metric-value">${tokenStats.avgCompletionTokens.toFixed(1)}</span>
               </div>
             ` : ''}
             ${tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined ? `
               <div class="perf-metric-row perf-total-row">
                 <span class="perf-metric-label">Total</span>
-                <span class="perf-metric-value perf-total-value">${tokenStats.avgTotalTokens}</span>
+                <span class="perf-metric-value perf-total-value">${tokenStats.avgTotalTokens.toFixed(1)}</span>
               </div>
             ` : ''}
           </div>
