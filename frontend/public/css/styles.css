@@ -328,13 +328,13 @@ body {
 .backend-info {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .info-label {
@@ -1052,15 +1052,79 @@ body {
   font-size: 1rem;
 }
 
-/* Performance Metrics */
+/* Performance Metrics - Compact Display */
 .performance-metrics {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
   background-color: #f8fafc;
   border-radius: 0.375rem;
-  border-left: 3px solid var(--primary-color);
+  border-left: 4px solid var(--primary-color);
+  font-size: 0.6875rem;
 }
 
+.perf-section {
+  margin-bottom: 0.375rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.perf-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.perf-section-title {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.perf-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.0625rem 0;
+  gap: 0.5rem;
+}
+
+.perf-metric-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.perf-metric-label .unit {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.perf-metric-value {
+  font-weight: 700;
+  color: var(--primary-color);
+  font-size: 0.75rem;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.perf-total-row {
+  background-color: rgba(59, 130, 246, 0.1);
+  margin-top: 0.125rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.perf-total-value {
+  font-size: 0.8125rem;
+  color: var(--primary-color);
+}
+
+/* Legacy metric styles for backward compatibility */
 .metric-row {
   display: flex;
   justify-content: space-between;

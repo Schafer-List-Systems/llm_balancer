@@ -378,7 +378,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         // Capture first chunk arrival time
         if (firstChunkTimestamp === null) {
           firstChunkTimestamp = Date.now();
-          const timeToFirstChunk = firstChunkTimestamp - startTime;
+          const timeToFirstChunk = firstChunkTimestamp - requestSentTime;
           console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: firstChunkArrived=${firstChunkTimestamp}, timeToFirstChunk=${timeToFirstChunk}ms, chunkNumber=${chunkCount}`);
         }
         // Accumulate data for token extraction
@@ -394,16 +394,17 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         const timeFromHeaders = fullResponseTime - headersReceivedTime;
         const timeFromFirstChunk = fullResponseTime - firstChunkTimestamp;
         const totalTime = fullResponseTime - requestSentTime;
-        const totalCompletionTimeMs = Date.now() - startTime;
-        const firstChunkTimeMs = firstChunkTimestamp !== null ? firstChunkTimestamp - startTime : 0;
+        const totalCompletionTimeMs = Date.now() - requestSentTime;
+        const firstChunkTimeMs = firstChunkTimestamp !== null ? firstChunkTimestamp - requestSentTime : 0;
 
         console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, firstChunk=${firstChunkTimestamp}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, timeFromFirstChunk=${timeFromFirstChunk}ms, totalTime=${totalTime}ms, chunkCount=${chunkCount}`);
 
         // Parse streaming response to extract token counts from final usage object
         // Note: vLLM streaming format doesn't include usage in chunks, only [DONE] at end
         // Some APIs (OpenAI) do include usage in the final chunk
-        let promptTokens = 0;
-        let completionTokens = 0;
+        let promptTokens = null;
+        let completionTokens = null;
+        let usageFound = false;
 
         try {
           // Split by newline for SSE format and find messages with usage stats
@@ -416,8 +417,9 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
                 const msg = JSON.parse(jsonStr);
                 // Check for usage in this message (some APIs include it in final chunk)
                 if (msg.usage) {
-                  promptTokens = msg.usage.prompt_tokens || 0;
-                  completionTokens = msg.usage.completion_tokens || 0;
+                  promptTokens = msg.usage.prompt_tokens || null;
+                  completionTokens = msg.usage.completion_tokens || null;
+                  usageFound = true;
                 }
               } catch (e) {
                 // Not a JSON line, skip
@@ -425,20 +427,29 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
             }
           }
 
-          // Update streaming stats with timing data (always available)
-          // If token counts are available from usage field, include rate calculations
-          if (promptTokens > 0 || completionTokens > 0) {
+          // Update streaming stats with comprehensive tracking
+          if (usageFound && (promptTokens !== null || completionTokens !== null)) {
+            // Full token data available from usage field
             backend.updateStreamingStats(
-              promptTokens,
-              completionTokens,
+              promptTokens !== null ? promptTokens : 0,
+              completionTokens !== null ? completionTokens : 0,
               firstChunkTimeMs,
               totalCompletionTimeMs
             );
-            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated: ${promptTokens} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated: ${promptTokens ?? 'N/A'} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens ?? 'N/A'} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+          } else if (chunkCount > 0) {
+            // Use chunk counting for completion tokens (vLLM-style backends without usage)
+            // Each SSE chunk ≈ 1 completion token (empirically verified)
+            backend.updateStreamingStatsFromChunks(
+              null,  // Estimated prompt tokens (could extract from request body if needed)
+              chunkCount,
+              firstChunkTimeMs,
+              totalCompletionTimeMs
+            );
+            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated (chunk count): ~${chunkCount} completion tokens in ${firstChunkTimeMs}ms to ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
           } else {
-            // Still track timing even without token counts (vLLM doesn't include usage in stream)
-            backend.updateStreamingTimingStats(firstChunkTimeMs, totalCompletionTimeMs);
-            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats tracked (timing only): first_chunk=${firstChunkTimeMs}ms, total_completion=${totalCompletionTimeMs}ms`);
+            // No usable data - log for debugging
+            console.warn(`[${getTimestamp()}] [RequestProcessor] No streaming stats to track: chunkCount=${chunkCount}, usageFound=${usageFound}`);
           }
         } catch (e) {
           console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to parse streaming response for stats:`, e.message);
@@ -618,9 +629,10 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         backend.updateNonStreamingStats(
           tokenCounts.promptTokens,
           tokenCounts.completionTokens,
-          totalTime
+          totalTime,
+          timeToFirstHeader  // Prompt processing time (time to first header)
         );
-        console.debug(`[${getTimestamp()}] [RequestProcessor] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, calculatedRate=${((tokenCounts.promptTokens + tokenCounts.completionTokens) / (totalTime / 1000)).toFixed(2)} tokens/sec`);
+        console.debug(`[${getTimestamp()}] [RequestProcessor] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
       }
 
       // Track debug request with request/response content

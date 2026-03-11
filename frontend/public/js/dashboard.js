@@ -302,45 +302,113 @@ document.addEventListener('DOMContentLoaded', () => {
           `).join('')
         : '';
 
-      // Extract performance stats from backend object (added by /stats endpoint)
+      // Extract new performance stats from backend object
       const perfStats = backend.performanceStats || {};
-      const nonStreamingStats = perfStats.nonStreamingStats || {};
-      const streamingStats = perfStats.streamingStats || {};
-      const timingStats = perfStats.timingStats || {};
 
-      // Build performance metrics HTML
+      // Helper functions for formatting
+      function formatMs(ms) {
+        if (ms === undefined || ms === null || isNaN(ms)) return 'N/A';
+        if (ms < 1) return `${(ms * 1000).toFixed(1)}µs`;
+        if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+        return `${Math.round(ms)}ms`;
+      }
+
+      function formatRate(rate) {
+        if (!rate || !rate.count || rate.count === 0 || !rate.avgTokensPerSecond) return 'N/A';
+        const rounded = Math.round(rate.avgTokensPerSecond);
+        if (rounded >= 1000) return `${(rounded / 1000).toFixed(2)}k`;
+        return rounded;
+      }
+
+      // Build performance metrics HTML with new comprehensive stats
       let performanceMetricsHtml = '';
 
-      // Non-streaming tokens/sec
-      if (nonStreamingStats.count > 0) {
+      // 1. Time Metrics Section (always available when requests made)
+      const timeStats = perfStats.timeStats || {};
+      const hasTimeStats = timeStats.avgTotalTimeMs !== undefined ||
+                          timeStats.avgPromptProcessingTimeMs !== undefined ||
+                          timeStats.avgGenerationTimeMs !== undefined;
+
+      if (hasTimeStats) {
         performanceMetricsHtml += `
-          <div class="metric-row">
-            <span class="metric-label">⚡ Non-Stream</span>
-            <span class="metric-value">${formatTokensPerSecond(nonStreamingStats.avgTokensPerSecond)}</span>
-            <span class="metric-unit">tok/s (${nonStreamingStats.count})</span>
+          <div class="perf-section">
+            <div class="perf-section-title">⏱️ Time Metrics</div>
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Total Time</span>
+              <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
+            </div>
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Prompt Processing</span>
+              <span class="perf-metric-value">${formatMs(timeStats.avgPromptProcessingTimeMs)}</span>
+            </div>
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Generation</span>
+              <span class="perf-metric-value">${formatMs(timeStats.avgGenerationTimeMs)}</span>
+            </div>
           </div>
         `;
       }
 
-      // Streaming tokens/sec (if available)
-      if (streamingStats.promptProcessingRate?.count > 0 || streamingStats.generationRate?.count > 0) {
-        const avgStreamTps = ((streamingStats.promptProcessingRate.avgTokensPerSecond || 0) +
-                              (streamingStats.generationRate.avgTokensPerSecond || 0)) / 2;
+      // 2. Token Rates Section
+      const rateStats = perfStats.rateStats || {};
+      const hasAnyRate = rateStats.totalRate?.count > 0 ||
+                        rateStats.promptRate?.count > 0 ||
+                        rateStats.generationRate?.count > 0;
+
+      if (hasAnyRate) {
         performanceMetricsHtml += `
-          <div class="metric-row">
-            <span class="metric-label">📡 Stream</span>
-            <span class="metric-value">${formatTokensPerSecond(avgStreamTps)}</span>
-            <span class="metric-unit">tok/s (${streamingStats.promptProcessingRate.count})</span>
+          <div class="perf-section">
+            <div class="perf-section-title">⚡ Token Rates</div>
+            ${rateStats.totalRate?.count > 0 ? `
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Total Rate<span class="unit">(tokens/sec)</span></span>
+                <span class="perf-metric-value">${formatRate(rateStats.totalRate)} (${rateStats.totalRate.count})</span>
+              </div>
+            ` : ''}
+            ${rateStats.promptRate?.count > 0 ? `
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Prompt Rate<span class="unit">(tokens/sec)</span></span>
+                <span class="perf-metric-value">${formatRate(rateStats.promptRate)} (${rateStats.promptRate.count})</span>
+              </div>
+            ` : ''}
+            ${rateStats.generationRate?.count > 0 ? `
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Generation Rate<span class="unit">(tokens/sec)</span></span>
+                <span class="perf-metric-value">${formatRate(rateStats.generationRate)} (${rateStats.generationRate.count})</span>
+              </div>
+            ` : ''}
           </div>
         `;
       }
 
-      // Timing stats (first chunk, total time) - always available for streaming backends
-      if (timingStats.streamingRequestCount > 0) {
+      // 3. Token Counts Section
+      const tokenStats = perfStats.tokenStats || {};
+      const hasTokenStats = tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined ||
+                           tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ||
+                           tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined;
+
+      if (hasTokenStats) {
         performanceMetricsHtml += `
-          <div class="metric-row">
-            <span class="metric-label">⏱️ Timing</span>
-            <span class="metric-value">${timingStats.avgFirstChunkTimeMs}ms → ${Math.round(timingStats.avgTotalCompletionTimeMs - timingStats.avgFirstChunkTimeMs)}ms</span>
+          <div class="perf-section">
+            <div class="perf-section-title">📊 Tokens Processed</div>
+            ${tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined ? `
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Prompt</span>
+                <span class="perf-metric-value">${tokenStats.avgPromptTokens}</span>
+              </div>
+            ` : ''}
+            ${tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ? `
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Completion</span>
+                <span class="perf-metric-value">${tokenStats.avgCompletionTokens}</span>
+              </div>
+            ` : ''}
+            ${tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined ? `
+              <div class="perf-metric-row perf-total-row">
+                <span class="perf-metric-label">Total</span>
+                <span class="perf-metric-value perf-total-value">${tokenStats.avgTotalTokens}</span>
+              </div>
+            ` : ''}
           </div>
         `;
       }
