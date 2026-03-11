@@ -127,10 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <section class="backends-section">
           <div class="section-header">
-            <div>
-              <h2 class="section-title">Backends</h2>
-              <p class="section-description">Individual backend status and metrics</p>
-            </div>
+            <h2 class="section-title">Backends <span class="section-subtitle">(Individual backend status and metrics)</span></h2>
           </div>
           <div id="backendsGrid" class="backends-grid">
             <!-- Backend cards will be rendered here -->
@@ -139,10 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <section class="backends-section">
           <div class="section-header">
-            <div>
-              <h2 class="section-title">Statistics</h2>
-              <p class="section-description">System-wide statistics and metrics</p>
-            </div>
+            <h2 class="section-title">Statistics <span class="section-subtitle">(System-wide statistics and metrics)</span></h2>
           </div>
           <div id="statsSection" class="stats-section">
             <!-- Stats will be rendered here -->
@@ -151,10 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <section class="backends-section">
           <div class="section-header">
-            <div>
-              <h2 class="section-title">Configuration</h2>
-              <p class="section-description">API endpoint URL for your applications</p>
-            </div>
+            <h2 class="section-title">Configuration <span class="section-subtitle">(API endpoint URL for your applications)</span></h2>
           </div>
           <div id="configSection" class="config-section">
             <!-- Configuration will be rendered here -->
@@ -163,10 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <section class="backends-section">
           <div class="section-header">
-            <div>
-              <h2 class="section-title">Debug</h2>
-              <p class="section-description">Request/response content tracking and debugging</p>
-            </div>
+            <h2 class="section-title">Debug <span class="section-subtitle">(Request/response content tracking and debugging)</span></h2>
             <button id="toggleDebug" class="toggle-button">Show Debug</button>
           </div>
           <div id="debugSection" class="debug-section" style="display: none;">

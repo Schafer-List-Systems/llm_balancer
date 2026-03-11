@@ -276,12 +276,17 @@ body.dark-mode body {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.section-description {
+.section-subtitle {
   font-size: 0.75rem;
   color: var(--text-secondary);
-  margin-top: 0.25rem;
+  font-weight: 400;
+  margin-left: 0.25rem;
 }
 
 /* Configuration Section */
