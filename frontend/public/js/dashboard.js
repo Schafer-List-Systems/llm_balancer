@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return rounded >= 1000 ? `${(rounded / 1000).toFixed(2)}k` : rounded;
   }
 
-  // Render backend cards with performance metrics
+  // Render backend cards with performance metrics (incremental updates to preserve hover/scroll)
   function renderBackends(backendsData) {
     const backendsGrid = document.getElementById('backendsGrid');
 
@@ -261,195 +261,267 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    backendsGrid.innerHTML = backendsData.backends.map(backend => {
+    // Initialize cards if they don't exist
+    if (!backendsGrid.querySelector('.backend-card')) {
+      backendsGrid.innerHTML = backendsData.backends.map((backend, index) => `
+        <div class="backend-card" data-backend-url="${encodeURIComponent(backend.url)}">
+          <div class="backend-url">${backend.url}</div>
+          <div class="api-badges"></div>
+          <div class="backend-info">
+            <div class="info-row" data-field="health">
+              <span class="info-label">Health</span>
+              <span class="info-value"></span>
+            </div>
+            <div class="info-row" data-field="status">
+              <span class="info-label">Status</span>
+              <span class="info-value"></span>
+            </div>
+            <div class="info-row" data-field="concurrency">
+              <span class="info-label">Concurrency</span>
+              <span class="info-value"></span>
+            </div>
+            <div class="info-row" data-field="requests">
+              <span class="info-label">Requests</span>
+              <span class="info-value"></span>
+            </div>
+            <div class="info-row" data-field="errors">
+              <span class="info-label">Errors</span>
+              <span class="info-value"></span>
+            </div>
+            <div class="info-row" data-field="fails">
+              <span class="info-label">Fails</span>
+              <span class="info-value"></span>
+            </div>
+          </div>
+          <div class="performance-metrics performance-placeholder">
+            <div class="perf-section">
+              <div class="perf-section-title">⏱️ No Data Yet</div>
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Waiting for requests...</span>
+              </div>
+            </div>
+          </div>
+          <div class="models-list models-placeholder">
+            <span class="model-tag">No models available</span>
+          </div>
+        </div>
+      `).join('');
+      return;
+    }
+
+    // Incremental updates - update existing cards without destroying DOM
+    backendsData.backends.forEach(backend => {
       const healthClass = backend.healthy ? 'healthy' : 'unhealthy';
       const healthText = backend.healthy ? 'Healthy' : 'Unhealthy';
       const busyText = backend.activeRequestCount > 0 ? 'Busy' : 'Idle';
-      const busyBgClass = backend.activeRequestCount > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800';
 
-      const apiTypeLabels = {
-        'openai': 'OpenAI',
-        'anthropic': 'Anthropic',
-        'google': 'Gemini',
-        'ollama': 'Ollama'
-      };
+      const card = backendsGrid.querySelector(`[data-backend-url="${encodeURIComponent(backend.url)}"]`);
+      if (!card) return;
 
-      // Support both array (multi-API) and single string (backward compatibility)
-      const apiTypes = Array.isArray(backend.apiTypes)
-        ? backend.apiTypes
-        : (backend.apiType && backend.apiType !== 'unknown' ? [backend.apiType] : []);
+      // Update health class on card
+      card.classList.remove('healthy', 'unhealthy');
+      card.classList.add(healthClass);
 
-      const apiBadges = apiTypes.length > 0
-        ? apiTypes.map(apiType => `
-            <div class="api-badge ${apiType}">${apiTypeLabels[apiType] || apiType.toUpperCase()}</div>
-          `).join('')
-        : '';
+      // Update text values using textContent (preserves event listeners)
+      const urlEl = card.querySelector('.backend-url');
+      if (urlEl) urlEl.textContent = backend.url;
 
-      // Extract new performance stats from backend object
+      // Update health row
+      const healthRow = card.querySelector('[data-field="health"] .info-value');
+      if (healthRow) {
+        healthRow.textContent = healthText;
+        healthRow.className = `info-value ${healthClass}`;
+      }
+
+      // Update status row
+      const statusRow = card.querySelector('[data-field="status"] .info-value');
+      if (statusRow) statusRow.textContent = busyText;
+
+      // Update concurrency row
+      const concurrencyRow = card.querySelector('[data-field="concurrency"] .info-value');
+      if (concurrencyRow) concurrencyRow.textContent = `${backend.activeRequestCount || 0}/${backend.maxConcurrency || 0}`;
+
+      // Update requests row
+      const requestsRow = card.querySelector('[data-field="requests"] .info-value');
+      if (requestsRow) requestsRow.textContent = backend.requestCount || 0;
+
+      // Update errors row
+      const errorsRow = card.querySelector('[data-field="errors"] .info-value');
+      if (errorsRow) {
+        errorsRow.textContent = backend.errorCount || 0;
+        errorsRow.className = `info-value ${backend.errorCount > 0 ? 'text-danger' : ''}`;
+      }
+
+      // Update fails row
+      const failsRow = card.querySelector('[data-field="fails"] .info-value');
+      if (failsRow) {
+        failsRow.textContent = backend.failCount || 0;
+        failsRow.className = `info-value ${backend.failCount > 0 ? 'text-danger' : ''}`;
+      }
+
+      // Update performance metrics section
+      const perfMetrics = card.querySelector('.performance-metrics');
       const perfStats = backend.performanceStats || {};
 
-      // Helper functions for formatting
-      function formatMs(ms) {
-        if (ms === undefined || ms === null || isNaN(ms)) return 'N/A';
-        if (ms < 1) return `${(ms * 1000).toFixed(1)}µs`;
-        if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
-        return `${Math.round(ms)}ms`;
+      if (shouldUpdatePerformanceMetrics(perfMetrics, perfStats)) {
+        const { html, hasData } = buildPerformanceMetricsHTML(perfStats);
+        if (hasData) {
+          perfMetrics.className = 'performance-metrics';
+          perfMetrics.innerHTML = html;
+        } else {
+          perfMetrics.className = 'performance-metrics performance-placeholder';
+          perfMetrics.innerHTML = `
+            <div class="perf-section">
+              <div class="perf-section-title">⏱️ No Data Yet</div>
+              <div class="perf-metric-row">
+                <span class="perf-metric-label">Waiting for requests...</span>
+              </div>
+            </div>
+          `;
+        }
       }
 
-      function formatRate(rate) {
-        if (!rate || !rate.count || rate.count === 0 || !rate.avgTokensPerSecond) return 'N/A';
-        const rounded = Math.round(rate.avgTokensPerSecond);
-        if (rounded >= 1000) return `${(rounded / 1000).toFixed(2)}k`;
-        return rounded;
+      // Update models list incrementally (preserve scroll position)
+      const modelsList = card.querySelector('.models-list');
+      const currentModels = Array.from(modelsList.querySelectorAll('.model-tag')).map(tag => tag.textContent);
+      const newModels = backend.models || [];
+
+      // Check if models changed
+      const modelsChanged = currentModels.length !== newModels.length ||
+                            currentModels.some((m, i) => m !== newModels[i]);
+
+      if (modelsChanged) {
+        if (newModels.length > 0) {
+          modelsList.className = 'models-list';
+          modelsList.innerHTML = newModels.map(model => `
+            <span class="model-tag">${model}</span>
+          `).join('');
+        } else {
+          modelsList.className = 'models-list models-placeholder';
+          modelsList.innerHTML = '<span class="model-tag">No models available</span>';
+        }
       }
+    });
+  }
 
-      function formatTokens(tokens) {
-        if (tokens === null || tokens === undefined || isNaN(tokens)) return 'N/A';
-        return Math.round(tokens);
-      }
+  // Helper: check if performance metrics need updating
+  function shouldUpdatePerformanceMetrics(perfMetricsEl, perfStats) {
+    if (!perfMetricsEl) return false;
+    const hasTimeStats = perfStats.timeStats?.avgTotalTimeMs !== undefined;
+    const hasRates = perfStats.rateStats?.totalRate?.count > 0 || perfStats.rateStats?.promptRate?.count > 0 || perfStats.rateStats?.generationRate?.count > 0;
+    const hasTokens = perfStats.tokenStats?.avgPromptTokens !== null && perfStats.tokenStats?.avgPromptTokens !== undefined;
+    return hasTimeStats || hasRates || hasTokens || perfMetricsEl.classList.contains('performance-placeholder');
+  }
 
-      // Build performance metrics HTML with new comprehensive stats
-      let performanceMetricsHtml = '';
+  // Helper: build performance metrics HTML
+  function buildPerformanceMetricsHTML(perfStats) {
+    const timeStats = perfStats.timeStats || {};
+    const rateStats = perfStats.rateStats || {};
+    const tokenStats = perfStats.tokenStats || {};
 
-      // 1. Time Metrics Section (always available when requests made)
-      const timeStats = perfStats.timeStats || {};
-      const hasTimeStats = timeStats.avgTotalTimeMs !== undefined ||
-                          timeStats.avgPromptProcessingTimeMs !== undefined ||
-                          timeStats.avgGenerationTimeMs !== undefined;
+    function formatMs(ms) {
+      if (ms === undefined || ms === null || isNaN(ms)) return 'N/A';
+      if (ms < 1) return `${(ms * 1000).toFixed(1)}µs`;
+      if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+      return `${Math.round(ms)}ms`;
+    }
 
-      if (hasTimeStats) {
-        performanceMetricsHtml += `
-          <div class="perf-section">
-            <div class="perf-section-title">⏱️ Avg Time Metrics</div>
+    function formatRate(rate) {
+      if (!rate || !rate.count || rate.count === 0 || !rate.avgTokensPerSecond) return 'N/A';
+      const rounded = Math.round(rate.avgTokensPerSecond);
+      if (rounded >= 1000) return `${(rounded / 1000).toFixed(2)}k`;
+      return rounded;
+    }
+
+    let hasData = false;
+    let html = '';
+
+    // Time Metrics Section
+    const hasTimeStats = timeStats.avgTotalTimeMs !== undefined || timeStats.avgPromptProcessingTimeMs !== undefined || timeStats.avgGenerationTimeMs !== undefined;
+    if (hasTimeStats) {
+      hasData = true;
+      html += `
+        <div class="perf-section">
+          <div class="perf-section-title">⏱️ Avg Time Metrics</div>
+          <div class="perf-metric-row">
+            <span class="perf-metric-label">Total Time</span>
+            <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
+          </div>
+          <div class="perf-metric-row">
+            <span class="perf-metric-label">Prompt Processing</span>
+            <span class="perf-metric-value">${formatMs(timeStats.avgPromptProcessingTimeMs)}</span>
+          </div>
+          <div class="perf-metric-row">
+            <span class="perf-metric-label">Generation</span>
+            <span class="perf-metric-value">${formatMs(timeStats.avgGenerationTimeMs)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Token Rates Section
+    const hasAnyRate = rateStats.totalRate?.count > 0 || rateStats.promptRate?.count > 0 || rateStats.generationRate?.count > 0;
+    if (hasAnyRate) {
+      hasData = true;
+      const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nTotal Rate: ${rateStats.totalRate?.count || 0} samples\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples`;
+      html += `
+        <div class="perf-section">
+          <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⚡ Avg Token Rates (tokens/sec)</div>
+          ${rateStats.totalRate?.count > 0 ? `
             <div class="perf-metric-row">
-              <span class="perf-metric-label">Total Time</span>
-              <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
-            </div>
-            <div class="perf-metric-row">
-              <span class="perf-metric-label">Prompt Processing</span>
-              <span class="perf-metric-value">${formatMs(timeStats.avgPromptProcessingTimeMs)}</span>
-            </div>
-            <div class="perf-metric-row">
-              <span class="perf-metric-label">Generation</span>
-              <span class="perf-metric-value">${formatMs(timeStats.avgGenerationTimeMs)}</span>
-            </div>
-          </div>
-        `;
-      }
-
-      // 2. Token Rates Section
-      const rateStats = perfStats.rateStats || {};
-      const hasAnyRate = rateStats.totalRate?.count > 0 ||
-                        rateStats.promptRate?.count > 0 ||
-                        rateStats.generationRate?.count > 0;
-
-      if (hasAnyRate) {
-        const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nTotal Rate: ${rateStats.totalRate?.count || 0} samples\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples`;
-        performanceMetricsHtml += `
-          <div class="perf-section">
-            <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⚡ Avg Token Rates (tokens/sec)</div>
-            ${rateStats.totalRate?.count > 0 ? `
-              <div class="perf-metric-row">
-                <span class="perf-metric-label">Total Rate</span>
-                <span class="perf-metric-value">${formatRate(rateStats.totalRate)}</span>
-              </div>
-            ` : ''}
-            ${rateStats.promptRate?.count > 0 ? `
-              <div class="perf-metric-row">
-                <span class="perf-metric-label">Prompt Rate</span>
-                <span class="perf-metric-value">${formatRate(rateStats.promptRate)}</span>
-              </div>
-            ` : ''}
-            ${rateStats.generationRate?.count > 0 ? `
-              <div class="perf-metric-row">
-                <span class="perf-metric-label">Generation Rate</span>
-                <span class="perf-metric-value">${formatRate(rateStats.generationRate)}</span>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      }
-
-      // 3. Token Counts Section
-      const tokenStats = perfStats.tokenStats || {};
-      const hasTokenStats = tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined ||
-                           tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ||
-                           tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined;
-
-      if (hasTokenStats) {
-        performanceMetricsHtml += `
-          <div class="perf-section">
-            <div class="perf-section-title">📊 Avg Tokens Processed</div>
-            ${tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined ? `
-              <div class="perf-metric-row">
-                <span class="perf-metric-label">Prompt</span>
-                <span class="perf-metric-value">${tokenStats.avgPromptTokens.toFixed(1)}</span>
-              </div>
-            ` : ''}
-            ${tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ? `
-              <div class="perf-metric-row">
-                <span class="perf-metric-label">Completion</span>
-                <span class="perf-metric-value">${tokenStats.avgCompletionTokens.toFixed(1)}</span>
-              </div>
-            ` : ''}
-            ${tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined ? `
-              <div class="perf-metric-row perf-total-row">
-                <span class="perf-metric-label">Total</span>
-                <span class="perf-metric-value perf-total-value">${tokenStats.avgTotalTokens.toFixed(1)}</span>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      }
-
-      return `
-        <div class="backend-card ${healthClass}">
-          <div class="backend-url">${backend.url}</div>
-          ${apiBadges}
-          <div class="backend-info">
-            <div class="info-row">
-              <span class="info-label">Health</span>
-              <span class="info-value ${healthClass}">${healthText}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Status</span>
-              <span class="info-value">${busyText}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Concurrency</span>
-              <span class="info-value">${backend.activeRequestCount || 0}/${backend.maxConcurrency || 0}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Requests</span>
-              <span class="info-value">${backend.requestCount || 0}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Errors</span>
-              <span class="info-value ${backend.errorCount > 0 ? 'text-danger' : ''}">${backend.errorCount || 0}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Fails</span>
-              <span class="info-value ${backend.failCount > 0 ? 'text-danger' : ''}">${backend.failCount || 0}</span>
-            </div>
-          </div>
-          ${performanceMetricsHtml ? `
-            <div class="performance-metrics">
-              ${performanceMetricsHtml}
+              <span class="perf-metric-label">Total Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.totalRate)}</span>
             </div>
           ` : ''}
-          ${backend.models && backend.models.length > 0 ? `
-            <div class="models-list">
-              ${backend.models.map(model => `
-                <span class="model-tag">${model}</span>
-              `).join('')}
+          ${rateStats.promptRate?.count > 0 ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Prompt Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.promptRate)}</span>
+            </div>
+          ` : ''}
+          ${rateStats.generationRate?.count > 0 ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Generation Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.generationRate)}</span>
             </div>
           ` : ''}
         </div>
       `;
-    }).join('');
+    }
+
+    // Token Counts Section
+    const hasTokenStats = tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined || tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined || tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined;
+    if (hasTokenStats) {
+      hasData = true;
+      html += `
+        <div class="perf-section">
+          <div class="perf-section-title">📊 Avg Tokens Processed</div>
+          ${tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Prompt</span>
+              <span class="perf-metric-value">${tokenStats.avgPromptTokens.toFixed(1)}</span>
+            </div>
+          ` : ''}
+          ${tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Completion</span>
+              <span class="perf-metric-value">${tokenStats.avgCompletionTokens.toFixed(1)}</span>
+            </div>
+          ` : ''}
+          ${tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined ? `
+            <div class="perf-metric-row perf-total-row">
+              <span class="perf-metric-label">Total</span>
+              <span class="perf-metric-value perf-total-value">${tokenStats.avgTotalTokens.toFixed(1)}</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    return { html, hasData };
   }
 
-  // Render statistics section
+  // Render statistics section (incremental updates to preserve hover states)
   function renderStats(statsData) {
     const statsSection = document.getElementById('statsSection');
 
@@ -460,61 +532,86 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const { balancer, healthCheck, config } = statsData;
 
-    statsSection.innerHTML = `
-      <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Health Check Interval</span>
+    // Initialize grid if it doesn't exist
+    if (!statsSection.querySelector('.stats-grid')) {
+      statsSection.innerHTML = `
+        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+          <div class="card stats-card" data-stat="health-interval">
+            <div class="card-header">
+              <span class="card-title">Health Check Interval</span>
+            </div>
+            <div class="card-value stat-value" style="font-size: 1rem;"></div>
           </div>
-          <div class="card-value" style="font-size: 1rem;">${(config.healthCheckInterval / 1000).toFixed(1)}s</div>
+          <div class="card stats-card" data-stat="last-check">
+            <div class="card-header">
+              <span class="card-title">Last Health Check</span>
+            </div>
+            <div class="card-value stat-value" style="font-size: 1rem;"></div>
+          </div>
+          <div class="card stats-card" data-stat="consecutive-failures">
+            <div class="card-header">
+              <span class="card-title">Consecutive Failures</span>
+            </div>
+            <div class="card-value stat-value" style="font-size: 1rem;"></div>
+          </div>
+          <div class="card stats-card" data-stat="max-payload">
+            <div class="card-header">
+              <span class="card-title">Max Payload Size</span>
+            </div>
+            <div class="card-value stat-value" style="font-size: 1rem;"></div>
+          </div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Last Health Check</span>
-          </div>
-          <div class="card-value" style="font-size: 1rem;">
-            ${healthCheck.lastCheck ? new Date(healthCheck.lastCheck).toLocaleString() : 'Never'}
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Consecutive Failures</span>
-          </div>
-          <div class="card-value" style="font-size: 1rem; color: ${healthCheck.consecutiveFailures > 0 ? 'var(--danger-color)' : 'var(--success-color)'};">
-            ${healthCheck.consecutiveFailures || 0}
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Max Payload Size</span>
-          </div>
-          <div class="card-value" style="font-size: 1rem;">${config.maxPayloadSizeMB} MB</div>
-        </div>
-      </div>
-    `;
+      `;
+      return;
+    }
+
+    // Incremental updates - only update values, preserve DOM elements
+    const healthIntervalValue = statsSection.querySelector('[data-stat="health-interval"] .stat-value');
+    const lastCheckValue = statsSection.querySelector('[data-stat="last-check"] .stat-value');
+    const failuresValue = statsSection.querySelector('[data-stat="consecutive-failures"] .stat-value');
+    const payloadValue = statsSection.querySelector('[data-stat="max-payload"] .stat-value');
+
+    if (healthIntervalValue) {
+      healthIntervalValue.textContent = `${(config.healthCheckInterval / 1000).toFixed(1)}s`;
+    }
+    if (lastCheckValue) {
+      lastCheckValue.textContent = healthCheck.lastCheck ? new Date(healthCheck.lastCheck).toLocaleString() : 'Never';
+    }
+    if (failuresValue) {
+      failuresValue.textContent = healthCheck.consecutiveFailures || 0;
+      failuresValue.style.color = healthCheck.consecutiveFailures > 0 ? 'var(--danger-color)' : 'var(--success-color)';
+    }
+    if (payloadValue) {
+      payloadValue.textContent = `${config.maxPayloadSizeMB} MB`;
+    }
   }
 
   function renderConfig() {
     const configSection = document.getElementById('configSection');
+
+    // Config is static - only render once on init
+    if (configSection.querySelector('.config-card')) {
+      return;
+    }
 
     const frontendUrl = 'http://localhost:3080';
     const apiUrl = 'http://localhost:3001';
 
     configSection.innerHTML = `
       <div class="config-container">
-        <div class="config-card" style="flex: 1; min-width: 250px;">
+        <div class="config-card" data-config="frontend" style="flex: 1; min-width: 250px;">
           <div class="config-label">Frontend URL</div>
           <div class="config-url">${frontendUrl}</div>
           <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Dashboard access point</p>
         </div>
 
-        <div class="config-card" style="flex: 1; min-width: 250px;">
+        <div class="config-card" data-config="api" style="flex: 1; min-width: 250px;">
           <div class="config-label">API Base URL</div>
           <div class="config-url">${apiUrl}</div>
           <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Load balancer endpoint for Ollama/Anthropic APIs</p>
         </div>
 
-        <div class="config-card" style="flex: 1; min-width: 250px;">
+        <div class="config-card" data-config="integration" style="flex: 1; min-width: 250px;">
           <div class="config-label">Application Integration</div>
           <div class="config-url">${frontendUrl}/api</div>
           <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Set your app's BASE_URL to this endpoint</p>
