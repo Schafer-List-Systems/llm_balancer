@@ -403,17 +403,24 @@ class Balancer {
   }
 
   /**
-   * Get debug statistics
+   * Get debug statistics with backend performance metrics
    * @returns {Object} Debug statistics
    */
   getDebugStats() {
     if (!this.debug) return { enabled: false };
 
+    const backendStats = this.backends.map(b => ({
+      url: b.url,
+      requestCount: b.requestCount || 0,
+      performanceStats: b.getPerformanceStats()
+    }));
+
     return {
       enabled: true,
       totalRequests: this.debugRequests.length,
       queueSize: this.queue.length,
-      requestHistorySize: this.debugRequestHistorySize
+      requestHistorySize: this.debugRequestHistorySize,
+      backendStats: backendStats
     };
   }
 }

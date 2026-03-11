@@ -460,7 +460,8 @@ app.get('/stats', (req, res) => {
       requestCount: b.requestCount,
       errorCount: b.errorCount,
       apiTypes: b.getApiTypes(),
-      primaryApiType: b.getPrimaryApiType()
+      primaryApiType: b.getPrimaryApiType(),
+      performanceStats: b.getPerformanceStats()
     })),
     // Add: Queue statistics
     queueStats: balancer.getAllQueueStats()
@@ -493,7 +494,8 @@ app.get('/backends', (req, res) => {
           endpoints: b.backendInfo.endpoints,
           models: b.backendInfo.models,
           detectedAt: b.backendInfo.detectedAt
-        } : null
+        } : null,
+        performanceStats: b.getPerformanceStats()
       };
     })
   });

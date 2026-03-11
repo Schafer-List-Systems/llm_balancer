@@ -257,7 +257,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Render backend cards
+  // Format tokens per second for display
+  function formatTokensPerSecond(tps) {
+    if (!tps || tps === 0) return 'N/A';
+    // Round to nearest integer and add k suffix for thousands
+    const rounded = Math.round(tps);
+    return rounded >= 1000 ? `${(rounded / 1000).toFixed(2)}k` : rounded;
+  }
+
+  // Render backend cards with performance metrics
   function renderBackends(backendsData) {
     const backendsGrid = document.getElementById('backendsGrid');
 
@@ -294,6 +302,49 @@ document.addEventListener('DOMContentLoaded', () => {
           `).join('')
         : '';
 
+      // Extract performance stats from backend object (added by /stats endpoint)
+      const perfStats = backend.performanceStats || {};
+      const nonStreamingStats = perfStats.nonStreamingStats || {};
+      const streamingStats = perfStats.streamingStats || {};
+      const timingStats = perfStats.timingStats || {};
+
+      // Build performance metrics HTML
+      let performanceMetricsHtml = '';
+
+      // Non-streaming tokens/sec
+      if (nonStreamingStats.count > 0) {
+        performanceMetricsHtml += `
+          <div class="metric-row">
+            <span class="metric-label">⚡ Non-Stream</span>
+            <span class="metric-value">${formatTokensPerSecond(nonStreamingStats.avgTokensPerSecond)}</span>
+            <span class="metric-unit">tok/s (${nonStreamingStats.count})</span>
+          </div>
+        `;
+      }
+
+      // Streaming tokens/sec (if available)
+      if (streamingStats.promptProcessingRate?.count > 0 || streamingStats.generationRate?.count > 0) {
+        const avgStreamTps = ((streamingStats.promptProcessingRate.avgTokensPerSecond || 0) +
+                              (streamingStats.generationRate.avgTokensPerSecond || 0)) / 2;
+        performanceMetricsHtml += `
+          <div class="metric-row">
+            <span class="metric-label">📡 Stream</span>
+            <span class="metric-value">${formatTokensPerSecond(avgStreamTps)}</span>
+            <span class="metric-unit">tok/s (${streamingStats.promptProcessingRate.count})</span>
+          </div>
+        `;
+      }
+
+      // Timing stats (first chunk, total time) - always available for streaming backends
+      if (timingStats.streamingRequestCount > 0) {
+        performanceMetricsHtml += `
+          <div class="metric-row">
+            <span class="metric-label">⏱️ Timing</span>
+            <span class="metric-value">${timingStats.avgFirstChunkTimeMs}ms → ${Math.round(timingStats.avgTotalCompletionTimeMs - timingStats.avgFirstChunkTimeMs)}ms</span>
+          </div>
+        `;
+      }
+
       return `
         <div class="backend-card ${healthClass}">
           <div class="backend-url">${backend.url}</div>
@@ -324,6 +375,11 @@ document.addEventListener('DOMContentLoaded', () => {
               <span class="info-value ${backend.failCount > 0 ? 'text-danger' : ''}">${backend.failCount || 0}</span>
             </div>
           </div>
+          ${performanceMetricsHtml ? `
+            <div class="performance-metrics">
+              ${performanceMetricsHtml}
+            </div>
+          ` : ''}
           ${backend.models && backend.models.length > 0 ? `
             <div class="models-list">
               ${backend.models.map(model => `

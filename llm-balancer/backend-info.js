@@ -67,6 +67,14 @@ class BackendInfo {
 
     // Store discovered models for use in POST probes
     this.discoveredModels = {};
+
+    // Performance statistics tracking - stores per-request rates, then averages them
+    this.stats = {
+      requestCount: 0,
+      nonStreamingRates: [],      // Array of tokens/second per request
+      streamingPromptRates: [],   // Array of prompt tokens/sec per request
+      streamingGenerationRates: [] // Array of completion tokens/sec per request
+    };
   }
 
   /**
@@ -460,6 +468,95 @@ class BackendInfo {
     });
 
     return backendInfo;
+  }
+
+  /**
+   * Compute arithmetic mean of an array of numbers
+   * @param {number[]} arr - Array of rates
+   * @returns {number} Average value or 0 if empty
+   */
+  _computeAverage(arr) {
+    if (!arr || arr.length === 0) return 0;
+    const sum = arr.reduce((a, b) => a + b, 0);
+    return sum / arr.length;
+  }
+
+  /**
+   * Update non-streaming performance statistics
+   * Calculates tokens/second for this request and stores the rate
+   * @param {number} promptTokens - Number of prompt tokens used
+   * @param {number} completionTokens - Number of completion tokens generated
+   * @param {number} responseTimeMs - Total response time in milliseconds
+   * @returns {number} Per-request tokens/second rate
+   */
+  updateNonStreamingStats(promptTokens, completionTokens, responseTimeMs) {
+    const totalTokens = (promptTokens || 0) + (completionTokens || 0);
+
+    // Calculate tokens per second for this request
+    const responseTimeSeconds = responseTimeMs / 1000;
+    const rate = totalTokens / responseTimeSeconds;
+
+    // Store the per-request rate
+    this.stats.nonStreamingRates.push(rate);
+    this.stats.requestCount++;
+
+    return rate;
+  }
+
+  /**
+   * Update streaming performance statistics
+   * Calculates prompt processing rate and generation rate separately
+   * @param {number} promptTokens - Number of prompt tokens used
+   * @param {number} completionTokens - Number of completion tokens generated
+   * @param {number} firstChunkTimeMs - Time to receive first chunk in milliseconds
+   * @param {number} totalCompletionTimeMs - Total time until response completed in milliseconds
+   * @returns {{promptRate: number, generationRate: number}} Per-request rates
+   */
+  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs) {
+    promptTokens = promptTokens || 0;
+    completionTokens = completionTokens || 0;
+    firstChunkTimeMs = firstChunkTimeMs || 0;
+    totalCompletionTimeMs = totalCompletionTimeMs || 0;
+
+    // Calculate prompt processing rate (tokens/second to first chunk)
+    const promptProcessingSeconds = firstChunkTimeMs / 1000;
+    const promptRate = promptTokens / promptProcessingSeconds;
+
+    // Calculate generation rate (completion tokens/second during streaming)
+    const generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs;
+    const generationSeconds = generationTimeMs / 1000;
+    const generationRate = completionTokens / generationSeconds;
+
+    // Store the per-request rates
+    this.stats.streamingPromptRates.push(promptRate);
+    this.stats.streamingGenerationRates.push(generationRate);
+    this.stats.requestCount++;
+
+    return { promptRate, generationRate };
+  }
+
+  /**
+   * Get current performance statistics with computed averages
+   * @returns {{requestCount: number, nonStreamingStats: {count: number, avgTokensPerSecond: number}, streamingStats: {promptProcessingRate: {count: number, avgTokensPerSecond: number}, generationRate: {count: number, avgTokensPerSecond: number}}}} Statistics object
+   */
+  getStats() {
+    return {
+      requestCount: this.stats.requestCount,
+      nonStreamingStats: {
+        count: this.stats.nonStreamingRates.length,
+        avgTokensPerSecond: this._computeAverage(this.stats.nonStreamingRates)
+      },
+      streamingStats: {
+        promptProcessingRate: {
+          count: this.stats.streamingPromptRates.length,
+          avgTokensPerSecond: this._computeAverage(this.stats.streamingPromptRates)
+        },
+        generationRate: {
+          count: this.stats.streamingGenerationRates.length,
+          avgTokensPerSecond: this._computeAverage(this.stats.streamingGenerationRates)
+        }
+      }
+    };
   }
 }
 

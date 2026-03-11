@@ -7,6 +7,10 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 
+function getTimestamp() {
+  return new Date().toISOString();
+}
+
 /**
  * Hop-by-hop headers that should not be forwarded
  */
@@ -62,6 +66,25 @@ function extractModelsFromRequest(req) {
   }
 
   return null;
+}
+
+/**
+ * Extract token counts from a response body
+ * Handles various response formats (usage object with token fields)
+ * @param {Object} responseBody - Response body object
+ * @returns {{promptTokens: number, completionTokens: number, totalTokens: number}|null} Token counts or null if not found
+ */
+function extractTokenCounts(responseBody) {
+  if (!responseBody || !responseBody.usage) {
+    return null;
+  }
+
+  // Support both OpenAI format (prompt_tokens/completion_tokens) and LiteLLM format (input_tokens/output_tokens)
+  return {
+    promptTokens: responseBody.usage.prompt_tokens || responseBody.usage.input_tokens || 0,
+    completionTokens: responseBody.usage.completion_tokens || responseBody.usage.output_tokens || 0,
+    totalTokens: responseBody.usage.total_tokens || 0
+  };
 }
 
 /**
@@ -247,9 +270,12 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
   // Remove Content-Length - let Node.js calculate it for the forwarded request
   delete headers['content-length'];
 
-  // Handle streaming response
-  if (req.is('raw') && headers['content-type']?.includes('stream')) {
-    console.debug(`[Gateway] Using handleStreamingRequest`);
+  // Handle streaming response - check if client requested stream in body
+  const isStreaming = (originalBody && typeof originalBody === 'object' && originalBody.stream === true) ||
+                      (typeof requestBody === 'string' && requestBody.includes('"stream":true'));
+
+  if (isStreaming) {
+    console.debug(`[Gateway] Using handleStreamingRequest (stream: true detected in body)`);
     handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
   } else {
     console.debug(`[Gateway] Using handleNonStreamingRequest`);
@@ -316,8 +342,19 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     onRequestComplete();
   });
 
+  // Record when request is sent to backend
+  const requestSentTime = Date.now();
+
   proxyReq.on('response', (proxyRes) => {
-    console.debug(`[Gateway] Proxy response from ${backend.url}: ${proxyRes.statusCode}`);
+    // Record when headers are received from backend
+    const headersReceivedTime = Date.now();
+    const timeToFirstHeader = headersReceivedTime - requestSentTime;
+    console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, timeToFirstHeader=${timeToFirstHeader}ms, statusCode=${proxyRes.statusCode}`);
+
+    // Record start time for performance tracking
+    const startTime = Date.now();
+    let firstChunkTimestamp = null;
+    let chunkCount = 0;
 
     // Copy response headers
     Object.keys(proxyRes.headers).forEach(header => {
@@ -327,21 +364,141 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
       }
     });
 
-    // Handle streaming response
-    if (proxyRes.headers['content-type']?.includes('stream')) {
-      proxyRes.pipe(res);
-      // For piped streaming, release when the response ends
+    // Handle streaming response with token tracking
+    // Note: Node.js normalizes headers to lowercase
+    const contentType = proxyRes.headers['content-type'] || proxyRes.headers['Content-Type'];
+    console.debug(`[Gateway] Streaming content-type check: ${contentType}`);
+
+    if (contentType?.includes('stream')) {
+      let data = '';
+      const chunks = [];  // Collect all chunks for parsing
+
+      proxyRes.on('data', chunk => {
+        chunkCount++;
+        // Capture first chunk arrival time
+        if (firstChunkTimestamp === null) {
+          firstChunkTimestamp = Date.now();
+          const timeToFirstChunk = firstChunkTimestamp - startTime;
+          console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: firstChunkArrived=${firstChunkTimestamp}, timeToFirstChunk=${timeToFirstChunk}ms, chunkNumber=${chunkCount}`);
+        }
+        // Accumulate data for token extraction
+        data += Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
+        chunks.push(chunk);
+      });
+
       proxyRes.on('end', () => {
+        // Record when full response is received
+        const fullResponseTime = Date.now();
+        const timeFromHeaders = fullResponseTime - headersReceivedTime;
+        const timeFromFirstChunk = fullResponseTime - firstChunkTimestamp;
+        const totalTime = fullResponseTime - requestSentTime;
+        const totalCompletionTimeMs = Date.now() - startTime;
+        const firstChunkTimeMs = firstChunkTimestamp !== null ? firstChunkTimestamp - startTime : 0;
+
+        console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, firstChunk=${firstChunkTimestamp}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, timeFromFirstChunk=${timeFromFirstChunk}ms, totalTime=${totalTime}ms, chunkCount=${chunkCount}`);
+
+        // Parse streaming response to extract token counts from final usage object
+        // Note: vLLM streaming format doesn't include usage in chunks, only [DONE] at end
+        // Some APIs (OpenAI) do include usage in the final chunk
+        let promptTokens = 0;
+        let completionTokens = 0;
+
+        try {
+          // Split by newline for SSE format and find messages with usage stats
+          const lines = data.split('\n').filter(line => line.trim());
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const jsonStr = line.substring(5).trim();
+              if (jsonStr === '[DONE]') continue;  // Skip completion marker
+              try {
+                const msg = JSON.parse(jsonStr);
+                // Check for usage in this message (some APIs include it in final chunk)
+                if (msg.usage) {
+                  promptTokens = msg.usage.prompt_tokens || 0;
+                  completionTokens = msg.usage.completion_tokens || 0;
+                }
+              } catch (e) {
+                // Not a JSON line, skip
+              }
+            }
+          }
+
+          // Update streaming stats with timing data (always available)
+          // If token counts are available from usage field, include rate calculations
+          if (promptTokens > 0 || completionTokens > 0) {
+            backend.updateStreamingStats(
+              promptTokens,
+              completionTokens,
+              firstChunkTimeMs,
+              totalCompletionTimeMs
+            );
+            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated: ${promptTokens} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+          } else {
+            // Still track timing even without token counts (vLLM doesn't include usage in stream)
+            backend.updateStreamingTimingStats(firstChunkTimeMs, totalCompletionTimeMs);
+            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats tracked (timing only): first_chunk=${firstChunkTimeMs}ms, total_completion=${totalCompletionTimeMs}ms`);
+          }
+        } catch (e) {
+          console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to parse streaming response for stats:`, e.message);
+        }
+
+        // Pipe accumulated data to client response
+        const finalBuffer = Buffer.concat(chunks);
+        res.write(finalBuffer);
+
+        const route = req.path || req.originalUrl || '/';
+        balancer.trackDebugRequest(
+          {
+            route,
+            method: req.method,
+            priority: backend.priority || 0,
+            backendId: backend.id,
+            backendUrl: backend.url,
+            streamingStats: {
+              firstChunkTimeMs,
+              totalCompletionTimeMs
+            }
+          },
+          requestBody,
+          { data: data, contentType: proxyRes.headers['content-type'] }
+        );
+
+        res.end();
         releaseBackend(balancer, backend);
         onRequestComplete();
       });
     } else {
       let data = '';
       proxyRes.on('data', chunk => {
+        // Capture first chunk arrival time for non-piped streaming
+        if (firstChunkTimestamp === null) {
+          firstChunkTimestamp = Date.now();
+        }
         data += Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
       });
 
       proxyRes.on('end', () => {
+        const totalCompletionTimeMs = Date.now() - startTime;
+        const firstChunkTimeMs = firstChunkTimestamp !== null ? firstChunkTimestamp - startTime : 0;
+
+        // Extract token counts and update streaming stats
+        try {
+          const responseBody = JSON.parse(data);
+          const tokenCounts = extractTokenCounts(responseBody);
+
+          if (tokenCounts) {
+            backend.updateStreamingStats(
+              tokenCounts.promptTokens,
+              tokenCounts.completionTokens,
+              firstChunkTimeMs,
+              totalCompletionTimeMs
+            );
+            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated: ${tokenCounts.promptTokens} prompt tokens in ${firstChunkTimeMs}ms, ${tokenCounts.completionTokens} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+          }
+        } catch (e) {
+          console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to parse streaming response for stats:`, e.message);
+        }
+
         const route = req.path || req.originalUrl || '/';
         balancer.trackDebugRequest(
           {
@@ -429,8 +586,17 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     onRequestComplete();
   });
 
+  // Record when request is sent to backend
+  const requestSentTime = Date.now();
+
   proxyReq.on('response', (proxyRes) => {
-    console.debug(`[Gateway] Proxy response received from ${backend.url}: ${proxyRes.statusCode}`);
+    // Record when headers are received from backend
+    const headersReceivedTime = Date.now();
+    const timeToFirstHeader = headersReceivedTime - requestSentTime;
+    console.debug(`[${getTimestamp()}] [RequestProcessor] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, timeToFirstHeader=${timeToFirstHeader}ms, statusCode=${proxyRes.statusCode}`);
+
+    // Record start time for performance tracking (when response starts arriving)
+    const startTime = Date.now();
     let data = '';
 
     proxyRes.on('data', chunk => {
@@ -438,6 +604,24 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     });
 
     proxyRes.on('end', () => {
+      // Record when full response is received
+      const fullResponseTime = Date.now();
+      const timeFromHeaders = fullResponseTime - headersReceivedTime;
+      const totalTime = fullResponseTime - requestSentTime;
+      const responseTimeMs = fullResponseTime - startTime;
+      console.debug(`[${getTimestamp()}] [RequestProcessor] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, totalTime=${totalTime}ms, responseTimeMs=${responseTimeMs}, dataLength=${data.length}`);
+      const responseBody = JSON.parse(data);
+      const tokenCounts = extractTokenCounts(responseBody);
+
+      if (tokenCounts) {
+        backend.updateNonStreamingStats(
+          tokenCounts.promptTokens,
+          tokenCounts.completionTokens,
+          totalTime
+        );
+        console.debug(`[${getTimestamp()}] [RequestProcessor] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, calculatedRate=${((tokenCounts.promptTokens + tokenCounts.completionTokens) / (totalTime / 1000)).toFixed(2)} tokens/sec`);
+      }
+
       // Track debug request with request/response content
       const route = req.path || req.originalUrl || '/';
       balancer.trackDebugRequest(
@@ -491,5 +675,6 @@ module.exports = {
   executeProxyRequest,
   getRequestBody,
   extractModelsFromRequest,
-  replaceModelInRequestBody
+  replaceModelInRequestBody,
+  extractTokenCounts
 };
