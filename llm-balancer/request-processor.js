@@ -384,6 +384,8 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         // Accumulate data for token extraction
         data += Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
         chunks.push(chunk);
+        // Immediately pipe to client response (true streaming)
+        res.write(chunk);
       });
 
       proxyRes.on('end', () => {
@@ -442,9 +444,9 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to parse streaming response for stats:`, e.message);
         }
 
-        // Pipe accumulated data to client response
-        const finalBuffer = Buffer.concat(chunks);
-        res.write(finalBuffer);
+        // The [DONE] message is already included in the chunks from the backend
+        // Just end the response
+        res.end();
 
         const route = req.path || req.originalUrl || '/';
         balancer.trackDebugRequest(
@@ -463,7 +465,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           { data: data, contentType: proxyRes.headers['content-type'] }
         );
 
-        res.end();
         releaseBackend(balancer, backend);
         onRequestComplete();
       });
