@@ -69,12 +69,16 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
         </div>
-        <button id="refreshButton" class="refresh-button">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M2 8a6 6 0 0 1 6-6v6l4-4"/>
-            <path d="M6 8a6 6 0 0 1 6-6v6l-4-4"/>
+        <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+          <!-- Sun icon (visible in light mode) -->
+          <svg class="mode-icon sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
           </svg>
-          Refresh
+          <!-- Moon icon (visible in dark mode) -->
+          <svg class="mode-icon moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
         </button>
       </header>
 
@@ -214,27 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <p>LLM Balancer Dashboard • Running on port 3080</p>
       </footer>
     `;
-
-    // Add event listener for refresh button
-    const refreshButton = document.getElementById('refreshButton');
-    refreshButton.addEventListener('click', handleRefresh);
-  }
-
-  // Handle refresh button click
-  async function handleRefresh() {
-    const refreshButton = document.getElementById('refreshButton');
-    refreshButton.classList.add('spinning');
-
-    const result = await apiClient.manualRefresh();
-
-    refreshButton.classList.remove('spinning');
-
-    if (result.success) {
-      renderDashboard();
-      showNotification('Dashboard refreshed successfully', 'success');
-    } else {
-      showNotification(`Failed to refresh: ${result.error}`, 'error');
-    }
   }
 
   // Render overview statistics
@@ -928,9 +911,26 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLastUpdateTime(apiClient.getLastUpdateTime());
   }
 
+  // Initialize dark mode toggle
+  function initDarkMode() {
+    const toggleBtn = document.getElementById('darkModeToggle');
+
+    if (!toggleBtn) return;
+
+    // Default to dark mode
+    document.body.classList.add('dark-mode');
+
+    toggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      localStorage.setItem('darkMode', isDark);
+    });
+  }
+
   // Initialize
   async function init() {
     createDashboard();
+    initDarkMode();
 
     // Ensure apiClient is loaded
     if (!window.apiClient) {
