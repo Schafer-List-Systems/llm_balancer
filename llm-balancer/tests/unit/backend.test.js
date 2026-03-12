@@ -34,6 +34,184 @@ const createMockBackendInfo = (apiTypes, models = {}) => {
   };
 };
 
+describe('Backend Class - Performance Stats', () => {
+  describe('_limitSamples()', () => {
+    it('should not modify array when under default limit (20)', () => {
+      const backend = new Backend('http://localhost:11434');
+      const arr = [1, 2, 3, 4, 5];
+      const result = backend._limitSamples(arr);
+
+      expect(result).toEqual([1, 2, 3, 4, 5]);
+      expect(arr.length).toBe(5);
+    });
+
+    it('should not trim array when under default limit (20)', () => {
+      const backend = new Backend('http://localhost:11434');
+      const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const result = backend._limitSamples(arr);
+
+      expect(result).toEqual(arr);
+      expect(arr.length).toBe(10); // Under 20 default limit
+    });
+
+    it('should trim array when over default limit (20)', () => {
+      const backend = new Backend('http://localhost:11434');
+      const arr = [];
+      for (let i = 0; i < 25; i++) {
+        arr.push(i);
+      }
+      const result = backend._limitSamples(arr);
+
+      expect(result).toBe(arr);
+      expect(arr.length).toBe(20); // Trimmed to default MAX_STATS_SAMPLES
+      // Should keep most recent 20 (5,6,7,...,24)
+      expect(arr[0]).toBe(5);
+      expect(arr[19]).toBe(24);
+    });
+
+    it('should return the same array reference', () => {
+      const backend = new Backend('http://localhost:11434');
+      const arr = [1, 2, 3];
+      const result = backend._limitSamples(arr);
+
+      expect(result).toBe(arr);
+    });
+  });
+
+  describe('updateNonStreamingStats() - with sample limiting', () => {
+    it('should keep only MAX_STATS_SAMPLES (20) most recent entries by default', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add more samples than the default limit (20)
+      // Loop runs i=0 to i=29, so promptTokens = 10+i = 10 to 39
+      for (let i = 0; i < 30; i++) {
+        backend.updateNonStreamingStats(
+          10 + i,      // promptTokens (10,11,12,...,39)
+          20 + i,      // completionTokens
+          100 + i,     // totalTimeMs
+          10 + i       // promptProcessingTimeMs
+        );
+      }
+
+      // Should only have MAX_SAMPLES entries (default 20)
+      expect(backend._performanceStats.totalTimeMs.length).toBe(20);
+      expect(backend._performanceStats.promptTokens.length).toBe(20);
+      expect(backend._performanceStats.completionTokens.length).toBe(20);
+
+      // Should keep most recent 20 samples (promptTokens 20-39, removed 10-19)
+      expect(backend._performanceStats.promptTokens[0]).toBe(20);  // First kept (10+10)
+      expect(backend._performanceStats.promptTokens[19]).toBe(39); // Last kept (10+29)
+    });
+
+    it('should keep most recent samples with oldest removed', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add samples with known values
+      for (let i = 0; i < 25; i++) {
+        backend.updateNonStreamingStats(
+          i,      // promptTokens (0,1,2,...,24)
+          i * 10, // completionTokens
+          100,    // totalTimeMs
+          10      // promptProcessingTimeMs
+        );
+      }
+
+      // Should only have 20 most recent samples (promptTokens: 5,6,...,24)
+      const promptTokens = backend._performanceStats.promptTokens;
+      expect(promptTokens.length).toBe(20);
+      expect(promptTokens[0]).toBe(5);  // First kept (removed 0-4)
+      expect(promptTokens[19]).toBe(24); // Last kept
+    });
+  });
+
+  describe('updateStreamingStats() - with sample limiting', () => {
+    it('should keep only MAX_STATS_SAMPLES (20) most recent entries by default', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add more samples than the default limit (20)
+      for (let i = 0; i < 30; i++) {
+        backend.updateStreamingStats(
+          10 + i,           // promptTokens
+          20 + i,           // completionTokens
+          10 + i,           // firstChunkTimeMs
+          100 + i           // totalCompletionTimeMs
+        );
+      }
+
+      // Should only have MAX_SAMPLES entries (default 20)
+      expect(backend._performanceStats.totalTimeMs.length).toBe(20);
+      expect(backend._performanceStats.promptTokens.length).toBe(20);
+      expect(backend._performanceStats.completionTokens.length).toBe(20);
+      expect(backend._performanceStats.generationTimeMs.length).toBe(20);
+    });
+
+    it('should keep most recent samples for generationTimeMs', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add samples with known firstChunkTimeMs
+      // Loop runs i=0 to i=24, firstChunkTimeMs = 5+i = 5 to 29
+      // generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs = 100 - (5+i) = 95 to 71
+      // With MAX_SAMPLES=20, we keep last 20 samples (i=5 to i=24)
+      for (let i = 0; i < 25; i++) {
+        backend.updateStreamingStats(
+          10,             // promptTokens
+          20,             // completionTokens
+          5 + i,          // firstChunkTimeMs (5,6,7,...,29)
+          100             // totalCompletionTimeMs
+        );
+      }
+
+      const generationTimeMs = backend._performanceStats.generationTimeMs;
+      expect(generationTimeMs.length).toBe(20);
+      // First kept generationTimeMs: 100 - (5+5) = 90 (i=5)
+      // Last kept generationTimeMs: 100 - 29 = 71 (i=24)
+      expect(generationTimeMs[0]).toBe(90);
+      expect(generationTimeMs[19]).toBe(71);
+    });
+  });
+
+  describe('getPerformanceStats() - with sample limiting', () => {
+    it('should compute averages from limited samples only', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add varied response times
+      for (let i = 0; i < 10; i++) {
+        backend.updateNonStreamingStats(
+          10,             // promptTokens
+          20,             // completionTokens
+          100 + i * 10,   // totalTimeMs (100, 110, 120, ..., 190)
+          10              // promptProcessingTimeMs
+        );
+      }
+
+      const stats = backend.getPerformanceStats();
+
+      // Average should be computed from limited samples
+      // With MAX_SAMPLES=20, all 10 would be included, avg = (100+110+...+190)/10 = 145
+      expect(stats.timeStats.avgTotalTimeMs).toBeGreaterThan(0);
+    });
+
+    it('should return null for rate stats with insufficient data', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add samples without token data
+      for (let i = 0; i < 5; i++) {
+        backend.updateNonStreamingStats(
+          null,           // no promptTokens
+          null,           // no completionTokens
+          100,            // totalTimeMs
+          10              // promptProcessingTimeMs
+        );
+      }
+
+      const stats = backend.getPerformanceStats();
+      expect(stats.rateStats.totalRate).toBeNull();
+      expect(stats.rateStats.promptRate).toBeNull();
+      expect(stats.rateStats.generationRate).toBeNull();
+    });
+  });
+});
+
 describe('Backend Class', () => {
   describe('constructor', () => {
     it('should create a Backend instance with default values', () => {

@@ -11,9 +11,25 @@ describe('Debug Mode', () => {
   let balancerEnabled;
 
   beforeEach(() => {
+    // Helper to create mock backend with getPerformanceStats stub
+    const createMockBackend = (url, priority = 1) => ({
+      url,
+      priority,
+      healthy: true,
+      busy: false,
+      requestCount: 0,
+      errorCount: 0,
+      getPerformanceStats: () => ({
+        requestCount: 0,
+        timeStats: { avgTotalTimeMs: 0, avgPromptProcessingTimeMs: 0, avgGenerationTimeMs: 0 },
+        tokenStats: { avgPromptTokens: null, avgCompletionTokens: null, avgTotalTokens: null },
+        rateStats: { totalRate: null, promptRate: null, generationRate: null }
+      })
+    });
+
     backends = [
-      { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0 },
-      { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0 }
+      createMockBackend('http://backend1:11434', 1),
+      createMockBackend('http://backend2:11434', 2)
     ];
 
     // Create balancer with debug disabled (default)

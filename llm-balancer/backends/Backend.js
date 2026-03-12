@@ -4,6 +4,10 @@
  * Follows the delegation pattern for health checking
  */
 
+// Maximum number of samples to keep for performance stats calculations
+// Configurable via MAX_STATS_SAMPLES environment variable, defaults to 20
+const MAX_STATS_SAMPLES = parseInt(process.env.MAX_STATS_SAMPLES) || 20;
+
 class Backend {
   constructor(url, maxConcurrency = 10) {
     this.url = url;
@@ -162,6 +166,20 @@ class Backend {
   }
 
   /**
+   * Limit an array to the maximum number of samples
+   * Removes oldest entries (from the beginning of the array) when array exceeds MAX_STATS_SAMPLES
+   * @param {any[]} arr - Array to limit
+   * @returns {any[]} Limited array
+   */
+  _limitSamples(arr) {
+    if (arr.length > MAX_STATS_SAMPLES) {
+      // Remove oldest entries (keep only the most recent MAX_STATS_SAMPLES)
+      arr.splice(0, arr.length - MAX_STATS_SAMPLES);
+    }
+    return arr;
+  }
+
+  /**
    * Compute arithmetic mean of an array of numbers
    * Filters out invalid values (Infinity, -Infinity, NaN) before computing average
    * @param {number[]} arr - Array of rates or times
@@ -195,34 +213,42 @@ class Backend {
 
     // Track time metrics (always available)
     this._performanceStats.totalTimeMs.push(totalTimeMs);
+    this._limitSamples(this._performanceStats.totalTimeMs);
     if (promptProcessingTimeMs !== null) {
       this._performanceStats.promptProcessingTimeMs.push(promptProcessingTimeMs);
+      this._limitSamples(this._performanceStats.promptProcessingTimeMs);
     }
 
     // Track token counts (only when provided, preserving null for backends without usage)
     if (promptTokens !== undefined && promptTokens !== null) {
       this._performanceStats.promptTokens.push(promptTokens);
+      this._limitSamples(this._performanceStats.promptTokens);
     }
     if (completionTokens !== undefined && completionTokens !== null) {
       this._performanceStats.completionTokens.push(completionTokens);
+      this._limitSamples(this._performanceStats.completionTokens);
     }
     // Track total tokens when both components are available
     const totalTokens = (promptTokens || 0) + (completionTokens || 0);
     if (totalTokens > 0) {
       this._performanceStats.totalTokens.push(totalTokens);
+      this._limitSamples(this._performanceStats.totalTokens);
     }
     if (totalTokens > 0 && totalTimeMs > 0) {
       const totalRate = totalTokens / (totalTimeMs / 1000);
       this._performanceStats.totalRate.push(totalRate);
+      this._limitSamples(this._performanceStats.totalRate);
     }
     if (promptTokens > 0 && promptProcessingTimeMs !== null && promptProcessingTimeMs > 0) {
       const promptRate = promptTokens / (promptProcessingTimeMs / 1000);
       this._performanceStats.promptRate.push(promptRate);
+      this._limitSamples(this._performanceStats.promptRate);
     }
     const generationTimeMs = totalTimeMs - (promptProcessingTimeMs || 0);
     if (completionTokens > 0 && generationTimeMs > 0) {
       const generationRate = completionTokens / (generationTimeMs / 1000);
       this._performanceStats.generationRate.push(generationRate);
+      this._limitSamples(this._performanceStats.generationRate);
     }
   }
 
@@ -240,33 +266,45 @@ class Backend {
 
     // Track time metrics (always available for streaming)
     this._performanceStats.totalTimeMs.push(totalCompletionTimeMs);
+    this._limitSamples(this._performanceStats.totalTimeMs);
     this._performanceStats.promptProcessingTimeMs.push(firstChunkTimeMs);
+    this._limitSamples(this._performanceStats.promptProcessingTimeMs);
 
     const generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs;
     this._performanceStats.generationTimeMs.push(generationTimeMs);
+    this._limitSamples(this._performanceStats.generationTimeMs);
 
     // Track token counts (only when provided, allowing null for APIs without usage)
     if (promptTokens !== null && promptTokens !== undefined) {
       this._performanceStats.promptTokens.push(promptTokens);
+      this._limitSamples(this._performanceStats.promptTokens);
     }
     if (completionTokens !== null && completionTokens !== undefined) {
       this._performanceStats.completionTokens.push(completionTokens);
+      this._limitSamples(this._performanceStats.completionTokens);
     }
     // Track total tokens when both components are available
     const totalTokens = (promptTokens || 0) + (completionTokens || 0);
     if (totalTokens > 0) {
       this._performanceStats.totalTokens.push(totalTokens);
+      this._limitSamples(this._performanceStats.totalTokens);
     }
 
     // Compute derived rates (only when both numerator and denominator available)
     if (totalTokens > 0 && totalCompletionTimeMs > 0) {
-      this._performanceStats.totalRate.push(totalTokens / (totalCompletionTimeMs / 1000));
+      const totalRate = totalTokens / (totalCompletionTimeMs / 1000);
+      this._performanceStats.totalRate.push(totalRate);
+      this._limitSamples(this._performanceStats.totalRate);
     }
     if (promptTokens > 0 && firstChunkTimeMs > 0) {
-      this._performanceStats.promptRate.push(promptTokens / (firstChunkTimeMs / 1000));
+      const promptRate = promptTokens / (firstChunkTimeMs / 1000);
+      this._performanceStats.promptRate.push(promptRate);
+      this._limitSamples(this._performanceStats.promptRate);
     }
     if (completionTokens > 0 && generationTimeMs > 0) {
-      this._performanceStats.generationRate.push(completionTokens / (generationTimeMs / 1000));
+      const generationRate = completionTokens / (generationTimeMs / 1000);
+      this._performanceStats.generationRate.push(generationRate);
+      this._limitSamples(this._performanceStats.generationRate);
     }
   }
 
@@ -288,6 +326,14 @@ class Backend {
       firstChunkTimeMs,
       totalCompletionTimeMs
     );
+  }
+
+  /**
+   * Get the maximum number of samples used for stats calculations
+   * @returns {number} Maximum sample count
+   */
+  static getMaxSamples() {
+    return MAX_STATS_SAMPLES;
   }
 
   /**
