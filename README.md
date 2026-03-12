@@ -21,13 +21,15 @@ The LLM Balancer provides priority-based load balancing across multiple backend 
 1. **[DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md)** - Find documentation by your role:
    - **User**: Installation, configuration, usage, troubleshooting
    - **API User**: API reference, request/response formats, integration
-   - **Developer**: Architecture, classes, testing, contributing
+   - **Developer**: Architecture, data flow, classes, testing, contributing
 
 2. **[docs/OVERVIEW.md](docs/OVERVIEW.md)** - System architecture and high-level design
 
-3. **[docs/user/INSTALLATION.md](docs/user/INSTALLATION.md)** - Installation options (Docker, manual, development)
+3. **[docs/developer/DATA_FLOW.md](docs/developer/DATA_FLOW.md)** - Interactive data flow diagrams showing request processing, health checks, and component interactions
 
-4. **[docs/user/USAGE.md](docs/user/USAGE.md)** - Complete usage guide with configuration examples
+4. **[docs/user/INSTALLATION.md](docs/user/INSTALLATION.md)** - Installation options (Docker, manual, development)
+
+5. **[docs/user/USAGE.md](docs/user/USAGE.md)** - Complete usage guide with configuration examples
 
 For quick reference, see the sections below.
 

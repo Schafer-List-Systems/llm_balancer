@@ -16,223 +16,215 @@ The LLM Balancer processes requests through several stages:
 
 ---
 
-## Request Processing Flow
+## System Architecture Overview
 
-### High-Level Flow
+```mermaid
+flowchart TB
+    subgraph ExternalClients["External Clients"]
+        Client["Client Application<br/>(LLM Request)"]
+    end
 
+    subgraph LB["LLM Balancer Gateway"]
+        Express["Express Middleware<br/>JSON/Body Parsing"]
+
+        subgraph Routes["API Routes"]
+            Chat["/v1/chat/completions*"]
+            Messages["/v1/messages*"]
+            Ollama["/api/*"]
+            Models["/models*"]
+        end
+
+        subgraph Core["Core Components"]
+            Balancer["Balancer<br/>(FIFO Queuing)"]
+            BackendSelector["BackendSelector"]
+        end
+    end
+
+    subgraph Backends["Backend Pool"]
+        Backend1["Backend 1<br/>(Priority 1)"]
+        Backend2["Backend 2<br/>(Priority 2)"]
+        Backend3["Backend 3<br/>(Priority 3)"]
+    end
+
+    subgraph Health["Health Monitoring"]
+        HealthChecker["HealthChecker<br/>(Periodic Checks)"]
+        BackendInfo["BackendInfo<br/>(Capability Detection)"]
+    end
+
+    Client -->|HTTP Request| Express
+    Express --> Routes
+    Routes --> Balancer
+    Balancer --> BackendSelector
+    BackendSelector --> BackendPool
+    BackendPool --> Backend1
+    BackendPool --> Backend2
+    BackendPool --> Backend3
+
+    Backend1 <-->|Proxy Request| Backend2
+    Backend2 <-->|Proxy Request| Backend3
+    Backend3 <-->|Proxy Request| Backend1
+
+    HealthChecker --> Backend1
+    HealthChecker --> Backend2
+    HealthChecker --> Backend3
+
+    BackendInfo -.->|Startup Discovery| Backend1
+    BackendInfo -.->|Startup Discovery| Backend2
+    BackendInfo -.->|Startup Discovery| Backend3
+
+    style Balancer fill:#e1f5fe
+    style BackendSelector fill:#e1f5fe
+    style HealthChecker fill:#fff3e0
+    style BackendInfo fill:#fff3e0
+    style Backend1 fill:#f3e5f5
+    style Backend2 fill:#f3e5f5
+    style Backend3 fill:#f3e5f5
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Client    │────▶│  API Server  │────▶│  Balancer   │
-└─────────────┘     └──────────────┘     └─────────────┘
-                                         │
-                                         ▼
-                                  ┌──────────────┐
-                                  │  Backend     │
-                                  │  Selection   │
-                                  └──────────────┘
-                                         │
-                                         ▼
-                                  ┌──────────────┐
-                                  │  Request     │
-                                  │  Processor   │
-                                  └──────────────┘
-                                         │
-                                         ▼
-                                  ┌──────────────┐
-                                  │  Backend     │
-                                  │  Server      │
-                                  └──────────────┘
-                                         │
-                                         ▼
-                                  ┌──────────────┐
-                                  │  API Server  │
-                                  └──────────────┘
-                                         │
-                                         ▼
-                                  ┌──────────────┐
-                                  │   Client     │
-                                  └──────────────┘
+
+---
+
+## Startup Phase Flow
+
+```mermaid
+sequenceDiagram
+    participant Main as main.js
+    participant Config as config.js
+    participant BackendInfo as BackendInfo
+    participant Backend as Backend
+    participant HealthChecker as HealthChecker
+
+    Note over Main,Config: Phase 1: Configuration Loading
+    Main->>Config: loadConfig()
+    Config-->>Main: config object with backend URLs
+
+    Note over Main,Backend: Phase 2: Backend Initialization
+    Main->>Main: Create Backend instances from config
+    Main->>Backend: new Backend(url, maxConcurrency)
+
+    Note over Main,BackendInfo: Phase 3: Capability Detection
+    Main->>BackendInfo: getInfoAll(urls)
+
+    par Parallel Detection for each Backend
+        BackendInfo->>BackendInfo: Probe /api/tags (Ollama)
+        BackendInfo->>BackendInfo: Probe /v1/models (OpenAI)
+        BackendInfo->>BackendInfo: Probe /v1beta/models (Google)
+        BackendInfo->>BackendInfo: Probe /v1/messages (Anthropic)
+    end
+
+    BackendInfo-->>Main: backendInfoMap with API types & models
+    Main->>Backend: backend.backendInfo = backendInfoMap[url]
+
+    Note over Main,Backend: Phase 4: Health Checker Assignment
+    Main->>Backend: Get primary API type
+    Main->>Backend: Assign API-specific health checker
+    Backend->>Backend: backend.healthChecker = <API-specific checker>
+
+    Note over Main,HealthChecker: Phase 5: Start Health Checking
+    Main->>HealthChecker: healthChecker.start()
+    HealthChecker->>HealthChecker: checkAll() (immediate)
+    HealthChecker->>HealthChecker: Interval-based checks
+
+    Note over Backend: Each Backend now contains
+    Note over Backend: - url, priority, maxConcurrency
+    Note over Backend: - healthChecker (delegated)
+    Note over Backend: - backendInfo (discovery data)
 ```
 
 ---
 
 ## Detailed Request Flow
 
-### Step 1: Request Reception
+### Request Processing Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Routes
+    participant Balancer
+    participant BackendSelector
+    participant Backend
+    participant RequestProcessor
+    participant BackendPool
+
+    Client->>Routes: HTTP POST /v1/chat/completions
+    Routes->>Balancer: extractModelsFromRequest()
+
+    Note over Balancer: Backend Selection
+
+    Balancer->>BackendSelector: getNextBackendForModelWithMatch(models)
+    BackendSelector->>BackendSelector: _filterByHealthAndAvailability()
+    BackendSelector->>BackendSelector: ModelMatcher.findBestMatchAcrossBackends()
+    BackendSelector-->>Balancer: backend + matchedModel
+
+    alt Backend Available Immediately
+        Balancer-->>Routes: backend (direct assignment)
+    else No Backend Available
+        Balancer->>Balancer: queueRequestWithRequestData()
+        Balancer-->>Routes: backend (after queue processing)
+    end
+
+    Routes->>RequestProcessor: forwardRequest(req, res, backend, matchedModel)
+    RequestProcessor->>RequestProcessor: processRequest()
+
+    Note over RequestProcessor: Increment activeRequestCount
+
+    RequestProcessor->>Backend: activeRequestCount++
+    RequestProcessor->>Backend: requestCount++
+
+    RequestProcessor->>RequestProcessor: Prepare proxy request
+    Note over RequestProcessor: - Replace model field if matchedModel
+    Note over RequestProcessor: - Remove hop-by-hop headers
+
+    alt isStreaming == true
+        RequestProcessor->>RequestProcessor: handleStreamingRequest()
+        RequestProcessor->>BackendPool: http.request()
+        BackendPool-->>RequestProcessor: stream response chunks
+        RequestProcessor->>RequestProcessor: Parse streaming stats
+        RequestProcessor->>RequestProcessor: extractTokenCounts from chunks
+    else isStreaming == false
+        RequestProcessor->>RequestProcessor: handleNonStreamingRequest()
+        RequestProcessor->>BackendPool: http.request()
+        BackendPool-->>RequestProcessor: full response
+        RequestProcessor->>RequestProcessor: extractTokenCounts from response
+    end
+
+    RequestProcessor->>RequestProcessor: Update backend performance stats
+    RequestProcessor->>Backend: updateStreamingStats() or updateNonStreamingStats()
+
+    RequestProcessor->>RequestProcessor: trackDebugRequest()
+    RequestProcessor->>Backend: releaseBackend()
+    Backend->>RequestProcessor: activeRequestCount--
+
+    RequestProcessor->>Balancer: notifyBackendAvailable() if available
+
+    Balancer->>Balancer: processQueueWhenBackendAvailable()
+    Balancer->>Balancer: Forward next queued request if any
+
+    RequestProcessor-->>Client: Final response
+```
+
+### Backend Selection Algorithm
+
+The backend selection follows these steps:
+
+1. **Filter by Health and Availability**: Only healthy backends with available concurrency are considered
+2. **Model Matching**: If models are specified, use priority-first regex matching to find backends that support the requested models
+3. **Sort by Priority**: Among matching backends, sort by priority (descending)
+4. **Select Best Candidate**: Return the highest priority available backend
 
 ```javascript
-// index.js - Route handler
-app.post('/v1/messages*', async (req, res) => {
-  // 1. Parse request
-  const body = req.body
+// Simplified selection flow
+function selectBackend(backends, options = {}) {
+  // Step 1: Filter by health and availability
+  let candidates = filterByHealthAndAvailability(backends)
 
-  // 2. Get priority from headers (optional)
-  const priority = req.headers.priority || 1
-
-  // 3. Queue request
-  const backend = await balancer.queueRequest(req)
-
-  // 4. Forward request
-  await forwardRequest(backend, req, res)
-})
-```
-
-**Middleware Processing**:
-```
-Request → CORS Middleware → Body Parser → Route Router → Handler
-```
-
----
-
-### Step 2: Backend Selection
-
-#### Queue Request Flow
-
-```javascript
-async function queueRequest(req) {
-  // Check if any healthy backends exist
-  if (!hasHealthyBackends()) {
-    throw new NoHealthyBackendsError()
+  // Step 2: Model matching if needed
+  if (options.models) {
+    return selectByPriorityFirst(candidates, options.models)
   }
 
-  // Try immediate assignment
-  const backend = getNextBackend()
-  if (backend) {
-    backend.activeRequestCount++
-    return backend
-  }
-
-  // Queue the request
-  const queuedRequest = createQueuedRequest()
-  queue.push(queuedRequest)
-
-  // Set timeout
-  queuedRequest.timeoutId = setTimeout(() => {
-    queuedRequest.reject(new TimeoutError())
-  }, queueTimeout)
-
-  return queuedRequest.promise
-}
-```
-
-#### Backend Selection Algorithm
-
-```javascript
-function getNextBackend() {
-  // 1. Filter healthy, available backends
-  const available = backends.filter(b =>
-    b.healthy &&
-    b.activeRequestCount < b.maxConcurrency
-  )
-
-  // 2. Sort by priority (descending)
-  available.sort((a, b) => b.priority - a.priority)
-
-  // 3. Select first available
-  return available.length > 0 ? available[0] : null
-}
-```
-
----
-
-### Step 3: Request Forwarding
-
-#### Forward Request
-
-```javascript
-async function forwardRequest(backend, req, res) {
-  // Parse backend URL
-  const backendUrl = new URL(backend.url)
-
-  // Construct target URL
-  const targetUrl = `${backendUrl.protocol}//${backendUrl.host}${req.path}`
-
-  // Forward request
-  const response = await fetch(targetUrl, {
-    method: req.method,
-    headers: filterHeaders(req.headers),
-    body: req.body
-  })
-
-  // Stream response
-  response.headers.forEach((value, key) => {
-    res.setHeader(key, value)
-  })
-
-  response.body.pipe(res)
-}
-```
-
-#### Header Filtering
-
-```javascript
-function filterHeaders(headers) {
-  const hopByHopHeaders = [
-    'connection',
-    'keep-alive',
-    'transfer-encoding',
-    'te',
-    'trailer',
-    'upgrade'
-  ]
-
-  const filtered = {}
-  for (const [key, value] of Object.entries(headers)) {
-    if (!hopByHopHeaders.includes(key)) {
-      filtered[key] = value
-    }
-  }
-
-  return filtered
-}
-```
-
----
-
-### Step 4: Response Handling
-
-#### Streaming Response
-
-```javascript
-// For streaming content types
-if (isStreamingResponse(req)) {
-  // Pipe response directly
-  response.body.pipe(res)
-} else {
-  // Buffer response
-  const chunks = []
-  for await (const chunk of response.body) {
-    chunks.push(chunk)
-  }
-  const body = Buffer.concat(chunks).toString()
-  res.send(body)
-}
-```
-
-#### Debug Tracking
-
-```javascript
-function trackDebugRequest(req, backend, response) {
-  if (!debugMode) return
-
-  const debugRequest = {
-    id: nextRequestId++,
-    timestamp: Date.now(),
-    route: req.path,
-    method: req.method,
-    priority: req.headers.priority || 1,
-    backendId: backend.url,
-    backendUrl: backend.url,
-    requestContent: parseRequestContent(req.body),
-    responseContent: {
-      data: parseResponseContent(response.body),
-      contentType: response.headers.get('content-type'),
-      statusCode: response.status
-    }
-  }
-
-  debugHistory.push(debugRequest)
-  trimDebugHistory()
+  // Step 3: Sort by priority and select best
+  return selectByPriority(candidates)
 }
 ```
 
@@ -240,334 +232,305 @@ function trackDebugRequest(req, backend, response) {
 
 ## Queue Processing Flow
 
-### Backend Becomes Available
+```mermaid
+sequenceDiagram
+    participant Balancer
+    participant Queue
+    participant Backend1
+    participant Backend2
+    participant Backend3
 
-```javascript
-function notifyBackendAvailable(backend) {
-  // Process queued requests while backends available
-  while (queue.length > 0) {
-    // Get next available backend
-    const nextBackend = getNextBackend()
-    if (!nextBackend) break
+    Note over Balancer: Initial State
 
-    // Get next queued request
-    const queuedRequest = queue.shift()
+    alt No Queue
+        Balancer->>BackendSelector: Select backend
+        BackendSelector-->>Balancer: Return backend
+    else Queue Not Empty
+        Balancer->>Queue: Push request
+        Queue->>Queue: Add to end of queue
+    end
 
-    // Clear timeout
-    if (queuedRequest.timeoutId) {
-      clearTimeout(queuedRequest.timeoutId)
-    }
+    Note over Queue: Queue: [req1, req2, req3]
 
-    // Assign backend and resolve promise
-    nextBackend.activeRequestCount++
-    queuedRequest.resolve(nextBackend)
-  }
-}
-```
+    Balancer->>Backend1: Process request
+    Backend1->>Backend1: activeRequestCount++
+    Backend1-->>Balancer: Processing...
 
-### Queue Timeout Handling
+    alt Backend at max concurrency
+        Balancer->>Backend2: Try next backend
+        Backend2-->>Balancer: No available
+        Balancer->>Backend3: Try next backend
+        Backend3-->>Balancer: No available
+        Balancer->>Queue: Queue request
+    else Backend available
+        Backend1-->>Balancer: Completed
+        Backend1->>Balancer: releaseBackend()
+        Backend1->>Balancer: activeRequestCount--
+    end
 
-```javascript
-// When timeout fires
-function handleQueueTimeout(queuedRequest) {
-  if (queuedRequest.timeoutId) {
-    clearTimeout(queuedRequest.timeoutId)
-    queuedRequest.reject(new TimeoutError('Request timeout'))
-  }
-}
+    Balancer->>Balancer: notifyBackendAvailable()
+    Balancer->>Queue: Check queue head
+
+    Queue-->>Balancer: Return req2
+
+    alt Queue has requests
+        Balancer->>Backend1: Process next request
+        Balancer->>Backend2: Process next request (if idle)
+        Balancer->>Backend3: Process next request (if idle)
+    else Queue empty
+        Balancer->>Balancer: No action
+    end
+
+    Note over Backend1,Backend3: Maintain FIFO order
+    Note over Queue: Only one global queue
 ```
 
 ---
 
 ## Health Check Flow
 
-### Periodic Health Check
+```mermaid
+flowchart TD
+    Start[HealthChecker Start] --> Initialize[Initial checkAll()]
 
-```javascript
-async function runHealthChecks() {
-  for (const backend of backends) {
-    try {
-      const healthy = await healthChecker.check(backend)
+    Initialize --> CheckEach{For Each Backend}
 
-      if (healthy) {
-        if (!backend.healthy) {
-          // Recovery
-          backend.healthy = true
-          backend.failCount = 0
-          notifyBackendAvailable(backend)
-        }
-      } else {
-        // Failure
-        if (backend.healthy) {
-          backend.healthy = false
-          backend.failCount++
-          balancer.markFailed(backend.url)
-        }
-      }
-    } catch (error) {
-      // Handle check error
-      backend.healthy = false
-      backend.failCount++
+    subgraph HealthCheckCycle["Health Check Cycle"]
+        CheckEach --> CheckBackend[Check Backend Health]
+
+        CheckBackend --> CallCheckHealth{backend.checkHealth}
+        CallCheckHealth --> Delegate[Delegate to healthChecker.check]
+
+        subgraph APISpecificHealth["API-Specific Health Checkers"]
+            Delegate --> CheckType{API Type?}
+            CheckType -->|Ollama| OllamaCheck[OllamaHealthCheck<br/>Probe /api/tags]
+            CheckType -->|OpenAI/Groq| OpenAICheck[OpenAIHealthCheck<br/>Probe /v1/models]
+            CheckType -->|Anthropic| AnthropicCheck[AnthropicHealthCheck<br/>Probe /v1/messages]
+            CheckType -->|Google| GoogleCheck[GoogleHealthCheck<br/>Probe /v1beta/models]
+        end
+
+        OllamaCheck --> ParseResult{Result?}
+        OpenAICheck --> ParseResult
+        AnthropicCheck --> ParseResult
+        GoogleCheck --> ParseResult
+
+        ParseResult -->|Healthy| MarkHealthy[backend.healthy = true<br/>backend.failCount = 0]
+        ParseResult -->|Unhealthy| MarkUnhealthy[backend.healthy = false<br/>backend.failCount++]
+
+        MarkHealthy --> LogHealthy[Log: healthy + models]
+        MarkUnhealthy --> LogUnhealthy[Log: unhealthy + error]
+    end
+
+    LogHealthy --> CheckNext{More Backends?}
+    LogUnhealthy --> CheckNext
+
+    CheckNext -->|Yes| CheckEach
+    CheckNext -->|No| NextInterval[Wait: healthCheckInterval]
+
+    NextInterval --> Loop{Interval End?}
+    Loop -->|Yes| Start
+    Loop -->|No| Loop
+
+    style CheckEach fill:#e8f5e9
+    style MarkHealthy fill:#c8e6c9
+    style MarkUnhealthy fill:#ffcdd2
+    style APISpecificHealth fill:#fff3e0
+```
+
+---
+
+## Component Interaction Diagram
+
+```mermaid
+graph TB
+    subgraph EntryPoints["Entry Points"]
+        Routes["Routes<br/>Express Handlers"]
+    end
+
+    subgraph BalancerCore["Balancer Core"]
+        Balancer["Balancer"]
+        BackendSelector["BackendSelector"]
+        ModelMatcher["ModelMatcher"]
+    end
+
+    subgraph BackendEntities["Backend Entities"]
+        Backend["Backend"]
+        BackendInfo["BackendInfo"]
+        HealthCheckerMain["HealthChecker"]
+        APIHealthCheckers["API Health Checkers"]
+    end
+
+    subgraph RequestFlow["Request Flow"]
+        RequestProcessor["RequestProcessor"]
+        ProxyRequests["Proxy Requests"]
+    end
+
+    subgraph StatsFlow["Statistics & Monitoring"]
+        PerformanceStats["Performance Stats"]
+        DebugStats["Debug Stats"]
+        QueueStats["Queue Stats"]
+    end
+
+    Routes --> Balancer
+    Balancer --> BackendSelector
+    BackendSelector --> ModelMatcher
+
+    BackendSelector --> Backend
+    Backend --> BackendInfo
+    Backend --> APIHealthCheckers
+
+    Backend --> RequestProcessor
+    RequestProcessor --> ProxyRequests
+
+    Backend --> PerformanceStats
+    Balancer --> DebugStats
+    Balancer --> QueueStats
+
+    Backend -.->|delegates to| APIHealthCheckers
+
+    style Balancer fill:#e1f5fe
+    style Backend fill:#f3e5f5
+    style BackendSelector fill:#e1f5fe
+    style RequestProcessor fill:#fff3e0
+    style HealthCheckerMain fill:#fff3e0
+    style APIHealthCheckers fill:#f1f8e9
+```
+
+---
+
+## Data Model Diagram
+
+```mermaid
+classDiagram
+    class Backend {
+        +string url
+        +int priority
+        +bool healthy
+        +int failCount
+        +int activeRequestCount
+        +int requestCount
+        +int errorCount
+        +int maxConcurrency
+        +BackendInfo backendInfo
+        +HealthChecker healthChecker
+        +checkHealth()
+        +getApiTypes()
+        +getModels()
+        +getPerformanceStats()
     }
-  }
-}
-```
 
-### Health Check Timer
+    class BackendInfo {
+        +string url
+        +bool healthy
+        +Object apis
+        +Object models
+        +Object endpoints
+        +date detectedAt
+        +probe()
+        +getInfo()
+    }
 
-```javascript
-function startHealthChecker() {
-  healthTimer = setInterval(() => {
-    runHealthChecks()
-  }, healthCheckInterval)
-}
+    class HealthChecker {
+        +Backend[] backends
+        +Config config
+        +intervalId
+        +start()
+        +stop()
+        +checkAll()
+        +checkBackend()
+    }
 
-function stopHealthChecker() {
-  if (healthTimer) {
-    clearInterval(healthTimer)
-  }
-}
-```
+    class Balancer {
+        +Backend[] backends
+        +int maxQueueSize
+        +int queueTimeout
+        +Request[] queue
+        +BackendSelector selector
+        +queueRequest()
+        +getNextBackend()
+        +processQueueWhenBackendAvailable()
+        +getStats()
+    }
 
----
+    class BackendSelector {
+        +selectBackend()
+        +getAvailableBackends()
+        +_filterByHealthAndAvailability()
+        +_sortCandidates()
+        +_selectByPriority()
+    }
 
-## State Transitions
+    class ModelMatcher {
+        +matches()
+        +findMatches()
+        +parseModelString()
+        +findBestMatchAcrossBackends()
+    }
 
-### Backend State Machine
+    class RequestProcessor {
+        +processRequest()
+        +releaseBackend()
+        +handleStreamingRequest()
+        +handleNonStreamingRequest()
+        +extractModelsFromRequest()
+        +extractTokenCounts()
+    }
 
-```
-                    ┌─────────────────┐
-                    │   Initialized   │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   Healthy       │◄────────────┐
-                    └────────┬────────┘             │
-                             │                     │
-                ┌────────────┴────────────┐         │
-                │                         │         │
-                ▼                         │         │
-         ┌──────────────┐                │         │
-         │  Unhealthy   │◄───────────────┘         │
-         └──────────────┘                          │
-                             │                     │
-                             └─────────────────────┘
-
-Transitions:
-- Initialized → Healthy: First health check succeeds
-- Healthy → Unhealthy: Health check fails
-- Unhealthy → Healthy: Health check succeeds (recovery)
-```
-
-### Queue State Machine
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Queue                              │
-│                                                         │
-│  Empty ──────▶ Processing ──────▶ Waiting               │
-│     ▲              │                  │                 │
-│     │              │                  │                 │
-│     └──────────────┴──────────────────┘                 │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-
-Transitions:
-- Empty → Processing: Request queued
-- Processing → Waiting: Waiting for backend
-- Waiting → Processing: Backend available
-- Processing → Empty: Request assigned
+    Backend --> BackendInfo : composition
+    Backend --> HealthChecker : delegation
+    Balancer --> Backend : contains
+    Balancer --> BackendSelector : uses
+    BackendSelector --> ModelMatcher : uses
+    Backend --> RequestProcessor : delegates to
+    RequestProcessor --> Backend : updates stats
 ```
 
 ---
 
-## Concurrency Management
+## Request Lifecycle Timeline
 
-### Active Request Counting
-
-```javascript
-// Request starts
-function acquireBackend(backend) {
-  backend.activeRequestCount++
-  backend.busy = true
-}
-
-// Request completes
-function releaseBackend(backend) {
-  backend.activeRequestCount--
-
-  if (backend.activeRequestCount === 0) {
-    backend.busy = false
-  }
-
-  // Notify if below max concurrency
-  if (backend.activeRequestCount < backend.maxConcurrency) {
-    notifyBackendAvailable(backend)
-  }
-}
-```
-
-### Utilization Calculation
-
-```javascript
-function getUtilization(backend) {
-  return (backend.activeRequestCount / backend.maxConcurrency) * 100
-}
-
-function isOverloaded(backend) {
-  return backend.activeRequestCount >= backend.maxConcurrency
-}
-
-function isAvailable(backend) {
-  return backend.activeRequestCount < backend.maxConcurrency
-}
+```mermaid
+timeline
+    title Request Processing Timeline
+    section Request Arrival
+        0ms : Client sends request
+        1ms : Express middleware processes
+        2ms : Route handler extracts models
+    section Backend Selection
+        3ms : Balancer calls BackendSelector
+        4ms : Filter by health/availability
+        5ms : Model matching (regex search)
+        6ms : Sort by priority
+        7ms : Return backend
+    section Request Processing
+        8ms : RequestProcessor increments counters
+        9ms : Prepare proxy headers
+        10ms : Send to backend
+        15ms : Backend receives request
+    section Response
+        20ms : Backend processes prompt
+        25ms : First chunk returned (firstChunkTimeMs)
+        30-5000ms : Streaming response chunks
+        5001ms : Full response complete (totalTimeMs)
+    section Completion
+        5002ms : Update performance stats
+        5003ms : Release backend
+        5004ms : Notify queue (if applicable)
+        5005ms : Response to client
 ```
 
 ---
 
-## Error Handling Flow
+## Key Architectural Patterns
 
-### Request Error Propagation
+**`★ Insight ───────────────────────────────────────────`**
 
-```
-Client Request
-    │
-    ▼
-API Server
-    │
-    ├─> ConfigurationError → 500 Internal Server Error
-    │
-    ├─> NoHealthyBackendsError → 503 Service Unavailable
-    │
-    ├─> QueueFullError → 503 Service Unavailable
-    │
-    └─> BackendError → 502 Bad Gateway
-```
+1. **Delegation Pattern**: `Backend.checkHealth()` delegates to `healthChecker.check()` - each backend has an API-specific health checker assigned at startup
+2. **Composition over Duplication**: `BackendInfo` (capability detection results) is composed into `Backend` rather than duplicated
+3. **Priority-First Model Matching**: When multiple backends match a model pattern, the highest priority healthy backend wins
+4. **Single Global Queue**: All queued requests use one FIFO queue, processed when any backend becomes available
 
-### Backend Error Handling
-
-```javascript
-async function handleBackendError(backend, error) {
-  // Mark backend as failed
-  backend.healthy = false
-  backend.failCount++
-
-  // Clear busy state
-  backend.busy = false
-  backend.activeRequestCount = 0
-
-  // Notify balancer
-  balancer.markFailed(backend.url)
-
-  // Release backend for queued requests
-  notifyBackendAvailable(backend)
-}
-```
-
----
-
-## Shutdown Flow
-
-### Graceful Shutdown
-
-```javascript
-async function gracefulShutdown(signal) {
-  console.log(`${signal} received. Shutting down gracefully...`)
-
-  // 1. Stop health checker
-  stopHealthChecker()
-
-  // 2. Reject all queued requests
-  for (const queuedRequest of queue) {
-    clearTimeout(queuedRequest.timeoutId)
-    queuedRequest.reject(new Error('Server shutting down, please retry'))
-  }
-  queue.length = 0
-
-  // 3. Close HTTP server
-  server.close(() => {
-    console.log('Server closed. All in-flight requests completed.')
-    process.exit(0)
-  })
-
-  // 4. Force exit after timeout
-  setTimeout(() => {
-    console.log('Forcing exit due to pending requests')
-    process.exit(1)
-  }, shutdownTimeout)
-}
-```
-
----
-
-## Startup Flow
-
-### Initialization Sequence
-
-```
-1. Load Configuration
-   └─> Parse environment variables
-       └─> Create backend objects
-
-2. Detect Capabilities
-   └─> BackendInfo.getInfoAll(urls)
-       └─> For each backend:
-           ├─> Probe OpenAI endpoint
-           ├─> Probe Anthropic endpoint
-           ├─> Probe Google endpoint
-           └─> Probe Ollama endpoint
-
-3. Assign Health Checkers
-   └─> For each backend:
-       ├─> Determine primary API
-       └─> Create appropriate health checker
-
-4. Start Health Checker
-   └─> Start periodic health checks
-
-5. Start API Server
-   └─> Listen on configured port
-```
-
----
-
-## Data Flow Diagrams
-
-### Request Flow Diagram
-
-```
-┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐
-│ Request │────▶│ Route   │────▶│ Queue   │────▶│ Backend │
-│         │     │ Router  │     │ Request │     │ Select  │
-└─────────┘     └─────────┘     └─────────┘     └─────────┘
-                                             │
-                                             ▼
-                                      ┌─────────┐     ┌─────────┐
-                                      │ Process │────▶│ Backend │
-                                      │ Request │     │ Server  │
-                                      └─────────┘     └─────────┘
-                                             │
-                                             ▼
-                                      ┌─────────┐
-                                      │ Response│
-                                      └─────────┘
-```
-
-### Health Check Flow Diagram
-
-```
-┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐
-│  Timer  │────▶│ Health  │────▶│ Probe   │────▶│ Update  │
-│         │     │ Checker │     │ Backend │     │ State   │
-└─────────┘     └─────────┘     └─────────┘     └─────────┘
-                                              │
-                                              ▼
-                                      ┌─────────┐
-                                      │ Notify  │
-                                      │ Balancer│
-                                      └─────────┘
-```
+`─────────────────────────────────────────────────────`
 
 ---
 
@@ -576,3 +539,4 @@ async function gracefulShutdown(signal) {
 - [System Architecture](ARCHITECTURE.md) - High-level architecture
 - [Class Hierarchy](CLASSES.md) - Class documentation
 - [Testing Guide](TESTING.md) - Testing data flows
+- [Debugging Guide](DEBUGGING.md) - Debug features and troubleshooting

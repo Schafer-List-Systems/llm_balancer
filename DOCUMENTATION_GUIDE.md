@@ -58,16 +58,16 @@ This guide helps you quickly find the documentation you need based on your role 
 
 ### Topics Covered
 - System architecture
+- Data flow diagrams and request processing
 - Class hierarchy and interfaces
-- Data flow and request processing
 - Testing guidelines
 - Contribution guidelines
 - Debugging techniques
 
 ### Documentation Files
 - [docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) - System architecture, component diagrams
+- [docs/developer/DATA_FLOW.md](docs/developer/DATA_FLOW.md) - Data flow diagrams, request processing, component interaction
 - [docs/developer/CLASSES.md](docs/developer/CLASSES.md) - Class hierarchy, interfaces, data structures
-- [docs/developer/DATA_FLOW.md](docs/developer/DATA_FLOW.md) - Request flow, data processing workflow
 - [docs/developer/TESTING.md](docs/developer/TESTING.md) - Test structure, how to run tests, writing tests
 - [docs/developer/CONTRIBUTING.md](docs/developer/CONTRIBUTING.md) - Contribution guidelines, code style
 - [docs/developer/DEBUGGING.md](docs/developer/DEBUGGING.md) - Debug features, troubleshooting for developers
@@ -130,8 +130,8 @@ llm_balancer/
 │   │
 │   ├── developer/                     # Developer documentation (contributors)
 │   │   ├── ARCHITECTURE.md            # System architecture, component diagrams
+│   │   ├── DATA_FLOW.md               # Data flow diagrams, request processing, component interaction
 │   │   ├── CLASSES.md                 # Class hierarchy, interfaces, data structures
-│   │   ├── DATA_FLOW.md               # Request flow, data processing workflow
 │   │   ├── TESTING.md                 # Test structure, how to run tests, writing tests
 │   │   ├── CONTRIBUTING.md            # Contribution guidelines, code style
 │   │   └── DEBUGGING.md               # Debug features, troubleshooting for developers
