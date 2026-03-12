@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // UI Elements
   const root = document.getElementById('root');
   const loadingContainer = document.querySelector('.loading-container');
-  const lastUpdateTime = document.querySelector('.last-update');
 
   // Token speed indicator
   let tokenSpeedIndicator = null;
@@ -63,9 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="connectionStatus" class="status-badge disconnected">
               <span class="status-dot"></span>
               <span>Connecting...</span>
-            </div>
-            <div class="last-update">
-              Last update: <span id="updateTime">Never</span>
             </div>
           </div>
         </div>
@@ -608,13 +604,6 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
-  // Update last update time
-  function updateLastUpdateTime(lastUpdateTime) {
-    if (lastUpdateTime) {
-      document.getElementById('updateTime').textContent = new Date(lastUpdateTime).toLocaleString();
-    }
-  }
-
   // Show token speed indicator
   function showTokenSpeedIndicator(tokenSpeed) {
     let indicator = document.getElementById('tokenSpeedIndicator');
@@ -993,7 +982,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderStats(data.stats);
     renderQueueStats(data.queueStats);
     renderConfig();
-    updateLastUpdateTime(apiClient.getLastUpdateTime());
   }
 
   // Initialize dark mode toggle
@@ -1138,14 +1126,12 @@ document.addEventListener('DOMContentLoaded', () => {
       apiClient.dataCache = data;
 
       renderDashboard();
-      updateLastUpdateTime(apiClient.getLastUpdateTime());
 
       loadingContainer.style.display = 'none';
 
       // Start polling for automatic refresh
       apiClient.setUpdateCallback((updatedData) => {
         renderDashboard();
-        updateLastUpdateTime(new Date());
       });
       apiClient.startPolling();
     } else {

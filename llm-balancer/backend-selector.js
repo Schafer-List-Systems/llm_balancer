@@ -5,7 +5,10 @@
  * - Availability (concurrency) checking
  * - Model-based filtering (exact match, extensible for regex/lists)
  * - Priority-based sorting and selection
+ * - Prefix-based matching for caching optimization
  */
+
+const { matchBackendByPrefix } = require('./prefix-matcher');
 
 /**
  * ModelMatcher class - handles model matching logic
@@ -159,6 +162,70 @@ class BackendSelector {
 
     // Step 3: Sort by priority and select best candidate (no model filtering)
     return this._selectByPriority(candidates);
+  }
+
+  /**
+   * Enhanced selectBackend with prefix-based matching
+   * Priority order:
+   * 1. Exact request ID match (highest priority)
+   * 2. Longest common prefix match (with mandatory model match)
+   * 3. Fallback to standard model-based selection
+   *
+   * @param {Array} backends - Array of backend objects
+   * @param {Object} options - Selection options
+   * @param {string|string[]} [options.models] - Requested model(s)
+   * @param {Object} [options.body] - Request body with prompt and optional id field
+   * @param {boolean} [options.allowSkip=false] - Allow skipping request if best backend is unavailable
+   * @returns {Object|null} Selected backend or null
+   * @throws {Error} If request should be skipped (when allowSkip=true)
+   */
+  selectBackendWithPrefix(backends, options = {}) {
+    const { models, body, allowSkip = false } = options;
+
+    // Prepare request object for prefix matcher
+    const request = body ? { body } : null;
+
+    if (!request || !request.body) {
+      // No prompt data available, fall back to normal selection
+      return this.selectBackend(backends, { models });
+    }
+
+    // Step 1: Try prefix-based matching first
+    const prefixResult = matchBackendByPrefix(
+      request,
+      backends,
+      0.8,   // 80% threshold (default)
+      1000   // 1000 character minimum (default)
+    );
+
+    if (prefixResult.backend) {
+      console.log(`[BackendSelector] Prefix match: ${prefixResult.prefixLength}/${request.body.prompt?.length || 0} chars (${(prefixResult.matchPercentage * 100).toFixed(1)}%)`);
+
+      // Check if backend is available
+      if (prefixResult.matchType === 'id') {
+        // Exact ID match - always use this backend if exists
+        if (prefixResult.backend.healthy &&
+            prefixResult.backend.activeRequestCount < prefixResult.backend.maxConcurrency) {
+          return prefixResult.backend;
+        }
+      } else if (!prefixResult.shouldSkip &&
+                 prefixResult.backend.healthy &&
+                 prefixResult.backend.activeRequestCount < prefixResult.backend.maxConcurrency) {
+        // Prefix match and backend is available
+        return prefixResult.backend;
+      }
+
+      // Backend matches well but is unavailable
+      if (allowSkip && prefixResult.shouldSkip) {
+        throw new Error(`SKIP_REQUEST: Backend matches ${prefixResult.matchPercentage * 100}% prefix but unavailable`);
+      }
+
+      // Fall through to normal selection if backend unavailable
+      console.log(`[BackendSelector] Best backend unavailable, falling back to normal selection`);
+    }
+
+    // Step 2: Fall back to standard model-based selection
+    return this.selectBackend(backends, { models });
   }
 
   /**

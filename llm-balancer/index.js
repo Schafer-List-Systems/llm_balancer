@@ -39,7 +39,12 @@ const backendInfo = new BackendInfo(config.healthCheckTimeout);
 // directly to Backend rather than copied to capabilities.
 // ──────────────────────────────────────────────────────────────────
 const backends = config.backends.map(backendConfig => {
-  return new Backend(backendConfig.url, backendConfig.maxConcurrency);
+  // Pass maxCachedPrefixes to Backend constructor for prefix cache configuration
+  return new Backend(
+    backendConfig.url,
+    backendConfig.maxConcurrency,
+    backendConfig.maxCachedPrefixes  // Prefix cache limit from config
+  );
 });
 
 // Initialize load balancer and health checker with Backend instances
@@ -86,34 +91,61 @@ function forwardRequest(req, res, backend, matchedModel = null) {
 
 /**
  * Route: OpenAI-compatible API routes (with queuing support)
+ * Uses prefix-based backend selection when available
  */
 app.all('/v1/chat/completions*', async (req, res) => {
   try {
     // Extract model from request body for backend selection
     const models = extractModelsFromRequest(req);
 
-    // Select backend based on model if specified, otherwise use default selection
     let backend;
     let matchedModel = null;
 
-    // Check: models must be truthy AND have at least one valid entry (not empty array)
-    if (models && (Array.isArray(models) ? models.length > 0 : true)) {
-      // Use priority-first regex matching to get both backend and matched model name
+    try {
+      // Try prefix-based selection first
+      // This checks for exact ID match or high-priority prefix match
+      const prefixResult = balancer.selector.selectBackendWithPrefix(backends, {
+        models,
+        body: req.body,
+        allowSkip: false  // Don't throw error, just fall through
+      });
+
+      if (prefixResult && prefixResult.backend) {
+        backend = prefixResult.backend;
+        matchedModel = prefixResult.actualModel || models;
+
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) via prefix match: ${displayModels}`);
+      } else {
+        // No prefix match - fall back to normal selection
+        backend = await balancer.queueRequest();
+      }
+    } catch (error) {
+      if (error.message.startsWith('SKIP_REQUEST')) {
+        console.warn(`[${getTimestamp()}] [Gateway] High-priority prefix match but backend unavailable, using normal selection`);
+        backend = await balancer.queueRequest();
+      } else {
+        throw error;
+      }
+    }
+
+    // If still no backend, try model-based selection with regex matching
+    if (!backend && models && (Array.isArray(models) ? models.length > 0 : true)) {
       const result = balancer.getNextBackendForModelWithMatch(models);
       backend = result.backend;
       matchedModel = result.actualModel;
 
-      // If no backend supports the requested model(s), try any available backend
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        // Model matched - logging handled above with actual model name if regex was used
         const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
         console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
-    } else {
-      // No model specified in request or empty models array - use default selection
+    }
+
+    // Final fallback: default selection
+    if (!backend) {
       backend = await balancer.queueRequest();
     }
 
@@ -153,34 +185,60 @@ app.all('/v1/chat/completions*', async (req, res) => {
 
 /**
  * Route: Anthropic API routes (with queuing support)
+ * Uses prefix-based backend selection when available
  */
 app.all('/v1/messages*', async (req, res) => {
   try {
     // Extract model from request body for backend selection
     const models = extractModelsFromRequest(req);
 
-    // Select backend based on model if specified, otherwise use default selection
     let backend;
     let matchedModel = null;
 
-    // Check: models must be truthy AND have at least one valid entry (not empty array)
-    if (models && (Array.isArray(models) ? models.length > 0 : true)) {
-      // Use priority-first regex matching to get both backend and matched model name
+    try {
+      // Try prefix-based selection first
+      const prefixResult = balancer.selector.selectBackendWithPrefix(backends, {
+        models,
+        body: req.body,
+        allowSkip: false
+      });
+
+      if (prefixResult && prefixResult.backend) {
+        backend = prefixResult.backend;
+        matchedModel = prefixResult.actualModel || models;
+
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) via prefix match: ${displayModels}`);
+      } else {
+        // No prefix match - fall back to normal selection
+        backend = await balancer.queueRequest();
+      }
+    } catch (error) {
+      if (error.message.startsWith('SKIP_REQUEST')) {
+        console.warn(`[${getTimestamp()}] [Gateway] High-priority prefix match but backend unavailable, using normal selection`);
+        backend = await balancer.queueRequest();
+      } else {
+        throw error;
+      }
+    }
+
+    // If still no backend, try model-based selection with regex matching
+    if (!backend && models && (Array.isArray(models) ? models.length > 0 : true)) {
       const result = balancer.getNextBackendForModelWithMatch(models);
       backend = result.backend;
       matchedModel = result.actualModel;
 
-      // If no backend supports the requested model(s), try any available backend
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        // Model matched - logging handled above with actual model name if regex was used
         const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
         console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
-    } else {
-      // No model specified in request or empty models array - use default selection
+    }
+
+    // Final fallback: default selection
+    if (!backend) {
       backend = await balancer.queueRequest();
     }
 
@@ -220,34 +278,60 @@ app.all('/v1/messages*', async (req, res) => {
 
 /**
  * Route: Ollama API routes (with queuing support)
+ * Uses prefix-based backend selection when available
  */
 app.all('/api/*', async (req, res) => {
   try {
     // Extract model from request body for backend selection
     const models = extractModelsFromRequest(req);
 
-    // Select backend based on model if specified, otherwise use default selection
     let backend;
     let matchedModel = null;
 
-    // Check: models must be truthy AND have at least one valid entry (not empty array)
-    if (models && (Array.isArray(models) ? models.length > 0 : true)) {
-      // Use priority-first regex matching to get both backend and matched model name
+    try {
+      // Try prefix-based selection first
+      const prefixResult = balancer.selector.selectBackendWithPrefix(backends, {
+        models,
+        body: req.body,
+        allowSkip: false
+      });
+
+      if (prefixResult && prefixResult.backend) {
+        backend = prefixResult.backend;
+        matchedModel = prefixResult.actualModel || models;
+
+        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) via prefix match: ${displayModels}`);
+      } else {
+        // No prefix match - fall back to normal selection
+        backend = await balancer.queueRequest();
+      }
+    } catch (error) {
+      if (error.message.startsWith('SKIP_REQUEST')) {
+        console.warn(`[${getTimestamp()}] [Gateway] High-priority prefix match but backend unavailable, using normal selection`);
+        backend = await balancer.queueRequest();
+      } else {
+        throw error;
+      }
+    }
+
+    // If still no backend, try model-based selection with regex matching
+    if (!backend && models && (Array.isArray(models) ? models.length > 0 : true)) {
       const result = balancer.getNextBackendForModelWithMatch(models);
       backend = result.backend;
       matchedModel = result.actualModel;
 
-      // If no backend supports the requested model(s), try any available backend
       if (!backend) {
         console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
         backend = await balancer.queueRequest();
       } else {
-        // Model matched - logging handled above with actual model name if regex was used
         const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
         console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
       }
-    } else {
-      // No model specified in request or empty models array - use default selection
+    }
+
+    // Final fallback: default selection
+    if (!backend) {
       backend = await balancer.queueRequest();
     }
 
@@ -287,6 +371,7 @@ app.all('/api/*', async (req, res) => {
 
 /**
  * Route: Models endpoint (with queuing support)
+ * Uses prefix-based backend selection when available
  */
 app.all('/models*', async (req, res) => {
   if (!balancer.hasHealthyBackends()) {
@@ -305,17 +390,46 @@ app.all('/models*', async (req, res) => {
     let matchedModel = null;
 
     if (models) {
-      // Use priority-first regex matching to get both backend and matched model name
-      const result = balancer.getNextBackendForModelWithMatch(models);
-      backend = result.backend;
-      matchedModel = result.actualModel;
+      try {
+        // Try prefix-based selection first
+        const prefixResult = balancer.selector.selectBackendWithPrefix(backends, {
+          models,
+          body: req.body,
+          allowSkip: false
+        });
 
+        if (prefixResult && prefixResult.backend) {
+          backend = prefixResult.backend;
+          matchedModel = prefixResult.actualModel || models;
+
+          const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+          console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) via prefix match: ${displayModels}`);
+        } else {
+          // No prefix match - fall back to normal selection
+          backend = await balancer.queueRequest();
+        }
+      } catch (error) {
+        if (error.message.startsWith('SKIP_REQUEST')) {
+          console.warn(`[${getTimestamp()}] [Gateway] High-priority prefix match but backend unavailable, using normal selection`);
+          backend = await balancer.queueRequest();
+        } else {
+          throw error;
+        }
+      }
+
+      // If still no backend, try model-based selection with regex matching
       if (!backend) {
-        console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
-        backend = await balancer.queueRequest();
-      } else {
-        const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
-        console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
+        const result = balancer.getNextBackendForModelWithMatch(models);
+        backend = result.backend;
+        matchedModel = result.actualModel;
+
+        if (!backend) {
+          console.warn(`[${getTimestamp()}] [Gateway] No backend found for models: ${Array.isArray(models) ? models.join(', ') : models}. Falling back to default selection.`);
+          backend = await balancer.queueRequest();
+        } else {
+          const displayModels = matchedModel || (Array.isArray(models) ? models.join(', ') : models);
+          console.debug(`[${getTimestamp()}] [Gateway] Selected backend ${backend.id} (${backend.url}) for models: ${displayModels}${matchedModel ? ` -> ${matchedModel}` : ''}`);
+        }
       }
     } else {
       backend = await balancer.queueRequest();

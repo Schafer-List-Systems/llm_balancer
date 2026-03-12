@@ -8,8 +8,15 @@
 // Configurable via MAX_STATS_SAMPLES environment variable, defaults to 20
 const MAX_STATS_SAMPLES = parseInt(process.env.MAX_STATS_SAMPLES) || 20;
 
+// Maximum number of prefixes to cache per backend (global, not per-model)
+// Configurable via PREFIX_CACHE_MAX_PREFIXES environment variable, defaults to 5
+const MAX_CACHE_PREFIXES = parseInt(process.env.PREFIX_CACHE_MAX_PREFIXES) || 5;
+// Maximum prompt length to cache (characters)
+// Configurable via PREFIX_CACHE_MAX_PROMPT_LENGTH environment variable, defaults to 10000
+const MAX_CACHE_PROMPT_LENGTH = parseInt(process.env.PREFIX_CACHE_MAX_PROMPT_LENGTH) || 10000;
+
 class Backend {
-  constructor(url, maxConcurrency = 10) {
+  constructor(url, maxConcurrency = 10, maxCachedPrefixes = null) {
     this.url = url;
     this.maxConcurrency = maxConcurrency;
     this.healthy = false;
@@ -21,6 +28,12 @@ class Backend {
     // BackendInfo (discovery data) will be attached after capability detection
     // This follows composition over duplication - BackendInfo is attached directly
     this.backendInfo = null;
+
+    // Prefix cache - stores recent prompts with their metadata
+    // Shared across all models for a backend, global limit enforced
+    // Each entry: { id, prompt, model, timestamp }
+    this.prefixCache = [];
+    this.maxCachedPrefixes = maxCachedPrefixes !== null ? maxCachedPrefixes : MAX_CACHE_PREFIXES;
 
     // Performance statistics tracking - stored separately from discovery data
     // Discovery data is a plain object, but we track stats as methods on Backend
@@ -382,6 +395,39 @@ class Backend {
         generationRate: this._getRateStats(this._performanceStats.generationRate)
       }
     };
+  }
+
+  /**
+   * Add a processed request to the prefix cache
+   * Automatically removes oldest entries when limit is exceeded (FIFO eviction)
+   * The cache is shared across all models for this backend with a global limit
+   * @param {string} requestId - The request ID from response (e.g., "chatcmpl-xxx")
+   * @param {string} prompt - The prompt/message content
+   * @param {string} model - The model name used
+   */
+  addPrefixToCache(requestId, prompt, model) {
+    // Extract relevant prefix (truncate if too long)
+    const promptStr = (prompt || '').substring(0, MAX_CACHE_PROMPT_LENGTH);
+
+    this.prefixCache.push({
+      id: requestId,
+      prompt: promptStr,
+      model: model,
+      timestamp: Date.now()
+    });
+
+    // Trim to maxCachedPrefixes - remove oldest entries first (FIFO eviction)
+    while (this.prefixCache.length > this.maxCachedPrefixes) {
+      this.prefixCache.shift();  // Remove oldest entry
+    }
+  }
+
+  /**
+   * Get prefix cache size
+   * @returns {number} Number of entries in the cache
+   */
+  getPrefixCacheSize() {
+    return this.prefixCache.length;
   }
 }
 

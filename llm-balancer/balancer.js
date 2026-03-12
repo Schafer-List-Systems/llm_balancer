@@ -108,47 +108,9 @@ class Balancer {
 
   /**
    * Notify that a backend is available (called when a backend becomes idle)
-   * This will wake up ONE queued request from the single global queue
-   *
-   * ★ Insight ─────────────────────────────────────
-   * When a backend becomes available, only ONE request should be dequeued.
-   * The while loop that processed ALL requests was the bug: getNextBackend()
-   * filters by activeRequestCount < maxConcurrency, but since activeRequestCount
-   * is only incremented later in processRequest(), the same backend could be
-   * selected multiple times in rapid succession, causing activeRequestCount to
-   * exceed maxConcurrency.
-   *
-   * By processing only one request per notification, we ensure proper capacity
-   * tracking and allow other backends to receive queued requests when they
-   * become available.
-   * ──────────────────────────────────────────────────
+   * Iterates through the queue and tries to forward as many requests as possible
+   * to available backends, keeping the system efficient.
    */
-  notifyBackendAvailable() {
-    const queue = this.queue;
-    if (!queue || queue.length === 0) {
-      console.log(`[${getTimestamp()}] [Balancer] notifyBackendAvailable() called but queue is empty (${queue ? queue.length : 'undefined'})`);
-      return;
-    }
-
-    console.log(`[${getTimestamp()}] [Balancer] Backend available, processing 1 queued request`);
-    console.log(`[${getTimestamp()}] [Balancer] Backend availability: ${this.backends.map(b => `${b.url}: ${b.activeRequestCount}/${b.maxConcurrency}`).join(', ')}`);
-
-    // Process ONLY ONE pending request from the single queue
-    const request = queue[0];
-    clearTimeout(request.timeout);
-
-    const backend = this.getNextBackend();
-    console.log(`[${getTimestamp()}] [Balancer] getNextBackend() returned: ${backend ? backend.url : 'null'}`);
-
-    if (backend) {
-      queue.shift();  // Remove from queue
-      console.log(`[${getTimestamp()}] [Balancer] Assigned queued request to backend ${backend.id} (${backend.url})`);
-      request.resolve(backend);
-    } else {
-      // No available backend, request stays in queue
-      console.log(`[${getTimestamp()}] [Balancer] No available backend, request remains queued`);
-    }
-  }
 
   /**
    * Get the index of the highest priority backend
@@ -197,6 +159,164 @@ class Balancer {
       backend: result.backend || null,
       actualModel: result.actualModel || null
     };
+  }
+
+  /**
+   * Select backend for a queued request with prefix-based optimization
+   * Tries prefix match first, then falls back to normal selection
+   * Does NOT block - always tries to find ANY available backend if high-priority match is unavailable
+   *
+   * @param {Object} request - The queued request object (must contain body with prompt/model/id)
+   * @returns {Object|null} Selected backend or null if none available
+   */
+  selectBackendForQueuedRequest(request) {
+    const prompt = request.body?.prompt || request.body?.messages;
+    const model = request.body?.model || null;
+
+    // Step 1: Try prefix-based selection first
+    try {
+      const prefixResult = this.selector.selectBackendWithPrefix(this.backends, {
+        prompt,
+        model,
+        body: request.body,
+        allowSkip: true
+      });
+
+      if (prefixResult && prefixResult.backend) {
+        // Check if backend is actually available
+        if (prefixResult.matchType === 'id') {
+          // Exact ID match - always use this backend if exists
+          return prefixResult.backend;
+        } else if (!prefixResult.shouldSkip) {
+          // Prefix match and backend is available
+          console.log(`[Balancer] Selected backend for queued request via prefix match: ${prefixResult.matchType} (${prefixResult.matchLength} chars)`);
+          return prefixResult.backend;
+        }
+        // shouldSkip=true means backend unavailable - fall through to normal selection
+        console.log(`[Balancer] Prefix match backend unavailable, trying other backends`);
+      }
+    } catch (error) {
+      if (error.message.startsWith('SKIP_REQUEST')) {
+        console.log(`[Balancer] High-priority prefix match but backend unavailable, trying other backends`);
+        // Fall through to normal selection - don't block
+      } else {
+        throw error;
+      }
+    }
+
+    // Step 2: Fall back to normal selection - keep backends busy
+    const backend = this.getNextBackend();
+    if (backend) {
+      console.log(`[Balancer] Selected backend via normal selection (keeping backends busy)`);
+      return backend;
+    }
+
+    // No backend available at all
+    return null;
+  }
+
+  /**
+   * Process queued requests - tries to forward as many as possible
+   * This replaces the old "one request per notification" logic
+   * Now we iterate through the queue and forward any request that can be processed
+   *
+   * Key behavior: When a request should be skipped due to unavailable high-priority backend,
+   * we do NOT stop processing - instead we move on and try to forward other requests
+   * in the queue to available backends. The goal is to keep backends busy while prefix
+   * matches are waiting.
+   */
+  processQueueWhenBackendAvailable() {
+    const queue = this.queue;
+    let processedCount = 0;
+    let skippedCount = 0;
+
+    console.log(`[${this._getTimestamp()}] [Balancer] Backend available, attempting to process ${queue.length} queued request(s)`);
+
+    // Iterate through queue, trying to forward each request
+    // We don't stop at the first one - we try to keep backends busy
+    for (let i = 0; i < queue.length; i++) {
+      const request = queue[i];
+
+      // Skip timed-out requests
+      if (request.timedOut) {
+        console.log(`[${this._getTimestamp()}] [Balancer] Skipping timed-out request`);
+        queue.splice(i, 1);
+        i--;
+        continue;
+      }
+
+      // Try to select a backend for this request
+      const backend = this.selectBackendForQueuedRequest(request);
+
+      if (backend) {
+        // Backend found - forward this request
+        if (request.timeout) {
+          clearTimeout(request.timeout);
+          request.timeout = null;
+        }
+
+        // Remove from queue and resolve
+        queue.splice(i, 1);
+        i--;
+        processedCount++;
+
+        // Increment backend's active request count (will be decremented on completion)
+        backend.activeRequestCount++;
+
+        // Trigger the actual request processing
+        this.triggerRequestProcessing(request, backend);
+
+        console.log(`[${this._getTimestamp()}] [Balancer] Forwarded request to backend ${backend.id} (${processedCount} processed)`);
+      } else {
+        // No backend available for this request
+        skippedCount++;
+      }
+    }
+
+    console.log(`[${this._getTimestamp()}] [Balancer] Queue processing complete: ${processedCount} forwarded, ${skippedCount} skipped`);
+  }
+
+  /**
+   * Trigger actual request processing for a queued request
+   * This is called after backend selection
+   * @param {Object} request - The queued request with req/res/config
+   * @param {Object} backend - Selected backend
+   */
+  triggerRequestProcessing(request, backend) {
+    // Extract request data
+    const { req, res, config } = request;
+
+    // Call the request processor directly
+    try {
+      const { processRequest } = require('./request-processor');
+
+      processRequest(this, backend, req, res, () => {
+        // Request completed callback
+        // Backend will decrement activeRequestCount and notify queue
+      }, config);
+    } catch (error) {
+      console.error(`[${this._getTimestamp()}] [Balancer] Failed to process request:`, error);
+      if (request.reject) {
+        request.reject(error);
+      }
+    }
+  }
+
+  /**
+   * Called when a backend becomes available (from releaseBackend)
+   * Now iterates through queue instead of processing just one request
+   */
+  notifyBackendAvailable() {
+    console.log(`[${this._getTimestamp()}] [Balancer] Backend became available, processing queue`);
+    this.processQueueWhenBackendAvailable();
+  }
+
+  /**
+   * Helper to get timestamp
+   * @returns {string} ISO timestamp
+   */
+  _getTimestamp() {
+    return new Date().toISOString();
   }
 
   /**

@@ -234,9 +234,13 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
 
   const targetUrl = new URL(req.url, backend.url);
 
-  // Capture request body for debug tracking
+  // Capture request body for debug tracking and prefix caching
   let requestBody = null;
   let originalBody = getRequestBody(req);
+  let responseBody = null;
+
+  // Store original body for prefix caching
+  const requestPrompt = originalBody;
 
   // Replace model field if matchedModel is provided
   if (matchedModel && typeof originalBody === 'string') {
@@ -405,6 +409,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         let promptTokens = null;
         let completionTokens = null;
         let usageFound = false;
+        let streamedResponse = null;
 
         try {
           // Split by newline for SSE format and find messages with usage stats
@@ -421,6 +426,8 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
                   completionTokens = msg.usage.completion_tokens || null;
                   usageFound = true;
                 }
+                // Collect last message for response caching
+                streamedResponse = msg;
               } catch (e) {
                 // Not a JSON line, skip
               }
@@ -475,6 +482,21 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           requestBody,
           { data: data, contentType: proxyRes.headers['content-type'] }
         );
+
+        // Add processed prompt to prefix cache (after sending response)
+        // This ensures the response ID is available for follow-up requests
+        try {
+          if (backend.addPrefixToCache && requestPrompt) {
+            const prompt = typeof requestPrompt === 'string' ? requestPrompt : JSON.stringify(requestPrompt);
+            const model = matchedModel || (requestPrompt.body && requestPrompt.body.model);
+            // Extract ID from the streamed response or the final usage object
+            const requestId = streamedResponse?.id || null;
+            backend.addPrefixToCache(requestId, prompt, model);
+            console.debug(`[${getTimestamp()}] [RequestProcessor] Added streaming request to prefix cache: id=${requestId}, model=${model}`);
+          }
+        } catch (e) {
+          console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to add to prefix cache:`, e.message);
+        }
 
         releaseBackend(balancer, backend);
         onRequestComplete();
@@ -622,7 +644,8 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
       const totalTime = fullResponseTime - requestSentTime;
       const responseTimeMs = fullResponseTime - startTime;
       console.debug(`[${getTimestamp()}] [RequestProcessor] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, totalTime=${totalTime}ms, responseTimeMs=${responseTimeMs}, dataLength=${data.length}`);
-      const responseBody = JSON.parse(data);
+      const parsedResponse = JSON.parse(data);
+      responseBody = parsedResponse;
       const tokenCounts = extractTokenCounts(responseBody);
 
       if (tokenCounts) {
@@ -654,6 +677,20 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         res.status(proxyRes.statusCode).json(parsed);
       } catch (e) {
         res.status(proxyRes.statusCode).send(data);
+      }
+
+      // Add processed prompt to prefix cache (after sending response)
+      // This ensures the response ID is available for follow-up requests
+      try {
+        if (backend.addPrefixToCache && requestPrompt) {
+          const prompt = typeof requestPrompt === 'string' ? requestPrompt : JSON.stringify(requestPrompt);
+          const model = matchedModel || (requestPrompt.body && requestPrompt.body.model);
+          const requestId = responseBody?.id || null;  // Extract ID from response (e.g., "chatcmpl-xxx")
+          backend.addPrefixToCache(requestId, prompt, model);
+          console.debug(`[${getTimestamp()}] [RequestProcessor] Added request to prefix cache: id=${requestId}, model=${model}`);
+        }
+      } catch (e) {
+        console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to add to prefix cache:`, e.message);
       }
 
       releaseBackend(balancer, backend);
