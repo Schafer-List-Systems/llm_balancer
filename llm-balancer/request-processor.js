@@ -220,8 +220,8 @@ function releaseBackend(balancer, backend) {
  */
 function processRequest(balancer, backend, req, res, onRequestComplete, config, matchedModel = null) {
   console.debug(`[Gateway] processRequest called for backend ${backend.id} (${backend.url})`);
-  console.debug(`[Gateway] req.is('raw'):`, req.is('raw'));
-  console.debug(`[Gateway] req.headers['content-type']:`, req.headers['content-type']);
+  console.debug(`[Gateway] req.is('raw'):`, req?.is?.('raw') ?? 'N/A');
+  console.debug(`[Gateway] req.headers['content-type']:`, req?.headers?.['content-type'] ?? 'N/A');
   console.debug(`[Gateway] req.body type:`, typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body));
 
   // Increment active request count for this backend
@@ -234,13 +234,10 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
 
   const targetUrl = new URL(req.url, backend.url);
 
-  // Capture request body for debug tracking and prefix caching
+  // Capture request body for debug tracking
   let requestBody = null;
   let originalBody = getRequestBody(req);
   let responseBody = null;
-
-  // Store original body for prefix caching
-  const requestPrompt = originalBody;
 
   // Replace model field if matchedModel is provided
   if (matchedModel && typeof originalBody === 'string') {
@@ -279,10 +276,10 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
                       (typeof requestBody === 'string' && requestBody.includes('"stream":true'));
 
   if (isStreaming) {
-    console.debug(`[Gateway] Using handleStreamingRequest (stream: true detected in body)`);
+    console.log(`[Gateway] Using handleStreamingRequest (stream: true detected in body)`);
     handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
   } else {
-    console.debug(`[Gateway] Using handleNonStreamingRequest`);
+    console.log(`[Gateway] Using handleNonStreamingRequest`);
     handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
   }
 }
@@ -463,8 +460,10 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         }
 
         // The [DONE] message is already included in the chunks from the backend
-        // Just end the response
-        res.end();
+        // Just end the response (only if headers not already sent)
+        if (!res.headersSent) {
+          res.end();
+        }
 
         const route = req.path || req.originalUrl || '/';
         balancer.trackDebugRequest(
@@ -482,21 +481,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           requestBody,
           { data: data, contentType: proxyRes.headers['content-type'] }
         );
-
-        // Add processed prompt to prefix cache (after sending response)
-        // This ensures the response ID is available for follow-up requests
-        try {
-          if (backend.addPrefixToCache && requestPrompt) {
-            const prompt = typeof requestPrompt === 'string' ? requestPrompt : JSON.stringify(requestPrompt);
-            const model = matchedModel || (requestPrompt.body && requestPrompt.body.model);
-            // Extract ID from the streamed response or the final usage object
-            const requestId = streamedResponse?.id || null;
-            backend.addPrefixToCache(requestId, prompt, model);
-            console.debug(`[${getTimestamp()}] [RequestProcessor] Added streaming request to prefix cache: id=${requestId}, model=${model}`);
-          }
-        } catch (e) {
-          console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to add to prefix cache:`, e.message);
-        }
 
         releaseBackend(balancer, backend);
         onRequestComplete();
@@ -546,11 +530,13 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           { data: data, contentType: proxyRes.headers['content-type'] }
         );
 
-        try {
-          const parsed = JSON.parse(data);
-          res.json(parsed);
-        } catch (e) {
-          res.send(data);
+        if (!res.headersSent) {
+          try {
+            const parsed = JSON.parse(data);
+            res.json(parsed);
+          } catch (e) {
+            res.send(data);
+          }
         }
 
         releaseBackend(balancer, backend);
@@ -614,12 +600,6 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     }
   });
 
-  proxyReq.on('end', () => {
-    console.debug(`[Balancer] Response from ${backend.url} completed, releasing backend ${backend.id}`);
-    releaseBackend(balancer, backend);
-    onRequestComplete();
-  });
-
   // Record when request is sent to backend
   const requestSentTime = Date.now();
 
@@ -672,25 +652,13 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         { data: data, contentType: proxyRes.headers['content-type'], statusCode: proxyRes.statusCode }
       );
 
-      try {
-        const parsed = JSON.parse(data);
-        res.status(proxyRes.statusCode).json(parsed);
-      } catch (e) {
-        res.status(proxyRes.statusCode).send(data);
-      }
-
-      // Add processed prompt to prefix cache (after sending response)
-      // This ensures the response ID is available for follow-up requests
-      try {
-        if (backend.addPrefixToCache && requestPrompt) {
-          const prompt = typeof requestPrompt === 'string' ? requestPrompt : JSON.stringify(requestPrompt);
-          const model = matchedModel || (requestPrompt.body && requestPrompt.body.model);
-          const requestId = responseBody?.id || null;  // Extract ID from response (e.g., "chatcmpl-xxx")
-          backend.addPrefixToCache(requestId, prompt, model);
-          console.debug(`[${getTimestamp()}] [RequestProcessor] Added request to prefix cache: id=${requestId}, model=${model}`);
+      if (!res.headersSent) {
+        try {
+          const parsed = JSON.parse(data);
+          res.status(proxyRes.statusCode).json(parsed);
+        } catch (e) {
+          res.status(proxyRes.statusCode).send(data);
         }
-      } catch (e) {
-        console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to add to prefix cache:`, e.message);
       }
 
       releaseBackend(balancer, backend);

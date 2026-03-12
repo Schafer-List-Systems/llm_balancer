@@ -39,16 +39,6 @@ function loadConfig() {
   // Parse version
   const version = process.env.VERSION || '0.0.0';
 
-  // Parse prefix caching configuration
-  // MAX_CACHE_PREFIXES: Maximum number of recent prompts to cache per backend (global, not per-model)
-  const prefixCacheMaxPrefixes = parseInt(process.env.PREFIX_CACHE_MAX_PREFIXES) || 5;
-  // PREFIX_MATCH_THRESHOLD: Minimum match percentage for "high priority" routing (e.g., 0.8 = 80%)
-  const prefixMatchThreshold = parseFloat(process.env.PREFIX_MATCH_THRESHOLD) || 0.8;
-  // PREFIX_MATCH_MIN_LENGTH: Minimum absolute match length for high priority routing (characters)
-  const prefixMatchMinLength = parseInt(process.env.PREFIX_MATCH_MIN_LENGTH) || 1000;
-  // PREFIX_CACHE_MAX_PROMPT_LENGTH: Maximum prompt length to cache per request (characters)
-  const prefixCacheMaxPromptLength = parseInt(process.env.PREFIX_CACHE_MAX_PROMPT_LENGTH) || 10000;
-
   // Create backend objects with health status and statistics
   const backends = backendArray.map((url, index) => {
     // Parse priority from environment variable using index-based naming
@@ -79,7 +69,6 @@ function loadConfig() {
       errorCount: 0,
       activeRequestCount: 0,  // Counter for concurrent requests
       maxConcurrency: maxConcurrency,  // Maximum parallel requests allowed
-      maxCachedPrefixes: prefixCacheMaxPrefixes,  // For prefix cache configuration
       models: []
     };
   });
@@ -98,12 +87,7 @@ function loadConfig() {
     debug,
     debugRequestHistorySize,
     shutdownTimeout,
-    version,
-    // Prefix caching configuration
-    prefixCacheMaxPrefixes,
-    prefixMatchThreshold,
-    prefixMatchMinLength,
-    prefixCacheMaxPromptLength
+    version
   };
 }
 

@@ -107,6 +107,56 @@ class Balancer {
   }
 
   /**
+   * Queue a request with request data attached
+   * This is used when requests need to be queued and the request data needs to be preserved
+   * @param {Object} requestData - Object containing req, res, config, matchedModel
+   * @returns {Promise} Promise that resolves when a backend is available
+   */
+  async queueRequestWithRequestData(requestData) {
+    // Check if any healthy backends exist before queuing
+    if (!this.hasHealthyBackends()) {
+        console.log(`[${getTimestamp()}] [Balancer] No healthy backends available`);
+        throw new Error('No healthy backends available');
+    }
+
+    // If queue is empty, try to get immediate backend
+    if (this.queue.length === 0) {
+        const backend = this.getNextBackend();
+        if (backend) {
+            // Store requestData in the backend for later use
+            backend.pendingRequestData = requestData;
+            console.log(`[${getTimestamp()}] [Balancer] Direct assignment to backend ${backend.url}`);
+            return Promise.resolve(backend);
+        } else {
+            console.log(`[${getTimestamp()}] [Balancer] No available backend found, queuing request`);
+            // Fall through to queueing logic
+        }
+    }
+
+    return new Promise((resolve, reject) => {
+        const queue = this.queue;
+
+        if (queue.length >= this.maxQueueSize) {
+            reject(new Error('Queue is full'));
+            return;
+        }
+
+        const request = {
+            resolve,
+            reject,
+            timestamp: Date.now(),
+            timeout: setTimeout(() => {
+                reject(new Error('Request timeout'));
+            }, this.queueTimeout),
+            requestData: requestData
+        };
+
+        queue.push(request);
+        this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
+    });
+  }
+
+  /**
    * Notify that a backend is available (called when a backend becomes idle)
    * Iterates through the queue and tries to forward as many requests as possible
    * to available backends, keeping the system efficient.
@@ -162,140 +212,97 @@ class Balancer {
   }
 
   /**
-   * Select backend for a queued request with prefix-based optimization
-   * Tries prefix match first, then falls back to normal selection
-   * Does NOT block - always tries to find ANY available backend if high-priority match is unavailable
-   *
-   * @param {Object} request - The queued request object (must contain body with prompt/model/id)
-   * @returns {Object|null} Selected backend or null if none available
-   */
-  selectBackendForQueuedRequest(request) {
-    const prompt = request.body?.prompt || request.body?.messages;
-    const model = request.body?.model || null;
-
-    // Step 1: Try prefix-based selection first
-    try {
-      const prefixResult = this.selector.selectBackendWithPrefix(this.backends, {
-        prompt,
-        model,
-        body: request.body,
-        allowSkip: true
-      });
-
-      if (prefixResult && prefixResult.backend) {
-        // Check if backend is actually available
-        if (prefixResult.matchType === 'id') {
-          // Exact ID match - always use this backend if exists
-          return prefixResult.backend;
-        } else if (!prefixResult.shouldSkip) {
-          // Prefix match and backend is available
-          console.log(`[Balancer] Selected backend for queued request via prefix match: ${prefixResult.matchType} (${prefixResult.matchLength} chars)`);
-          return prefixResult.backend;
-        }
-        // shouldSkip=true means backend unavailable - fall through to normal selection
-        console.log(`[Balancer] Prefix match backend unavailable, trying other backends`);
-      }
-    } catch (error) {
-      if (error.message.startsWith('SKIP_REQUEST')) {
-        console.log(`[Balancer] High-priority prefix match but backend unavailable, trying other backends`);
-        // Fall through to normal selection - don't block
-      } else {
-        throw error;
-      }
-    }
-
-    // Step 2: Fall back to normal selection - keep backends busy
-    const backend = this.getNextBackend();
-    if (backend) {
-      console.log(`[Balancer] Selected backend via normal selection (keeping backends busy)`);
-      return backend;
-    }
-
-    // No backend available at all
-    return null;
-  }
-
-  /**
    * Process queued requests - tries to forward as many as possible
-   * This replaces the old "one request per notification" logic
-   * Now we iterate through the queue and forward any request that can be processed
-   *
-   * Key behavior: When a request should be skipped due to unavailable high-priority backend,
-   * we do NOT stop processing - instead we move on and try to forward other requests
-   * in the queue to available backends. The goal is to keep backends busy while prefix
-   * matches are waiting.
+   * @param {Object} request - The queued request object (must contain body with prompt/model/id)
    */
   processQueueWhenBackendAvailable() {
     const queue = this.queue;
-    let processedCount = 0;
-    let skippedCount = 0;
 
-    console.log(`[${this._getTimestamp()}] [Balancer] Backend available, attempting to process ${queue.length} queued request(s)`);
-
-    // Iterate through queue, trying to forward each request
-    // We don't stop at the first one - we try to keep backends busy
-    for (let i = 0; i < queue.length; i++) {
-      const request = queue[i];
-
-      // Skip timed-out requests
-      if (request.timedOut) {
-        console.log(`[${this._getTimestamp()}] [Balancer] Skipping timed-out request`);
-        queue.splice(i, 1);
-        i--;
-        continue;
-      }
-
-      // Try to select a backend for this request
-      const backend = this.selectBackendForQueuedRequest(request);
-
-      if (backend) {
-        // Backend found - forward this request
-        if (request.timeout) {
-          clearTimeout(request.timeout);
-          request.timeout = null;
-        }
-
-        // Remove from queue and resolve
-        queue.splice(i, 1);
-        i--;
-        processedCount++;
-
-        // Increment backend's active request count (will be decremented on completion)
-        backend.activeRequestCount++;
-
-        // Trigger the actual request processing
-        this.triggerRequestProcessing(request, backend);
-
-        console.log(`[${this._getTimestamp()}] [Balancer] Forwarded request to backend ${backend.id} (${processedCount} processed)`);
-      } else {
-        // No backend available for this request
-        skippedCount++;
-      }
+    if (!queue || queue.length === 0) {
+      return;
     }
 
-    console.log(`[${this._getTimestamp()}] [Balancer] Queue processing complete: ${processedCount} forwarded, ${skippedCount} skipped`);
+    const request = queue[0];
+
+    // Skip timed-out requests
+    if (request.timedOut) {
+      queue.splice(0, 1);
+      this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+      return;
+    }
+
+    // Try to get a backend for this request
+    const backend = this.getNextBackend();
+
+    if (backend) {
+      // Backend found - forward this request
+      if (request.timeout) {
+        clearTimeout(request.timeout);
+        request.timeout = null;
+      }
+
+      // Remove from queue and resolve
+      queue.splice(0, 1);
+      this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+
+      // Trigger the actual request processing
+      // Note: requestData may be null for simple queueRequest() calls
+      this.triggerRequestProcessing(request, backend, null);
+    }
   }
 
   /**
    * Trigger actual request processing for a queued request
    * This is called after backend selection
-   * @param {Object} request - The queued request with req/res/config
+   * @param {Object} request - The queued request with requestData (or backend with pendingRequestData)
    * @param {Object} backend - Selected backend
+   * @param {Object} requestData - Optional requestData (can be null for simple queueRequest calls)
    */
-  triggerRequestProcessing(request, backend) {
-    // Extract request data
-    const { req, res, config } = request;
+  triggerRequestProcessing(request, backend, requestData = null) {
+    // Handle both cases:
+    // 1. Direct backend assignment: requestData is in backend.pendingRequestData
+    // 2. Queue processing: requestData is in request.requestData or passed as parameter
+    if (backend.pendingRequestData) {
+      requestData = backend.pendingRequestData;
+      delete backend.pendingRequestData;
+    } else if (!requestData && request.requestData) {
+      requestData = request.requestData;
+    }
+
+    // If no requestData and no request data, just resolve with backend
+    if (!requestData && (!request.req || !request.res)) {
+      // Simple queue request - just resolve with backend
+      if (request.resolve) {
+        request.resolve(backend);
+      }
+      return;
+    }
+
+    if (!requestData) {
+      console.error(`[${this._getTimestamp()}] [Balancer] No requestData found for request processing`);
+      if (request.reject) {
+        request.reject(new Error('No requestData found'));
+      }
+      return;
+    }
+
+    const { req, res, config, matchedModel } = requestData;
 
     // Call the request processor directly
     try {
-      const { processRequest } = require('./request-processor');
+      const { processRequest, releaseBackend } = require('./request-processor');
+
+      // Note: activeRequestCount is incremented in processRequest, not here
+      // This ensures the count is only incremented once per request
 
       processRequest(this, backend, req, res, () => {
         // Request completed callback
         // Backend will decrement activeRequestCount and notify queue
-      }, config);
+      }, config, matchedModel);
     } catch (error) {
       console.error(`[${this._getTimestamp()}] [Balancer] Failed to process request:`, error);
+      // Release backend if it was already assigned (activeRequestCount was incremented)
+      releaseBackend(this, backend);
       if (request.reject) {
         request.reject(error);
       }
