@@ -497,9 +497,9 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           ` : ''}
           ${tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined ? `
-            <div class="perf-metric-row perf-total-row">
+            <div class="perf-metric-row">
               <span class="perf-metric-label">Total</span>
-              <span class="perf-metric-value perf-total-value">${tokenStats.avgTotalTokens.toFixed(1)}</span>
+              <span class="perf-metric-value">${tokenStats.avgTotalTokens.toFixed(1)}</span>
             </div>
           ` : ''}
         </div>

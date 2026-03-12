@@ -221,7 +221,7 @@ body.dark-mode body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
 }
 
 .card-title {
@@ -257,7 +257,6 @@ body.dark-mode body {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 60px;
 }
 
 /* Backend Cards */
@@ -363,7 +362,7 @@ body.dark-mode body {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.75rem;
   color: var(--text-primary);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
   word-break: break-all;
 }
 
@@ -533,7 +532,7 @@ body.dark-mode body {
 .queue-stats-card {
   background-color: var(--card-bg);
   border-radius: 0.75rem;
-  padding: 1.5rem;
+  padding: 0.75rem;
   box-shadow: var(--shadow);
   border: 1px solid var(--border-color);
 }
@@ -553,7 +552,7 @@ body.dark-mode body {
   font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 500;
-  margin-bottom: 0.375rem;
+  margin-bottom: 0;
 }
 
 .queue-stat-value {
@@ -1118,8 +1117,8 @@ body.dark-mode body {
 
 /* Performance Metrics - New Comprehensive Display */
 .performance-metrics {
-  margin-top: 0.75rem;
-  padding: 1rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
   background-color: var(--card-bg);
   border-radius: 0.5rem;
   border-left: 4px solid var(--primary-color);
@@ -1131,8 +1130,8 @@ body.dark-mode .performance-metrics {
 }
 
 .perf-section {
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
+  padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1204,7 +1203,7 @@ body.dark-mode .perf-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.1rem 0;
+  padding: 0 0;
   gap: 0.5rem;
 }
 
@@ -1229,17 +1228,6 @@ body.dark-mode .perf-section {
   flex-shrink: 0;
 }
 
-.perf-total-row {
-  background-color: rgba(59, 130, 246, 0.1);
-  margin-top: 0.125rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-}
-
-.perf-total-value {
-  font-size: 0.8125rem;
-  color: var(--primary-color);
-}
 
 /* Legacy metric styles for backward compatibility */
 .metric-row {
@@ -1358,21 +1346,6 @@ body:not(.dark-mode) .mode-icon.moon {
   font-size: 0.625rem;
 }
 
-.perf-total-row {
-  background-color: rgba(59, 130, 246, 0.1);
-  margin-top: 0.375rem;
-  padding: 0.375rem 0.5rem;
-  border-radius: 0.25rem;
-}
-
-body.dark-mode .perf-total-row {
-  background-color: rgba(59, 130, 246, 0.2);
-}
-
-.perf-total-value {
-  font-size: 0.9375rem;
-  color: var(--primary-color);
-}
 
 /* Model tag dark mode - higher specificity */
 html body.dark-mode .model-tag {
