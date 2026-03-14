@@ -191,7 +191,7 @@ sequenceDiagram
     RequestProcessor->>RequestProcessor: Update backend performance stats
     RequestProcessor->>Backend: updateStreamingStats() or updateNonStreamingStats()
 
-    RequestProcessor->>RequestProcessor: trackDebugRequest()
+    RequestProcessor->>Backend: cachePrompt()  // Cache for KV reuse
     RequestProcessor->>Backend: releaseBackend()
     Backend->>RequestProcessor: activeRequestCount--
 
@@ -291,22 +291,22 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start[HealthChecker Start] --> Initialize[Initial checkAll()]
+    Start[HealthChecker Start] --> Initialize[Initial checkAll]
 
     Initialize --> CheckEach{For Each Backend}
 
-    subgraph HealthCheckCycle["Health Check Cycle"]
+    subgraph HealthCheckCycle ["Health Check Cycle"]
         CheckEach --> CheckBackend[Check Backend Health]
 
         CheckBackend --> CallCheckHealth{backend.checkHealth}
         CallCheckHealth --> Delegate[Delegate to healthChecker.check]
 
-        subgraph APISpecificHealth["API-Specific Health Checkers"]
+        subgraph APISpecificHealth ["API-Specific Health Checkers"]
             Delegate --> CheckType{API Type?}
-            CheckType -->|Ollama| OllamaCheck[OllamaHealthCheck<br/>Probe /api/tags]
-            CheckType -->|OpenAI/Groq| OpenAICheck[OpenAIHealthCheck<br/>Probe /v1/models]
-            CheckType -->|Anthropic| AnthropicCheck[AnthropicHealthCheck<br/>Probe /v1/messages]
-            CheckType -->|Google| GoogleCheck[GoogleHealthCheck<br/>Probe /v1beta/models]
+            CheckType -->|Ollama| OllamaCheck[OllamaHealthCheck Probe /api/tags]
+            CheckType -->|OpenAI/Groq| OpenAICheck[OpenAIHealthCheck Probe /v1/models]
+            CheckType -->|Anthropic| AnthropicCheck[AnthropicHealthCheck Probe /v1/messages]
+            CheckType -->|Google| GoogleCheck[GoogleHealthCheck Probe /v1beta/models]
         end
 
         OllamaCheck --> ParseResult{Result?}
@@ -314,8 +314,8 @@ flowchart TD
         AnthropicCheck --> ParseResult
         GoogleCheck --> ParseResult
 
-        ParseResult -->|Healthy| MarkHealthy[backend.healthy = true<br/>backend.failCount = 0]
-        ParseResult -->|Unhealthy| MarkUnhealthy[backend.healthy = false<br/>backend.failCount++]
+        ParseResult -->|Healthy| MarkHealthy[backend.healthy = true backend.failCount = 0]
+        ParseResult -->|Unhealthy| MarkUnhealthy[backend.healthy = false backend.failCount++]
 
         MarkHealthy --> LogHealthy[Log: healthy + models]
         MarkUnhealthy --> LogUnhealthy[Log: unhealthy + error]
@@ -330,11 +330,6 @@ flowchart TD
     NextInterval --> Loop{Interval End?}
     Loop -->|Yes| Start
     Loop -->|No| Loop
-
-    style CheckEach fill:#e8f5e9
-    style MarkHealthy fill:#c8e6c9
-    style MarkUnhealthy fill:#ffcdd2
-    style APISpecificHealth fill:#fff3e0
 ```
 
 ---
@@ -358,6 +353,7 @@ graph TB
         BackendInfo["BackendInfo"]
         HealthCheckerMain["HealthChecker"]
         APIHealthCheckers["API Health Checkers"]
+        PromptCache["PromptCache<br/>KV Cache"]
     end
 
     subgraph RequestFlow["Request Flow"]
@@ -369,6 +365,7 @@ graph TB
         PerformanceStats["Performance Stats"]
         DebugStats["Debug Stats"]
         QueueStats["Queue Stats"]
+        PromptCacheStats["Prompt Cache Stats"]
     end
 
     Routes --> Balancer
@@ -383,10 +380,13 @@ graph TB
     RequestProcessor --> ProxyRequests
 
     Backend --> PerformanceStats
+    Backend --> PromptCache
     Balancer --> DebugStats
     Balancer --> QueueStats
+    Backend --> PromptCacheStats
 
     Backend -.->|delegates to| APIHealthCheckers
+    Backend --> PromptCache[caches/prompts]
 
     style Balancer fill:#e1f5fe
     style Backend fill:#f3e5f5
@@ -394,6 +394,8 @@ graph TB
     style RequestProcessor fill:#fff3e0
     style HealthCheckerMain fill:#fff3e0
     style APIHealthCheckers fill:#f1f8e9
+    style PromptCache fill:#e8f5e9
+    style PromptCacheStats fill:#e8f5e9
 ```
 
 ---
@@ -412,11 +414,28 @@ classDiagram
         +int errorCount
         +int maxConcurrency
         +BackendInfo backendInfo
+        +PromptCache promptCache
         +HealthChecker healthChecker
         +checkHealth()
         +getApiTypes()
         +getModels()
         +getPerformanceStats()
+        +cachePrompt()
+        +findCacheMatch()
+        +getPromptCacheStats()
+    }
+
+    class PromptCache {
+        +int maxSize
+        +float similarityThreshold
+        +Entry[] entries  // LRU list
+        +Map idMap
+        +Stats stats
+        +fingerprint()
+        +cosineSimilarity()
+        +findBestMatch()
+        +addOrUpdate()
+        +getStats()
     }
 
     class BackendInfo {
@@ -533,6 +552,100 @@ timeline
 `─────────────────────────────────────────────────────`
 
 ---
+
+## Prompt Cache System
+
+### Overview
+
+The prompt cache enables KV cache reuse by storing prompts per backend. When similar prompts are detected, backends can reuse cached KV prefixes, significantly reducing generation time.
+
+### Architecture
+
+```mermaid
+classDiagram
+    class PromptCache {
+        +int maxSize
+        +float similarityThreshold
+        +Entry[] entries  // LRU list, front = MRU
+        +Map idMap  // ID -> entry mapping
+        +Stats stats
+        +fingerprint(text)
+        +cosineSimilarity(fp1, fp2)
+        +findBestMatch(prompt, model, id)
+        +addOrUpdate(prompt, model, id)
+        +getStats()
+    }
+
+    class PromptCacheEntry {
+        +string prompt
+        +string model
+        +int[] fingerprint  // 64-element hash array
+        +date lastAccessed
+        +string id  // Optional backend response ID
+        +int hitCount
+    }
+
+    PromptCache --> PromptCacheEntry : contains
+    Backend --> PromptCache : owns
+```
+
+### Cache Strategy
+
+1. **Fingerprint Computation**: Token-level FNV-1a 64-bit hash of prompt+model composite key
+2. **Similarity Matching**: Cosine similarity on fingerprint arrays (threshold: 0.85)
+3. **LRU Eviction**: Most recently used entries stay in cache, oldest evicted first
+4. **Model Isolation**: Each model has separate cache entries (composite key: prompt+model)
+
+### Priority Lookup
+
+1. **ID-based**: If backend provides response ID, use instant O(1) lookup
+2. **Fingerprint-based**: Compute cosine similarity on fingerprints (O(64))
+
+### Cache Statistics
+
+```json
+{
+  "hits": 0,
+  "misses": 0,
+  "evictions": 0,
+  "idMatches": 0,
+  "similarityMatches": 0,
+  "size": 5,
+  "maxSize": 5,
+  "cachedPrompts": [
+    {
+      "model": "qwen/qwen3.5-35b-a3b",
+      "prompt": "{...}",
+      "lastAccessed": 1773455665362,
+      "hitCount": 0
+    }
+  ]
+}
+```
+
+### Request Flow with Cache
+
+```mermaid
+sequenceDiagram
+    participant RequestProcessor
+    participant Backend
+    participant PromptCache
+
+    Note over RequestProcessor: After request completes
+
+    RequestProcessor->>Backend: cachePrompt(requestBody, matchedModel)
+    Backend->>PromptCache: addOrUpdate(prompt, model, id)
+
+    alt Cache full
+        PromptCache->>PromptCache: Evict LRU entry
+        PromptCache-->>Backend: Entry evicted
+    end
+
+    PromptCache->>PromptCache: Add/update entry at front
+    PromptCache-->>Backend: Entry cached
+
+    Backend-->>RequestProcessor: Done
+```
 
 ## Related Documentation
 
