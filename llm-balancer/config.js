@@ -33,6 +33,10 @@ function loadConfig() {
   const debug = process.env.DEBUG === 'true';
   const debugRequestHistorySize = parseInt(process.env.DEBUG_REQUEST_HISTORY_SIZE) || 100;
 
+  // Parse prompt cache configuration
+  const maxPromptCacheSize = parseInt(process.env.MAX_PROMPT_CACHE_SIZE) || 5;
+  const promptCacheSimilarityThreshold = parseFloat(process.env.PROMPT_CACHE_SIMILARITY_THRESHOLD) || 0.85;
+
   // Parse graceful shutdown timeout (default: 60 seconds for compute-heavy requests)
   const shutdownTimeout = parseInt(process.env.SHUTDOWN_TIMEOUT) || 60000;
 
@@ -86,6 +90,8 @@ function loadConfig() {
     requestTimeout,
     debug,
     debugRequestHistorySize,
+    maxPromptCacheSize,
+    promptCacheSimilarityThreshold,
     shutdownTimeout,
     version
   };

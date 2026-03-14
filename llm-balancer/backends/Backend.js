@@ -8,6 +8,9 @@
 // Configurable via MAX_STATS_SAMPLES environment variable, defaults to 20
 const MAX_STATS_SAMPLES = parseInt(process.env.MAX_STATS_SAMPLES) || 20;
 
+// Import PromptCache for KV cache support
+const { PromptCache } = require('./PromptCache');
+
 class Backend {
   constructor(url, maxConcurrency = 10) {
     this.url = url;
@@ -47,6 +50,13 @@ class Backend {
     // Health checker will be assigned based on primary API type
     // This enables API-specific health checking via delegation
     this.healthChecker = null;
+
+    // PromptCache initialization
+    const config = require('../config.js').loadConfig();
+    this.promptCache = new PromptCache(
+      config.maxPromptCacheSize,
+      config.promptCacheSimilarityThreshold
+    );
   }
 
   /**
@@ -384,6 +394,49 @@ class Backend {
     };
   }
 
+  /**
+   * Cache a completed request prompt
+   * Adds prompt to backend's prompt cache for KV cache reuse
+   *
+   * @param {string} prompt - Full prompt body that was sent to backend
+   * @param {string} model - Model name used for the request
+   * @param {string|null} id - Optional backend response ID (if backend provides one)
+   */
+  cachePrompt(prompt, model, id = null) {
+    if (!this.promptCache) {
+      console.warn(`[Backend] ${this.url}: Prompt cache not initialized, skipping cachePrompt`);
+      return;
+    }
+    this.promptCache.addOrUpdate(prompt, model, id);
+  }
+
+  /**
+   * Find if a prompt matches any cached entry
+   * Looks for cached prompt with similar fingerprint for KV cache reuse
+   *
+   * @param {string} prompt - Prompt body to match
+   * @param {string} model - Model name
+   * @param {string|null} id - Optional response ID (if available)
+   * @returns {{ entry: PromptCacheEntry, similarity: number, matchType: string }|null}
+   *          matchType: 'id' or 'similarity'
+   */
+  findCacheMatch(prompt, model, id = null) {
+    if (!this.promptCache) {
+      return null;
+    }
+    return this.promptCache.findBestMatch(prompt, model, id);
+  }
+
+  /**
+   * Get prompt cache statistics for monitoring
+   * @returns {{ hits: number, misses: number, evictions: number, idMatches: number, similarityMatches: number, size: number, maxSize: number }}
+   */
+  getPromptCacheStats() {
+    if (!this.promptCache) {
+      return null;
+    }
+    return this.promptCache.getStats();
+  }
 }
 
 module.exports = Backend;

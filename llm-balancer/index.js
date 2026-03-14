@@ -400,7 +400,9 @@ app.get('/stats', (req, res) => {
       maxPayloadSize: config.maxPayloadSize,
       maxPayloadSizeMB: config.maxPayloadSizeMB,
       maxQueueSize: config.maxQueueSize,
-      queueTimeout: config.queueTimeout
+      queueTimeout: config.queueTimeout,
+      maxPromptCacheSize: config.maxPromptCacheSize,
+      promptCacheSimilarityThreshold: config.promptCacheSimilarityThreshold
     },
     // Add: Backend concurrency counts
     overloadedBackends: backends.filter(
@@ -422,7 +424,14 @@ app.get('/stats', (req, res) => {
       errorCount: b.errorCount,
       apiTypes: b.getApiTypes(),
       primaryApiType: b.getPrimaryApiType(),
-      performanceStats: b.getPerformanceStats()
+      performanceStats: b.getPerformanceStats(),
+      promptCacheStats: b.getPromptCacheStats()
+    })),
+    // Add: Prompt cache statistics summary
+    promptCache: backends.map(b => ({
+      backendId: b.id,
+      backendUrl: b.url,
+      cache: b.getPromptCacheStats()
     })),
     // Add: Queue statistics
     queueStats: balancer.getAllQueueStats()

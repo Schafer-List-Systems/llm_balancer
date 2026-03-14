@@ -484,6 +484,11 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
 
         releaseBackend(balancer, backend);
         onRequestComplete();
+
+        // Cache the completed request for KV cache reuse
+        if (matchedModel) {
+          backend.cachePrompt(requestBody, matchedModel);
+        }
       });
     } else {
       let data = '';
@@ -663,6 +668,11 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
 
       releaseBackend(balancer, backend);
       onRequestComplete();
+
+      // Cache the completed request for KV cache reuse
+      if (config.debug && matchedModel) {
+        backend.cachePrompt(requestBody, matchedModel);
+      }
     });
   });
 
