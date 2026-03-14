@@ -337,12 +337,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     }
   });
 
-  proxyReq.on('end', () => {
-    console.debug(`[Balancer] Proxy request to ${backend.url} ended, releasing backend ${backend.id}`);
-    releaseBackend(balancer, backend);
-    onRequestComplete();
-  });
-
   // Record when request is sent to backend
   const requestSentTime = Date.now();
 
@@ -520,8 +514,10 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     }
   });
 
-  console.debug(`[Gateway] Sending request to ${backend.url} with body: ${requestBody ? requestBody.substring(0, 100) : 'none'}`);
-  sendRequestBody(proxyReq, getRequestBody(req));
+  // End the request - this sends the body and completes the request
+  // This must be called AFTER all handlers are registered but triggers immediately
+  console.debug(`[Gateway] Sending request body to ${backend.url}`);
+  proxyReq.end(getRequestBody(req));
 }
 
 /**

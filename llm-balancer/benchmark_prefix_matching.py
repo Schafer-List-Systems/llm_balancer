@@ -252,29 +252,30 @@ def send_request_streaming(balancer_url: str, prompt: str, model: str, config: O
                     chunk_count += 1
                     if first_chunk_time is None:
                         first_chunk_time = time.time()
-                    if line != 'data: [DONE]':
-                        try:
-                            full_response.append(json.loads(line[5:].strip()))
-                        except:
-                            pass
+                    # Handle both [DONE] signal and actual data chunks
+                    if line == 'data: [DONE]':
+                        break
+                    try:
+                        full_response.append(json.loads(line[5:].strip()))
+                    except:
+                        pass
 
         total_time = time.time() - start_time
         first_chunk_time_ms = (first_chunk_time - start_time) * 1000 if first_chunk_time else None
         total_time_ms = total_time * 1000
 
-        # Get content from streaming chunks (streaming uses delta.reasoning_content)
+        # Get content from streaming chunks
         content = ''
         if full_response:
-            # Streaming chunks have delta.reasoning_content, not message.content
+            # Qwen returns reasoning in delta.reasoning, not reasoning_content
             last_chunk = full_response[-1]
             delta = last_chunk.get('choices', [{}])[0].get('delta', {})
-            reasoning_content = delta.get('reasoning_content', '')
+            reasoning = delta.get('reasoning', '')
+            content = reasoning
 
             # Debug: show raw response details
             if config.debug:
-                print(f"    [DEBUG] delta.reasoning_content={repr(reasoning_content[:30] if reasoning_content else None)}")
-
-            content = reasoning_content
+                print(f"    [DEBUG] delta.reasoning={repr(reasoning[:30] if reasoning else None)}")
 
         return RequestResult(
             success=True,

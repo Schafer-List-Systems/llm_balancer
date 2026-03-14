@@ -795,7 +795,8 @@ async function startServer() {
         const status = backend.healthy ? '✓' : '✗';
         const apiTypeStr = apiTypes.length > 0 ? apiTypes.join(', ') : 'none';
         const primaryApi = backend.getPrimaryApiType() || 'none';
-        console.log(`  ${i + 1}. ${backend.url} (${apiTypeStr}, ${modelCount} models, primary: ${primaryApi}) ${status}`);
+        const apiBadges = apiTypes.map(api => `[${api}]`).join(' ');
+        console.log(`  ${i + 1}. ${backend.url} ${apiBadges} (${modelCount} models) ${status}`);
       });
       console.log(`\nRoutes:`);
       console.log(`  OpenAI API:     /v1/chat/completions*`);
