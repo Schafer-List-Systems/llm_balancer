@@ -33,8 +33,8 @@ The LLM Balancer is built using a modular, interface-based architecture that emp
 │  └──────────────────────────────────────────────────────────────────┘  │
 │  │                                                                       │
 │  │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
-│  │  │   Balancer      │◄───│  Backend        │    │  Health         │  │
-│  │  │   (balancer.js) │    │  (Backend.js)   │    │  Checker        │  │
+│  │  │   Balancer      │◄───│  BackendPool  │    │  Backend        │  │
+│  │  │   (balancer.js) │    │(backend-pool) │    │  (Backend.js)   │  │
 │  │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
 │  │         │                     │                     │                │
 │  │         │                     │                     │                │
@@ -60,6 +60,27 @@ The LLM Balancer is built using a modular, interface-based architecture that emp
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+### BackendPool vs BackendSelector Distinction
+
+| Aspect | BackendPool | BackendSelector |
+|--------|-------------|-----------------|
+| **Responsibility** | Owns the backend collection (source of truth) | Selects the best backend from a list |
+| **Returns** | New `BackendPool` instance (filtered collection) | Single `Backend` object (or null) |
+| **State** | Stateful (`this._backends`) | Stateless (takes backends as parameter) |
+| **Interface** | `filter(criteria)` - unified criteria object | `selectBackend(backends, options)` |
+| **Pattern** | Collection pattern (filtered views) | Strategy pattern (selection algorithms) |
+
+**Example Usage:**
+```javascript
+// BackendPool owns and filters backends
+const pool = new BackendPool(backends);
+const filteredPool = pool.filter({ healthy: true, models: ['llama3'] });
+
+// BackendSelector picks best backend from filtered list
+const candidates = filteredPool.getAll();
+const bestBackend = selector.selectBackend(candidates, { models: ['llama3'] });
+```
+
 ---
 
 ## Core Components
@@ -82,17 +103,120 @@ loadConfig() -> ConfigObject
 
 ---
 
-### 2. Balancer Class
+### 2. BackendPool Class
+
+**File**: `llm-balancer/backend-pool.js`
+
+**Responsibilities**:
+- Own the backend collection (source of truth)
+- Provide unified filtering interface
+- Support immutable filter chaining
+- Track pool statistics
+
+**Properties**:
+```javascript
+{
+  _backends: Backend[]  // Private collection (source of truth)
+}
+```
+
+**Key Methods**:
+```javascript
+filter(criteria) -> BackendPool  // Returns new filtered pool
+healthy() -> BackendPool         // Filter by health
+available() -> BackendPool       // Filter by availability
+byModel(models) -> BackendPool   // Filter by models
+healthyAndAvailable() -> BackendPool  // Combined filter
+getAll() -> Backend[]            // Return all backends
+some(criteria) -> boolean        // Check if any match
+getStats() -> Object             // Pool statistics
+add(backend) -> void             // Add backend dynamically
+remove(url) -> void              // Remove backend
+getByUrl(url) -> Backend         // Find backend by URL
+```
+
+**Filter Criteria Object:**
+```javascript
+{
+  healthy: boolean,              // true = only healthy, false = only unhealthy, undefined = any
+  available: boolean,            // true = has capacity, false = at max, undefined = any
+  models: string[],              // Filter backends supporting these models
+  custom: function(backend)      // Custom filter function
+}
+```
+
+**Usage Examples:**
+```javascript
+// Simple filters
+const healthyPool = pool.filter({ healthy: true });
+const availablePool = pool.filter({ available: true });
+const modelPool = pool.filter({ models: ['llama3', 'qwen'] });
+
+// Chaining (immutable pattern)
+const result = pool
+  .filter({ healthy: true })
+  .filter({ available: true })
+  .filter({ models: ['llama3'] });
+
+// Convenience methods
+const healthyAndAvailable = pool.healthyAndAvailable();
+const llamaBackends = pool.byModel('llama3');
+
+// Statistics
+const stats = pool.getStats();  // { totalBackends, healthyBackends, availableBackends, ... }
+```
+
+---
+
+### 3. BackendSelector Class
+
+**File**: `llm-balancer/backend-selector.js`
+
+**Responsibilities**:
+- Select the best backend from a list
+- Implement priority-based selection algorithm
+- Model matching using regex patterns
+- Health and availability filtering
+
+**Key Methods:**
+```javascript
+selectBackend(backends, options) -> Backend|null  // Select best backend
+getAvailableBackends(backends) -> Backend[]       // Get sorted available backends
+hasAvailableBackend(backends, models) -> boolean  // Check if any backend available
+getModelAvailabilityStats(backends) -> Object     // Get model availability stats
+```
+
+**Selection Algorithm:**
+1. Filter healthy, available backends
+2. Sort by priority (descending)
+3. Select first available backend
+4. If none available, queue request
+
+---
+
+### 4. Balancer Class
 
 **File**: `llm-balancer/balancer.js`
 
 **Responsibilities**:
-- Priority-based backend selection
+- Priority-based backend selection (delegates to BackendSelector)
 - Request queue management
 - Backend availability notifications
 - Statistics tracking
 
-**Key Methods**:
+**Properties:**
+```javascript
+{
+  backendPool: BackendPool,     // Owns backends
+  selector: BackendSelector,    // Selection strategy
+  queue: Array<QueuedRequest>,  // Pending requests
+  maxQueueSize: number,         // Maximum queue size
+  queueTimeout: number,         // Queue timeout (ms)
+  requestCounts: Map           // Requests per backend
+}
+```
+
+**Key Methods:**
 ```javascript
 queueRequest(req) -> Promise<Backend>
 getNextBackend() -> Backend|null
@@ -102,15 +226,9 @@ markHealthy(backendUrl) -> void
 getStats() -> BalancerStats
 ```
 
-**Selection Algorithm**:
-1. Filter healthy, available backends
-2. Sort by priority (descending)
-3. Select first available backend
-4. If none available, queue request
-
 ---
 
-### 3. Backend Class
+### 5. Backend Class
 
 **File**: `llm-balancer/backends/Backend.js`
 
@@ -142,7 +260,7 @@ supportsApi(apiType) -> boolean
 
 ---
 
-### 4. BackendInfo Class
+### 6. BackendInfo Class
 
 **File**: `llm-balancer/backends/BackendInfo.js`
 

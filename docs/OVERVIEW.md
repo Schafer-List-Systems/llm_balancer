@@ -35,32 +35,45 @@ Client → Load Balancer (localhost:3001) → Multiple Backend Servers
 
 ### Core Components
 
-The system consists of five core components:
+The system consists of seven core components:
 
 1. **Configuration Module** ([llm-balancer/config.js](llm-balancer/config.js))
    - Loads and validates environment variables
    - Creates backend objects with health status tracking
    - Parses priority and concurrency configurations
 
-2. **Balancer Class** ([llm-balancer/balancer.js](llm-balancer/balancer.js))
+2. **BackendPool Class** ([llm-balancer/backend-pool.js](llm-balancer/backend-pool.js))
+   - Owns the backend collection (source of truth)
+   - Provides unified filtering interface
+   - Supports immutable filter chaining
+   - Tracks pool statistics
+
+3. **BackendSelector Class** ([llm-balancer/backend-selector.js](llm-balancer/backend-selector.js))
+   - Implements priority-based selection algorithm
+   - Performs model matching using regex patterns
+   - Filters by health and availability
+   - Stateless strategy pattern implementation
+
+4. **Balancer Class** ([llm-balancer/balancer.js](llm-balancer/balancer.js))
    - Priority-based request routing with FIFO queueing
-   - Manages backend selection algorithm
+   - Uses BackendPool for data ownership
+   - Uses BackendSelector for selection strategy
    - Handles request queuing and backend availability notifications
    - Tracks statistics and queue metrics
 
-3. **Health Checker** ([llm-balancer/health-check.js](llm-balancer/health-check.js))
+5. **Health Checker** ([llm-balancer/health-check.js](llm-balancer/health-check.js))
    - Periodic backend health monitoring
    - API capability detection using [BackendInfo](llm-balancer/backends/BackendInfo.js)
    - Automatic failure detection and recovery
    - Model discovery on startup
 
-4. **Request Processor** ([llm-balancer/request-processor.js](llm-balancer/request-processor.js))
+6. **Request Processor** ([llm-balancer/request-processor.js](llm-balancer/request-processor.js))
    - HTTP proxy for forwarding requests to backends
    - Handles streaming and non-streaming responses
    - Manages active request counting
    - Implements hop-by-hop header filtering
 
-5. **API Server** ([llm-balancer/index.js](llm-balancer/index.js))
+7. **API Server** ([llm-balancer/index.js](llm-balancer/index.js))
    - Express server exposing routes and endpoints
    - Request routing to balancer
    - Health, stats, and debug endpoints
@@ -175,6 +188,8 @@ llm_balancer/
 ├── llm-balancer/                 # Backend load balancer
 │   ├── index.js                  # Load balancer server
 │   ├── balancer.js               # Priority-based balancer with FIFO queue
+│   ├── backend-pool.js           # Backend pool with unified filtering
+│   ├── backend-selector.js       # Priority-based selection algorithm
 │   ├── health-check.js           # Health checker
 │   ├── request-processor.js      # Request forwarding logic
 │   ├── config.js                 # Configuration loader

@@ -12,14 +12,20 @@ This document describes the class structure, interfaces, and data structures.
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐              │
-│  │   Backend    │    │   Balancer   │    │  BackendInfo │              │
+│  │   Backend    │    │  BackendPool │    │  BackendInfo │              │
 │  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘              │
 │         │                   │                   │                       │
 │         │                   │                   │                       │
 │         ▼                   ▼                   ▼                       │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐              │
-│  │ IHealthCheck │    │ IModelList   │    │ HealthChecker│              │
-│  └──────────────┘    └──────────────┘    └──────────────┘              │
+│  │ IHealthCheck │    │ Backend      │    │ HealthChecker│              │
+│  └──────────────┘    │  Selector    │    └──────────────┘              │
+│                      └──────┬───────┘                                    │
+│                             │                                            │
+│                             ▼                                            │
+│                      ┌──────────────┐                                    │
+│                      │ ModelMatcher │                                    │
+│                      └──────────────┘                                    │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -27,6 +33,95 @@ This document describes the class structure, interfaces, and data structures.
 ---
 
 ## Core Classes
+
+### BackendPool Class
+
+**File**: `llm-balancer/backend-pool.js`
+
+**Purpose**: Owns the backend collection (source of truth) and provides filtering capabilities using a unified interface. Implements the Collection pattern.
+
+**Properties**:
+```javascript
+{
+  _backends: Backend[]  // Private collection (source of truth)
+}
+```
+
+**Key Methods**:
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `filter(criteria)` | `BackendPool` | Filter by criteria, returns new BackendPool (immutable) |
+| `healthy()` | `BackendPool` | Filter healthy backends only |
+| `available()` | `BackendPool` | Filter backends with available capacity |
+| `byModel(models)` | `BackendPool` | Filter backends supporting specified models |
+| `healthyAndAvailable()` | `BackendPool` | Combined filter for healthy AND available |
+| `getAll()` | `Backend[]` | Return all backends (read-only) |
+| `some(criteria)` | `boolean` | Check if any backends match criteria |
+| `getStats()` | `Object` | Return pool statistics |
+| `add(backend)` | `void` | Add backend dynamically |
+| `remove(url)` | `void` | Remove backend by URL |
+| `getByUrl(url)` | `Backend` | Find backend by URL |
+
+**Filter Criteria Object**:
+```javascript
+{
+  healthy: boolean,        // true = only healthy, false = only unhealthy, undefined = any
+  available: boolean,      // true = has capacity, false = at max, undefined = any
+  models: string[],        // Filter backends supporting these models
+  custom: function(backend) // Custom filter function returning boolean
+}
+```
+
+**Usage Examples**:
+```javascript
+// Simple filters
+const healthyPool = pool.filter({ healthy: true });
+const availablePool = pool.filter({ available: true });
+const modelPool = pool.filter({ models: ['llama3', 'qwen'] });
+
+// Chaining (immutable pattern - each filter returns new BackendPool)
+const result = pool
+  .filter({ healthy: true })
+  .filter({ available: true })
+  .filter({ models: ['llama3'] });
+
+// Convenience methods
+const healthyAndAvailable = pool.healthyAndAvailable();
+const llamaBackends = pool.byModel('llama3');
+
+// Statistics
+const stats = pool.getStats();  // { totalBackends, healthyBackends, availableBackends, ... }
+
+// Dynamic management
+pool.add(newBackend);
+pool.remove('http://old-backend:11434');
+const backend = pool.getByUrl('http://backend1:11434');
+```
+
+---
+
+### BackendSelector Class
+
+**File**: `llm-balancer/backend-selector.js`
+
+**Purpose**: Selects the best backend from a list using priority-based selection and model matching. Implements the Strategy pattern.
+
+**Key Methods**:
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `selectBackend(backends, options)` | `Backend|null` | Select the single best backend |
+| `getAvailableBackends(backends)` | `Backend[]` | Get sorted array of available backends |
+| `hasAvailableBackend(backends, models)` | `boolean` | Check if any backend available |
+| `getModelAvailabilityStats(backends)` | `Object` | Get model availability statistics |
+
+**Selection Algorithm**:
+1. Filter healthy, available backends
+2. If models specified, use priority-first regex matching
+3. Sort by priority (descending)
+4. Select first available backend
+5. Return null if no backends available
+
+---
 
 ### Backend Class
 
@@ -336,12 +431,13 @@ static async _selectBackendByPriorityFirst(backends, models) {
 
 **File**: `llm-balancer/balancer.js`
 
-**Purpose**: Manages request routing, queueing, and backend selection.
+**Purpose**: Manages request routing, queueing, and backend selection. Uses BackendPool for backend data ownership and BackendSelector for selection strategy.
 
 **Properties**:
 ```javascript
 {
-  backends: Backend[],              // Configured backends
+  backendPool: BackendPool,         // Owns backends (data ownership)
+  selector: BackendSelector,        // Selection strategy (Strategy pattern)
   queue: Array<QueuedRequest>,      // Pending requests
   maxQueueSize: number,             // Maximum queue size
   queueTimeout: number,             // Queue timeout (ms)
