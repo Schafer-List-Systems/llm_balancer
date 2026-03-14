@@ -45,8 +45,8 @@ describe('Integration Tests - Requires Real Backends', () => {
 
   it('should select healthy backends', () => {
     // Basic sanity check that balancer is initialized correctly
-    expect(balancer.backends).toHaveLength(backends.length);
-    expect(balancer.backends.every(b => b.healthy === true)).toBe(true);
+    expect(balancer.backendPool.getAll()).toHaveLength(backends.length);
+    expect(balancer.backendPool.getAll().every(b => b.healthy === true)).toBe(true);
   });
 
   // Add more integration tests here when real backends are available

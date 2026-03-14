@@ -47,7 +47,8 @@ describe('notifyBackendAvailable', () => {
       );
 
       // Mark all backends at max concurrency to force queueing
-      testBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
+      const testBackends = testBalancer.backendPool.getAll();
+      testBackends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue requests - they will go into the queue since all are at capacity
       const promises = [];
@@ -62,7 +63,7 @@ describe('notifyBackendAvailable', () => {
       expect(testBalancer.queue.length).toBeGreaterThan(0);
 
       // Release ONE backend by setting activeRequestCount to 0
-      testBalancer.backends[0].activeRequestCount = 0;
+      testBackends[0].activeRequestCount = 0;
 
       // Call notify - it will resolve ONLY ONE queued request
       testBalancer.notifyBackendAvailable();
@@ -75,7 +76,7 @@ describe('notifyBackendAvailable', () => {
       expect(testBalancer.queue.length).toBe(1);
 
       // Release the second backend to resolve the remaining request
-      testBalancer.backends[1].activeRequestCount = 0;
+      testBackends[1].activeRequestCount = 0;
       testBalancer.notifyBackendAvailable();
 
       const result2 = await promises[1];
@@ -93,7 +94,8 @@ describe('notifyBackendAvailable', () => {
       );
 
       // Mark all backends at max concurrency first
-      fifoBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
+      const fifoBackends = fifoBalancer.backendPool.getAll();
+      fifoBackends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue multiple requests (matching number of backends)
       const promises = [];
@@ -104,7 +106,7 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release ONE backend and call notify - should only process ONE request
-      fifoBalancer.backends[0].activeRequestCount = 0;
+      fifoBackends[0].activeRequestCount = 0;
       fifoBalancer.notifyBackendAvailable();
 
       const result1 = await promises[0];
@@ -112,7 +114,7 @@ describe('notifyBackendAvailable', () => {
       expect(fifoBalancer.queue.length).toBe(1);
 
       // Release the second backend to process the remaining request
-      fifoBalancer.backends[1].activeRequestCount = 0;
+      fifoBackends[1].activeRequestCount = 0;
       fifoBalancer.notifyBackendAvailable();
 
       const result2 = await promises[1];
@@ -130,7 +132,8 @@ describe('notifyBackendAvailable', () => {
       );
 
       // Mark all backends at max concurrency to force queueing
-      shortTimeoutBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
+      const shortTimeoutBackends = shortTimeoutBalancer.backendPool.getAll();
+      shortTimeoutBackends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue a request with very short timeout
       const promise = shortTimeoutBalancer.queueRequest();
@@ -139,7 +142,7 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release backend before timeout fires - set activeRequestCount to 0 first
-      shortTimeoutBalancer.backends.forEach(b => b.activeRequestCount = 0);
+      shortTimeoutBackends.forEach(b => b.activeRequestCount = 0);
       shortTimeoutBalancer.notifyBackendAvailable();
 
       // Should resolve successfully without timeout error
@@ -158,7 +161,8 @@ describe('notifyBackendAvailable', () => {
       );
 
       // Mark all backends at max concurrency to force queueing
-      testBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
+      const testBackends = testBalancer.backendPool.getAll();
+      testBackends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue more requests than we have backends
       const promises = [];
@@ -169,7 +173,7 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release ONE backend and call notify - should process ONLY ONE request
-      testBalancer.backends[0].activeRequestCount = 0;
+      testBackends[0].activeRequestCount = 0;
       testBalancer.notifyBackendAvailable();
 
       // Only ONE should resolve
@@ -178,7 +182,7 @@ describe('notifyBackendAvailable', () => {
       expect(testBalancer.queue.length).toBe(4);
 
       // Release the second backend and call notify again
-      testBalancer.backends[1].activeRequestCount = 0;
+      testBackends[1].activeRequestCount = 0;
       testBalancer.notifyBackendAvailable();
 
       // Now a second request should resolve
@@ -246,7 +250,8 @@ describe('notifyBackendAvailable', () => {
       );
 
       // Mark all backends at max concurrency to force queueing
-      concurrentBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
+      const concurrentBackends = concurrentBalancer.backendPool.getAll();
+      concurrentBackends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue multiple requests (matching number of backends)
       const promises = [];
@@ -257,12 +262,12 @@ describe('notifyBackendAvailable', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // Release ONE backend and call notify - should process ONE request
-      concurrentBalancer.backends[0].activeRequestCount = 0;
+      concurrentBackends[0].activeRequestCount = 0;
       concurrentBalancer.notifyBackendAvailable();
       await promises[0];
 
       // Release second backend and call notify again - should process second request
-      concurrentBalancer.backends[1].activeRequestCount = 0;
+      concurrentBackends[1].activeRequestCount = 0;
       concurrentBalancer.notifyBackendAvailable();
       await promises[1];
 
@@ -281,7 +286,8 @@ describe('notifyBackendAvailable', () => {
       );
 
       // Mark all backends at max concurrency to force queueing
-      limitedBalancer.backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
+      const limitedBackends = limitedBalancer.backendPool.getAll();
+      limitedBackends.forEach(b => b.activeRequestCount = b.maxConcurrency);
 
       // Queue more requests than we have backends available
       const promises = [];
@@ -294,12 +300,12 @@ describe('notifyBackendAvailable', () => {
       // Process requests one at a time by repeatedly releasing and re-marking backend[0]
       // Each cycle: release -> notify (assigns ONE request) -> mark at max concurrency again -> repeat
       for (let i = 0; i < 4; i++) {
-        limitedBalancer.backends[0].activeRequestCount = 0;
+        limitedBackends[0].activeRequestCount = 0;
         limitedBalancer.notifyBackendAvailable();
         const result = await promises[i];
         expect(result).not.toBe(null);
         // Mark backend at max concurrency again so we can process the next queued request in next iteration
-        limitedBalancer.backends[0].activeRequestCount = limitedBalancer.backends[0].maxConcurrency;
+        limitedBackends[0].activeRequestCount = limitedBackends[0].maxConcurrency;
       }
 
       // All 4 requests should have resolved (using the same backend sequentially)

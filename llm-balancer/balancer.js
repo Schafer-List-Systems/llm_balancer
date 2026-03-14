@@ -1,8 +1,14 @@
 /**
  * Priority-based load balancer with FIFO queueing
  * Distributes requests among healthy backends by priority, then queues waiting requests
+ *
+ * Architecture:
+ * - BackendPool owns the backend collection and provides unified filtering
+ * - Balancer owns queueing and request routing logic
+ * - This separation of concerns enables independent evolution of pool management and queueing
  */
 
+const BackendPool = require('./backend-pool');
 const { BackendSelector, ModelMatcher } = require('./backend-selector');
 
 // Helper function to get formatted timestamp
@@ -12,7 +18,8 @@ function getTimestamp() {
 
 class Balancer {
   constructor(backends, maxQueueSize = 100, queueTimeout = 30000, debug = false, debugRequestHistorySize = 100) {
-    this.backends = backends;
+    // BackendPool owns the backend collection (source of truth)
+    this.backendPool = new BackendPool(backends);
     this.requestCount = new Map();
     this.healthCheckCount = new Map();
 
@@ -62,7 +69,7 @@ class Balancer {
    * @returns {Promise} Promise that resolves when a backend is available
    */
   async queueRequest() {
-    console.log(`[${getTimestamp()}] [Balancer] queueRequest() called, queue length: ${this.queue.length}, backends at max concurrency: ${this.backends.filter(b => b.activeRequestCount >= b.maxConcurrency).length}`);
+    console.log(`[${getTimestamp()}] [Balancer] queueRequest() called, queue length: ${this.queue.length}, backends at max concurrency: ${this.backendPool.getAll().filter(b => b.activeRequestCount >= b.maxConcurrency).length}`);
 
     // Check if any healthy backends exist before queuing
     if (!this.hasHealthyBackends()) {
@@ -168,8 +175,9 @@ class Balancer {
    * @returns {number|null} Index of highest priority backend or null
    */
   getNextBackendIndex() {
-    const backend = this.selector.getAvailableBackends(this.backends)[0];
-    return backend ? this.backends.indexOf(backend) : null;
+    const backends = this.backendPool.getAll();
+    const backend = this.selector.getAvailableBackends(backends)[0];
+    return backend ? backends.indexOf(backend) : null;
   }
 
   /**
@@ -179,7 +187,7 @@ class Balancer {
    * @returns {Object|null} Next backend or null if all are unhealthy
    */
   getNextBackend() {
-    return this.selector.selectBackend(this.backends);
+    return this.selector.selectBackend(this.backendPool.getAll());
   }
 
   /**
@@ -189,7 +197,7 @@ class Balancer {
    * @returns {Object|null} Next backend supporting the model or null if none available
    */
   getNextBackendForModel(models) {
-    return this.selector.selectBackend(this.backends, { models });
+    return this.selector.selectBackend(this.backendPool.getAll(), { models });
   }
 
   /**
@@ -199,7 +207,7 @@ class Balancer {
    * @returns {{backend: Object|null, actualModel: string|null}} Backend and matched actual model name or null if none available
    */
   getNextBackendForModelWithMatch(models) {
-    const candidates = this.selector._filterByHealthAndAvailability(this.backends);
+    const candidates = this.selector._filterByHealthAndAvailability(this.backendPool.getAll());
 
     // Use priority-first regex matching
     const result = ModelMatcher.findBestMatchAcrossBackends(models, candidates);
@@ -330,7 +338,7 @@ class Balancer {
    * @returns {Array} Sorted array of available backends
    */
   getAvailableBackends() {
-    return this.selector.getAvailableBackends(this.backends);
+    return this.selector.getAvailableBackends(this.backendPool.getAll());
   }
 
   /**
@@ -338,7 +346,8 @@ class Balancer {
    * @param {string} backendUrl - URL of the backend to mark as failed
    */
   markFailed(backendUrl) {
-    const backend = this.backends.find(b => b.url === backendUrl);
+    const backends = this.backendPool.getAll();
+    const backend = backends.find(b => b.url === backendUrl);
     if (backend) {
       backend.healthy = false;
       backend.activeRequestCount = 0; // Also clear active request count so it can be retried
@@ -361,7 +370,8 @@ class Balancer {
    * @param {string} backendUrl - URL of the backend to mark as healthy
    */
   markHealthy(backendUrl) {
-    const backend = this.backends.find(b => b.url === backendUrl);
+    const backends = this.backendPool.getAll();
+    const backend = backends.find(b => b.url === backendUrl);
     if (backend && !backend.healthy) {
       // Only mark as healthy if it wasn't already
       backend.healthy = true;
@@ -375,7 +385,7 @@ class Balancer {
    * @returns {boolean} True if there are healthy backends
    */
   hasHealthyBackends() {
-    return this.backends.some(b => b.healthy);
+    return this.backendPool.some({ healthy: true });
   }
 
   /**
@@ -384,7 +394,7 @@ class Balancer {
    * @returns {boolean} True if at least one suitable backend exists
    */
   hasBackendForModel(models) {
-    return this.selector.hasAvailableBackend(this.backends, models);
+    return this.selector.hasAvailableBackend(this.backendPool.getAll(), models);
   }
 
   /**
@@ -392,7 +402,7 @@ class Balancer {
    * @returns {Object} Statistics object with model information
    */
   getModelAvailabilityStats() {
-    return this.selector.getModelAvailabilityStats(this.backends);
+    return this.selector.getModelAvailabilityStats(this.backendPool.getAll());
   }
 
   /**
@@ -400,14 +410,15 @@ class Balancer {
    * @returns {Object} Statistics object
    */
   getStats() {
-    const healthyBackends = this.backends.filter(b => b.healthy);
-    const unhealthyBackends = this.backends.filter(b => !b.healthy);
+    const backends = this.backendPool.getAll();
+    const healthyBackends = backends.filter(b => b.healthy);
+    const unhealthyBackends = backends.filter(b => !b.healthy);
 
     return {
-      totalBackends: this.backends.length,
+      totalBackends: backends.length,
       healthyBackends: healthyBackends.length,
       unhealthyBackends: unhealthyBackends.length,
-      backends: this.backends.map(b => ({
+      backends: backends.map(b => ({
         url: b.url,
         healthy: b.healthy,
         activeRequestCount: b.activeRequestCount,
@@ -430,7 +441,8 @@ class Balancer {
    * @returns {Function} Release function to call when request completes
    */
   simulateRequestStart(backendUrl) {
-    const backend = this.backends.find(b => b.url === backendUrl);
+    const backends = this.backendPool.getAll();
+    const backend = backends.find(b => b.url === backendUrl);
     if (!backend) {
       throw new Error(`Backend not found: ${backendUrl}`);
     }
@@ -447,7 +459,8 @@ class Balancer {
    * @param {string} backendUrl - URL of the backend
    */
   simulateRequestEnd(backendUrl) {
-    const backend = this.backends.find(b => b.url === backendUrl);
+    const backends = this.backendPool.getAll();
+    const backend = backends.find(b => b.url === backendUrl);
     if (!backend) {
       throw new Error(`Backend not found: ${backendUrl}`);
     }
@@ -466,7 +479,8 @@ class Balancer {
   getDebugStats() {
     if (!this.debug) return { enabled: false };
 
-    const backendStats = this.backends.map(b => ({
+    const backends = this.backendPool.getAll();
+    const backendStats = backends.map(b => ({
       url: b.url,
       requestCount: b.requestCount || 0,
       performanceStats: b.getPerformanceStats(),

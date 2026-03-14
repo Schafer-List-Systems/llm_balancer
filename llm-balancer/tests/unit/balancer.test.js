@@ -25,7 +25,8 @@ const createTestBackendWithPriority = (url, priority, healthy = true, maxConcurr
 
 // Helper function to make a backend available again for testing
 const makeBackendAvailable = (balancer, backendUrl) => {
-  const backend = balancer.backends.find(b => b.url === backendUrl);
+  const backends = balancer.backendPool.getAll();
+  const backend = backends.find(b => b.url === backendUrl);
   if (backend) {
     balancer.markHealthy(backendUrl);
     balancer.notifyBackendAvailable();
@@ -48,7 +49,7 @@ describe('Balancer', () => {
 
   describe('Constructor', () => {
     it('should initialize with backends', () => {
-      expect(balancer.backends.length).toBe(3);
+      expect(balancer.backendPool.getAll().length).toBe(3);
       expect(balancer.requestCount.size).toBe(0);
     });
 

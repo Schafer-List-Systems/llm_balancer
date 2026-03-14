@@ -13,7 +13,7 @@ describe('Minimal Test', () => {
   });
 
   it('should initialize with backends', () => {
-    expect(balancer.backends.length).toBe(2);
+    expect(balancer.backendPool.getAll().length).toBe(2);
   });
 
   it('should track queue statistics', () => {
