@@ -150,48 +150,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <section class="backends-section">
           <div class="section-header">
-            <h2 class="section-title">Debug <span class="section-subtitle">(Request/response content tracking and debugging)</span></h2>
+            <h2 class="section-title">Debug <span class="section-subtitle">(Prompt cache statistics and performance metrics)</span></h2>
             <button id="toggleDebug" class="toggle-button">Show Debug</button>
           </div>
           <div id="debugSection" class="debug-section" style="display: none;">
             <div class="debug-stats">
               <div class="debug-stat-item">
-                <span class="debug-stat-label">Enabled</span>
+                <span class="debug-stat-label">Debug Enabled</span>
                 <span class="debug-stat-value" id="debugEnabled">-</span>
-              </div>
-              <div class="debug-stat-item">
-                <span class="debug-stat-label">Total Requests</span>
-                <span class="debug-stat-value" id="debugTotalRequests">-</span>
               </div>
             </div>
 
             <div class="debug-controls">
-              <input type="text" id="backendFilter" placeholder="Filter by backend ID..." class="input-field">
-              <select id="requestLimit" class="select-field">
-                <option value="10">10 requests</option>
-                <option value="25">25 requests</option>
-                <option value="50" selected>50 requests</option>
-                <option value="100">100 requests</option>
-              </select>
-              <button id="expandAll" class="button button-secondary" title="Expand all sections">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M2 4v2h12V4H2z"/>
-                  <path d="M2 8v2h12V8H2z"/>
-                  <path d="M2 12v2h12v-2H2z"/>
-                </svg>
-                Expand All
-              </button>
-              <button id="collapseAll" class="button button-secondary" title="Collapse all sections">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 2h8v12H4z"/>
-                </svg>
-                Collapse All
-              </button>
               <button id="refreshDebug" class="button button-secondary">Refresh</button>
-              <button id="clearDebug" class="button button-danger">Clear History</button>
             </div>
 
-            <div id="debugRequestsContainer" class="debug-requests-container">
+            <div id="debugBackendStatsContainer" class="debug-backend-stats-container">
               <p class="debug-empty">Loading debug data...</p>
             </div>
           </div>
@@ -764,6 +738,38 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'text-success';
   }
 
+  // Format URL for display (shorten to hostname:port)
+  function formatUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.hostname}:${parsed.port}`;
+    } catch {
+      return url;
+    }
+  }
+
+  // Format milliseconds to human readable
+  function formatMs(ms) {
+    if (ms < 1000) return `${ms.toFixed(0)}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
+
+  // Format JSON for display in UI (plain text with line breaks)
+  function formatJsonDisplay(jsonStr) {
+    try {
+      const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      const formatted = JSON.stringify(obj, null, 2);
+      // Escape HTML and preserve line breaks
+      return formatted
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    } catch (error) {
+      return '<span class="json-error">' + jsonStr.substring(0, 500) + '</span>';
+    }
+  }
+
   // Toggle debug section
   function toggleDebugSection() {
     const debugSection = document.getElementById('debugSection');
@@ -781,192 +787,164 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Load debug data
+  // Load debug data (now shows prompt cache stats)
   async function loadDebugData() {
-    const requestsContainer = document.getElementById('debugRequestsContainer');
-    const backendFilter = document.getElementById('backendFilter').value;
-    const requestLimit = parseInt(document.getElementById('requestLimit').value);
+    const container = document.getElementById('debugBackendStatsContainer');
 
     // Get debug stats
     const statsResult = await apiClient.getDebugStats();
 
-    if (statsResult.success) {
+    if (statsResult.success && statsResult.data) {
+      // Update debug enabled status
       document.getElementById('debugEnabled').textContent = statsResult.data.enabled ? 'Yes' : 'No';
       document.getElementById('debugEnabled').style.color = statsResult.data.enabled ? 'var(--success-color)' : 'var(--text-secondary)';
-      document.getElementById('debugTotalRequests').textContent = statsResult.data.totalRequests || 0;
-    }
 
-    if (!backendFilter) {
-      // Load all requests
-      const result = await apiClient.getDebugRequests(requestLimit);
-
-      if (result.success) {
-        renderDebugRequests(result.data.requests);
-      } else {
-        requestsContainer.innerHTML = `<p class="debug-empty">Failed to load debug data: ${result.error}</p>`;
-      }
+      // Render backend stats with performance and prompt cache info
+      renderBackendStats(statsResult.data.backendStats || []);
+      console.log('Debug stats received:', statsResult.data);
     } else {
-      // Load requests for specific backend
-      const result = await apiClient.getDebugRequestsByBackend(backendFilter, requestLimit);
-
-      if (result.success) {
-        renderDebugRequests(result.data.requests);
-      } else {
-        requestsContainer.innerHTML = `<p class="debug-empty">Failed to load debug data: ${result.error}</p>`;
-      }
+      container.innerHTML = `<p class="debug-empty">Failed to load debug data: ${statsResult.error || 'Unknown error'}</p>`;
     }
   }
 
-  // Render debug requests
-  function renderDebugRequests(requests) {
-    const requestsContainer = document.getElementById('debugRequestsContainer');
+  // Render backend stats with performance and prompt cache metrics
+  function renderBackendStats(backendStats) {
+    const container = document.getElementById('debugBackendStatsContainer');
 
-    if (!requests || requests.length === 0) {
-      requestsContainer.innerHTML = '<p class="debug-empty">No requests found</p>';
+    if (!backendStats || backendStats.length === 0) {
+      container.innerHTML = '<p class="debug-empty">No backend stats available</p>';
       return;
     }
 
-    const methodColors = {
-      GET: { bg: '#dcfce7', color: '#166534' },
-      POST: { bg: '#dbeafe', color: '#1e40af' },
-      PUT: { bg: '#fef3c7', color: '#92400e' },
-      DELETE: { bg: '#fee2e2', color: '#991b1b' }
-    };
+    container.innerHTML = backendStats.map(backend => {
+      const pc = backend.promptCacheStats || {};
+      const perf = backend.performanceStats || {};
 
-    requestsContainer.innerHTML = requests.map(req => {
-      const methodColor = methodColors[req.method] || { bg: '#f1f5f9', color: '#64748b' };
-      const statusColor = req.statusCode >= 200 && req.statusCode < 300 ? 'success' : 'error';
+      // Calculate cache hit rate
+      const totalCacheOps = (pc.hits || 0) + (pc.misses || 0);
+      const hitRate = totalCacheOps > 0 ? ((pc.hits / totalCacheOps) * 100).toFixed(1) : 0;
+
+      // Build cache status indicator
+      let cacheStatus = 'No data';
+      let cacheStatusClass = '';
+      if (totalCacheOps === 0) {
+        cacheStatus = 'Learning';
+        cacheStatusClass = 'neutral';
+      } else if (hitRate >= 50) {
+        cacheStatus = `Hit Rate: ${hitRate}%`;
+        cacheStatusClass = 'success';
+      } else if (hitRate >= 20) {
+        cacheStatus = `Hit Rate: ${hitRate}%`;
+        cacheStatusClass = 'warning';
+      } else {
+        cacheStatus = `Hit Rate: ${hitRate}%`;
+        cacheStatusClass = 'error';
+      }
 
       return `
-        <div class="debug-request-item">
-          <div class="debug-request-header">
-            <span class="debug-request-method" style="background-color: ${methodColor.bg}; color: ${methodColor.color};">
-              ${req.method}
-            </span>
-            <span class="debug-request-status ${statusColor}">
-              ${req.statusCode} ${req.statusText || ''}
-            </span>
-            <span class="debug-request-path">${req.route}</span>
-            <span class="debug-request-time">${new Date(req.timestamp).toLocaleString()}</span>
+        <div class="backend-stats-card">
+          <div class="backend-stats-header">
+            <h3 class="backend-name">${formatUrl(backend.url)}</h3>
+            <span class="backend-request-count">Requests: ${backend.requestCount || 0}</span>
           </div>
-          ${req.backendId ? `<div class="debug-request-backend">Backend: ${req.backendId}</div>` : ''}
-          ${req.tokenCount !== undefined ? `
-          <div class="debug-request-tokens">
-            <span class="token-label">Tokens:</span>
-            <span class="token-count">${req.tokenCount}</span>
+
+          <div class="stats-grid">
+            <!-- Performance Stats -->
+            <div class="stat-section">
+              <h4 class="section-header">Performance</h4>
+              <div class="stat-row">
+                <span class="stat-label">Avg Total Time</span>
+                <span class="stat-value">${formatMs(perf.timeStats?.avgTotalTimeMs || 0)}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Avg Prompt Time</span>
+                <span class="stat-value">${formatMs(perf.timeStats?.avgPromptProcessingTimeMs || 0)}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Avg Generation Time</span>
+                <span class="stat-value">${formatMs(perf.timeStats?.avgGenerationTimeMs || 0)}</span>
+              </div>
+            </div>
+
+            <!-- Token Stats -->
+            <div class="stat-section">
+              <h4 class="section-header">Tokens</h4>
+              <div class="stat-row">
+                <span class="stat-label">Avg Prompt</span>
+                <span class="stat-value">${perf.tokenStats?.avgPromptTokens ? Math.round(perf.tokenStats.avgPromptTokens) : '-'}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Avg Completion</span>
+                <span class="stat-value">${perf.tokenStats?.avgCompletionTokens ? Math.round(perf.tokenStats.avgCompletionTokens) : '-'}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Avg Total</span>
+                <span class="stat-value">${perf.tokenStats?.avgTotalTokens ? Math.round(perf.tokenStats.avgTotalTokens) : '-'}</span>
+              </div>
+            </div>
+
+            <!-- Rate Stats -->
+            <div class="stat-section">
+              <h4 class="section-header">Throughput</h4>
+              <div class="stat-row">
+                <span class="stat-label">Total Rate</span>
+                <span class="stat-value">${perf.rateStats?.totalRate?.avgTokensPerSecond ? perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Generation Rate</span>
+                <span class="stat-value">${perf.rateStats?.generationRate?.avgTokensPerSecond ? perf.rateStats.generationRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+              </div>
+            </div>
+
+            <!-- Prompt Cache Stats -->
+            <div class="stat-section">
+              <h4 class="section-header">Prompt Cache</h4>
+              <div class="stat-row">
+                <span class="stat-label">Status</span>
+                <span class="stat-value cache-status ${cacheStatusClass}">${cacheStatus}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Hits</span>
+                <span class="stat-value">${pc.hits || 0}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Misses</span>
+                <span class="stat-value">${pc.misses || 0}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Evictions</span>
+                <span class="stat-value">${pc.evictions || 0}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Cache Size</span>
+                <span class="stat-value">${pc.size || 0} / ${pc.maxSize || 5}</span>
+              </div>
+            </div>
           </div>
+
+          <!-- Cached Prompts -->
+          ${pc.cachedPrompts && pc.cachedPrompts.length > 0 ? `
+            <div class="prompt-cache-prompts">
+              <h4 class="section-header">Cached Prompts (${pc.cachedPrompts.length})</h4>
+              ${pc.cachedPrompts.map((cp, idx) => `
+                <div class="cached-prompt-item">
+                  <div class="cached-prompt-header">
+                    <span class="cached-prompt-model">${cp.model}</span>
+                    <span class="cached-prompt-info">Accessed: ${new Date(cp.lastAccessed).toLocaleTimeString()} | Hits: ${cp.hitCount}</span>
+                  </div>
+                  <div class="cached-prompt-content">${formatJsonDisplay(cp.prompt)}</div>
+                </div>
+              `).join('')}
+            </div>
           ` : ''}
-          ${req.responseLength !== undefined ? `
-          <div class="debug-request-length">
-            <span class="length-label">Length:</span>
-            <span class="length-count">${req.responseLength} chars</span>
-          </div>
-          ` : ''}
-          ${req.requestContent ? createCollapsibleSection('Request Body', formatJson(req.requestContent), false) : ''}
-          ${req.responseContent ? createCollapsibleSection('Response', formatJson(extractResponseData(req.responseContent).data), false) : ''}
         </div>
       `;
     }).join('');
   }
 
-  /**
-   * Extract and parse response data from debug object
-   * Response content is string: '{"data":"{actual content}","contentType":"...","statusCode":200}'
-   */
-  function extractResponseData(responseContent) {
-    try {
-      const parsed = typeof responseContent === 'string'
-        ? JSON.parse(responseContent)
-        : responseContent;
-
-      return {
-        data: parsed.data,
-        contentType: parsed.contentType || 'application/json',
-        statusCode: parsed.statusCode || 200
-      };
-    } catch (error) {
-      console.error('Failed to parse response content:', error);
-      return {
-        data: responseContent,
-        contentType: 'unknown',
-        statusCode: 0
-      };
-    }
-  }
-
-  /**
-   * Pretty-print JSON with syntax highlighting
-   */
-  function formatJson(json, indent = 2) {
-    try {
-      const obj = typeof json === 'string' ? JSON.parse(json) : json;
-      const jsonString = JSON.stringify(obj, null, indent);
-
-      // Simple syntax highlighting with regex
-      return jsonString
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-          let cls = 'json-key';
-          if (/^"/.test(match)) {
-            if (/:$/.test(match)) {
-              cls = 'json-key';
-            } else {
-              cls = 'json-string';
-            }
-          } else if (/true|false/.test(match)) {
-            cls = 'json-boolean';
-          } else if (/null/.test(match)) {
-            cls = 'json-null';
-          } else if (/\d/.test(match)) {
-            cls = 'json-number';
-          }
-          return '<span class="' + cls + '">' + match + '</span>';
-        });
-    } catch (error) {
-      return '<span class="json-error">' + json + '</span>';
-    }
-  }
-
-  /**
-   * Create collapsible section HTML
-   * @param {string} title - Header title
-   * @param {string} contentHtml - Content to display
-   * @param {boolean} isInitiallyExpanded - Whether section is expanded by default
-   */
-  function createCollapsibleSection(title, contentHtml, isInitiallyExpanded = false) {
-    const defaultClass = isInitiallyExpanded ? 'collapsible-section expanded' : 'collapsible-section';
-    const iconClass = isInitiallyExpanded ? 'collapsible-icon expanded' : 'collapsible-icon';
-    const arrow = isInitiallyExpanded ? '▼' : '▶';
-
-    return `
-      <div class="${defaultClass}" data-expanded="${isInitiallyExpanded}">
-        <div class="collapsible-header">
-          <span class="collapsible-toggle">
-            <span class="${iconClass}">${arrow}</span>
-          </span>
-          <span class="collapsible-title">${title}</span>
-        </div>
-        <div class="collapsible-content" style="display: ${isInitiallyExpanded ? 'block' : 'none'};">
-          <div class="collapsible-body">
-            ${contentHtml}
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // Clear debug history
+  // Clear debug history - now a no-op since we don't track requests
   async function clearDebugHistory() {
-    const result = await apiClient.clearDebugHistory();
-
-    if (result.success) {
-      showNotification('Debug history cleared successfully', 'success');
-      loadDebugData();
-    } else {
-      showNotification(`Failed to clear debug history: ${result.error}`, 'error');
-    }
+    showNotification('Debug request tracking has been replaced with prompt cache statistics. No clearing needed.', 'info');
   }
 
   // Render dashboard with data

@@ -435,7 +435,15 @@ class Backend {
     if (!this.promptCache) {
       return null;
     }
-    return this.promptCache.getStats();
+    const stats = this.promptCache.getStats();
+    // Add cached prompt text for debugging
+    stats.cachedPrompts = this.promptCache.entries.map(entry => ({
+      model: entry.model,
+      prompt: entry.prompt.substring(0, 500) + (entry.prompt.length > 500 ? '...' : ''),
+      lastAccessed: entry.lastAccessed,
+      hitCount: entry.hitCount
+    }));
+    return stats;
   }
 }
 

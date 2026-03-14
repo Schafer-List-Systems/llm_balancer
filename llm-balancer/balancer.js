@@ -24,7 +24,6 @@ class Balancer {
     // Debug configuration
     this.debug = debug;
     this.debugRequestHistorySize = debugRequestHistorySize;
-    this.debugRequests = []; // Array to store request metadata including content
 
     // Initialize backend selector for decoupled selection logic
     this.selector = new BackendSelector();
@@ -461,75 +460,6 @@ class Balancer {
   }
 
   /**
-   * Add a request to debug tracking
-   * @param {Object} metadata - Request metadata
-   * @param {Object} requestData - Request data (optional)
-   * @param {Object} responseData - Response data (optional)
-   */
-  trackDebugRequest(metadata, requestData = null, responseData = null) {
-    if (!this.debug) return;
-
-    const request = {
-      ...metadata,
-      timestamp: Date.now(),
-      id: this.debugRequests.length + 1,
-      requestContent: requestData,
-      responseContent: responseData
-    };
-
-    // Add to front and limit size
-    this.debugRequests.unshift(request);
-    if (this.debugRequests.length > this.debugRequestHistorySize) {
-      this.debugRequests = this.debugRequests.slice(0, this.debugRequestHistorySize);
-    }
-
-    // Log to console if debug is enabled
-    console.log(`[${getTimestamp()}] [DEBUG] Request tracked:`, metadata);
-  }
-
-  /**
-   * Get debug request history
-   * @returns {Array} Debug request history
-   */
-  getDebugRequestHistory() {
-    if (!this.debug) return [];
-    return [...this.debugRequests];
-  }
-
-  /**
-   * Get debug requests filtered by backend ID with optional limit
-   * @param {string} backendId - Optional backend ID to filter by
-   * @param {number} limit - Optional limit on number of requests to return
-   * @returns {Array} Filtered debug request history
-   */
-  getDebugRequestsFiltered(backendId, limit) {
-    if (!this.debug) return [];
-
-    let filtered = [...this.debugRequests];
-
-    // Filter by backend ID if specified
-    if (backendId) {
-      filtered = filtered.filter(req => req.backendId === backendId);
-    }
-
-    // Apply limit if specified
-    if (limit) {
-      filtered = filtered.slice(0, limit);
-    }
-
-    return filtered;
-  }
-
-  /**
-   * Clear debug request history
-   */
-  clearDebugRequestHistory() {
-    if (!this.debug) return;
-    this.debugRequests = [];
-    console.log(`[${getTimestamp()}] [DEBUG] Request history cleared`);
-  }
-
-  /**
    * Get debug statistics with backend performance metrics
    * @returns {Object} Debug statistics
    */
@@ -539,14 +469,13 @@ class Balancer {
     const backendStats = this.backends.map(b => ({
       url: b.url,
       requestCount: b.requestCount || 0,
-      performanceStats: b.getPerformanceStats()
+      performanceStats: b.getPerformanceStats(),
+      promptCacheStats: b.getPromptCacheStats()
     }));
 
     return {
       enabled: true,
-      totalRequests: this.debugRequests.length,
       queueSize: this.queue.length,
-      requestHistorySize: this.debugRequestHistorySize,
       backendStats: backendStats
     };
   }

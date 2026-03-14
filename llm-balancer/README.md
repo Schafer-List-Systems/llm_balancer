@@ -186,18 +186,18 @@ The `/stats` endpoint provides detailed information:
 
 ## Debug Features
 
-For development and troubleshooting, the load balancer provides debug endpoints:
+For development and troubleshooting, enable debug mode by setting `DEBUG=true` in your `.env` file. The load balancer provides debug endpoints that expose prompt cache statistics instead of request content:
 
 | Route | Description |
 |-------|-------------|
-| `/debug/stats` | Summary statistics about request tracking |
-| `/debug/requests` | Full debug request history |
-| `/debug/requests/recent?n=10` | Most recent N requests (default: 10) |
-| `/debug/requests/backend/:backendId?limit=10` | Requests filtered by specific backend |
+| `/debug/stats` | Summary statistics with performance and prompt cache stats per backend |
 
 Enable debug mode by setting `DEBUG=true` in your `.env` file.
 
-For detailed documentation of debug endpoints, see [DEBUG_REQUESTS.md](DEBUG_REQUESTS.md).
+The debug stats include per-backend metrics:
+- Request counts
+- Performance statistics (timing, tokens, rates)
+- Prompt cache statistics (hits, misses, evictions, size)
 
 ## API Detection
 

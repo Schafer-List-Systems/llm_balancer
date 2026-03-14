@@ -277,10 +277,10 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
 
   if (isStreaming) {
     console.log(`[Gateway] Using handleStreamingRequest (stream: true detected in body)`);
-    handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
+    handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel);
   } else {
     console.log(`[Gateway] Using handleNonStreamingRequest`);
-    handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers);
+    handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel);
   }
 }
 
@@ -465,23 +465,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           res.end();
         }
 
-        const route = req.path || req.originalUrl || '/';
-        balancer.trackDebugRequest(
-          {
-            route,
-            method: req.method,
-            priority: backend.priority || 0,
-            backendId: backend.id,
-            backendUrl: backend.url,
-            streamingStats: {
-              firstChunkTimeMs,
-              totalCompletionTimeMs
-            }
-          },
-          requestBody,
-          { data: data, contentType: proxyRes.headers['content-type'] }
-        );
-
         releaseBackend(balancer, backend);
         onRequestComplete();
 
@@ -521,19 +504,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         } catch (e) {
           console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to parse streaming response for stats:`, e.message);
         }
-
-        const route = req.path || req.originalUrl || '/';
-        balancer.trackDebugRequest(
-          {
-            route,
-            method: req.method,
-            priority: backend.priority || 0,
-            backendId: backend.id,
-            backendUrl: backend.url
-          },
-          requestBody,
-          { data: data, contentType: proxyRes.headers['content-type'] }
-        );
 
         if (!res.headersSent) {
           try {
@@ -643,20 +613,6 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         console.debug(`[${getTimestamp()}] [RequestProcessor] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
       }
 
-      // Track debug request with request/response content
-      const route = req.path || req.originalUrl || '/';
-      balancer.trackDebugRequest(
-        {
-          route,
-          method: req.method,
-          priority: backend.priority || 0,
-          backendId: backend.id,
-          backendUrl: backend.url
-        },
-        requestBody,
-        { data: data, contentType: proxyRes.headers['content-type'], statusCode: proxyRes.statusCode }
-      );
-
       if (!res.headersSent) {
         try {
           const parsed = JSON.parse(data);
@@ -670,7 +626,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
       onRequestComplete();
 
       // Cache the completed request for KV cache reuse
-      if (config.debug && matchedModel) {
+      if (matchedModel) {
         backend.cachePrompt(requestBody, matchedModel);
       }
     });

@@ -114,20 +114,6 @@ app.all('/v1/chat/completions*', async (req, res) => {
       });
     }
 
-    // Track debug request with model information
-    const route = req.path || req.originalUrl || '/';
-    balancer.trackDebugRequest(
-      {
-        route,
-        method: req.method,
-        priority: backend.priority || 0,
-        backendId: backend.id,
-        backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : []),
-        matchedModel: matchedModel
-      }
-    );
-
     forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
@@ -169,20 +155,6 @@ app.all('/v1/messages*', async (req, res) => {
       });
     }
 
-    // Track debug request with model information
-    const route = req.path || req.originalUrl || '/';
-    balancer.trackDebugRequest(
-      {
-        route,
-        method: req.method,
-        priority: backend.priority || 0,
-        backendId: backend.id,
-        backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : []),
-        matchedModel: matchedModel
-      }
-    );
-
     forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
@@ -223,20 +195,6 @@ app.all('/api/*', async (req, res) => {
         queueStats: balancer.getAllQueueStats()
       });
     }
-
-    // Track debug request with model information
-    const route = req.path || req.originalUrl || '/';
-    balancer.trackDebugRequest(
-      {
-        route,
-        method: req.method,
-        priority: backend.priority || 0,
-        backendId: backend.id,
-        backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : []),
-        matchedModel: matchedModel
-      }
-    );
 
     forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
@@ -290,20 +248,6 @@ app.all('/models*', async (req, res) => {
         queueStats: balancer.getAllQueueStats()
       });
     }
-
-    // Track debug request with model information
-    const route = req.path || req.originalUrl || '/';
-    balancer.trackDebugRequest(
-      {
-        route,
-        method: req.method,
-        priority: backend.priority || 0,
-        backendId: backend.id,
-        backendUrl: backend.url,
-        models: Array.isArray(models) ? models : (models ? [models] : []),
-        matchedModel: matchedModel
-      }
-    );
 
     forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
@@ -596,32 +540,36 @@ app.get('/debug/stats', (req, res) => {
 });
 
 /**
- * Route: Debug request history
+ * Route: Debug request history (deprecated - use /debug/stats for prompt cache stats)
  */
 app.get('/debug/requests', (req, res) => {
-  res.json(balancer.getDebugRequestHistory());
-});
-
-/**
- * Route: Get last N requests with content
- * Query parameter: n (number of requests to return, default: 10)
- */
-app.get('/debug/requests/recent', (req, res) => {
-  const n = parseInt(req.query.n) || 10;
-  const history = balancer.getDebugRequestHistory();
-
-  // Return the last N requests
-  const recentRequests = history.slice(0, n);
-
   res.json({
-    count: recentRequests.length,
-    limit: n,
-    requests: recentRequests
+    message: 'Debug request tracking has been replaced with prompt cache statistics. Use /debug/stats to view prompt cache metrics.',
+    endpoints: {
+      debugStats: '/debug/stats',
+      stats: '/stats'
+    }
   });
 });
 
 /**
- * Route: Get debug requests filtered by backend ID
+ * Route: Get last N requests with content (deprecated - use /debug/stats for prompt cache stats)
+ * Query parameter: n (number of requests to return, default: 10)
+ */
+app.get('/debug/requests/recent', (req, res) => {
+  const n = parseInt(req.query.n) || 10;
+  res.json({
+    message: 'Debug request tracking has been replaced with prompt cache statistics. Use /debug/stats to view prompt cache metrics.',
+    endpoints: {
+      debugStats: '/debug/stats',
+      stats: '/stats'
+    },
+    requestedLimit: n
+  });
+});
+
+/**
+ * Route: Get debug requests filtered by backend ID (deprecated - use /debug/stats for prompt cache stats)
  * Query parameters:
  *   - backendId: (optional) Filter by specific backend ID
  *   - limit: (optional) Number of requests to return, default: 10
@@ -629,22 +577,29 @@ app.get('/debug/requests/recent', (req, res) => {
 app.get('/debug/requests/backend/:backendId', (req, res) => {
   const backendId = req.params.backendId;
   const limit = parseInt(req.query.limit) || 10;
-  const history = balancer.getDebugRequestsFiltered(backendId, limit);
-
   res.json({
+    message: 'Debug request tracking has been replaced with prompt cache statistics. Use /debug/stats to view prompt cache metrics.',
+    endpoints: {
+      debugStats: '/debug/stats',
+      stats: '/stats'
+    },
     backendId: backendId,
-    count: history.length,
-    limit: limit,
-    requests: history
+    requestedLimit: limit
   });
 });
 
 /**
- * Route: Clear debug request history
+ * Route: Clear debug request history (deprecated - no action needed)
  */
 app.post('/debug/clear', (req, res) => {
-  balancer.clearDebugRequestHistory();
-  res.json({ success: true, message: 'Debug history cleared' });
+  res.json({
+    success: true,
+    message: 'Debug request tracking has been replaced with prompt cache statistics. No clearing needed.',
+    endpoints: {
+      debugStats: '/debug/stats',
+      stats: '/stats'
+    }
+  });
 });
 
 /**
