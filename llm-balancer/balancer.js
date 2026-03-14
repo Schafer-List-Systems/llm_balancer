@@ -280,9 +280,9 @@ class Balancer {
   }
 
   /**
-   * Process queued requests using criterion-based selection
+   * Process queued requests using criterion-based selection with prompt cache awareness
    * Tries to process ONE request per call (maintaining backward compatibility)
-   * Uses criterion-based matching to find suitable backends
+   * Uses BackendSelector.selectBackendWithCache to prioritize backends with cache hits
    * If the first request has no suitable backend, skips to next eligible request
    */
   processQueueWhenBackendAvailable() {
@@ -304,11 +304,18 @@ class Balancer {
         continue;
       }
 
-      // Try to find a backend matching this request's criterion
-      const backend = this.findBackendForCriterion(request.criterion);
+      // Extract prompt body from request data for cache lookup
+      const promptBody = this._extractPromptBody(request);
+
+      // Use selector with cache awareness
+      const backend = this.selector.selectBackendWithCache(
+        this.backendPool.getAll(),
+        request.criterion,
+        promptBody
+      );
 
       if (backend) {
-        // Backend found - process this request
+        // Backend found (either cache hit or model match)
         if (request.timeout) {
           clearTimeout(request.timeout);
           request.timeout = null;
@@ -326,6 +333,55 @@ class Balancer {
       // Else: skip this request, try next one in queue
     }
     // No suitable request found - queue remains unchanged
+  }
+
+  /**
+   * Extract prompt body from queued request for cache matching
+   * @param {Object} request - Queued request with requestData
+   * @returns {string|null} Prompt body or null
+   */
+  _extractPromptBody(request) {
+    const requestData = request.requestData;
+    if (!requestData || !requestData.req) {
+      return null;
+    }
+
+    const req = requestData.req;
+    let promptBody = null;
+
+    // Handle raw body buffer
+    if (req.is('raw') && Buffer.isBuffer(req.body)) {
+      try {
+        const bodyObj = JSON.parse(req.body.toString('utf8'));
+        // Extract prompt from different API formats
+        if (bodyObj.prompt !== undefined) {
+          promptBody = bodyObj.prompt; // Ollama format
+        } else if (bodyObj.messages !== undefined) {
+          promptBody = JSON.stringify(bodyObj.messages); // OpenAI/Anthropic format
+        } else if (bodyObj.content !== undefined) {
+          promptBody = bodyObj.content; // Some APIs
+        }
+      } catch (e) {
+        console.warn(`[Balancer] Failed to parse request body for cache lookup:`, e.message);
+        return null;
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      const bodyObj = req.body;
+      if (bodyObj.prompt !== undefined) {
+        promptBody = bodyObj.prompt;
+      } else if (bodyObj.messages !== undefined) {
+        promptBody = JSON.stringify(bodyObj.messages);
+      } else if (bodyObj.content !== undefined) {
+        promptBody = bodyObj.content;
+      }
+    }
+
+    // Normalize promptBody to string if it's an array
+    if (Array.isArray(promptBody)) {
+      promptBody = JSON.stringify(promptBody);
+    }
+
+    return promptBody;
   }
 
   /**

@@ -505,4 +505,195 @@ describe('BackendSelector', () => {
       expect(result).not.toBeNull();
     });
   });
+
+  describe('selectBackendWithCache() - Prompt cache-aware selection', () => {
+    const createMockBackendWithCache = (url, healthy, priority, models, cacheMatches = {}) => {
+      const backend = createTestBackendWithPriority(url, 'ollama', models, priority, 2);
+      backend.activeRequestCount = 0; // Start available
+
+      // Add mock cache matching behavior
+      backend.findCacheMatch = (prompt, model) => {
+        if (cacheMatches[prompt] && cacheMatches[prompt].model === model) {
+          return {
+            entry: cacheMatches[prompt],
+            similarity: cacheMatches[prompt].similarity,
+            matchType: 'similarity'
+          };
+        }
+        return null;
+      };
+
+      return backend;
+    };
+
+    beforeEach(() => {
+      selector = new BackendSelector();
+    });
+
+    it('should prioritize backend with cache hit over higher-priority backend without cache', () => {
+      const backends = [
+        createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.95 }
+        }),
+        createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      expect(result.url).toBe('http://low-prio:11434'); // Cache hit wins despite lower priority
+    });
+
+    it('should fall back to regular selection when no cache match exists', () => {
+      const backends = [
+        createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {}),
+        createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      expect(result.url).toBe('http://high-prio:11434'); // Regular selection (highest priority)
+    });
+
+    it('should skip backend with cache hit if backend is at max concurrency', () => {
+      const backends = [
+        (() => {
+          const b = createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {
+            'write a story': { model: 'llama3', similarity: 0.95 }
+          });
+          b.activeRequestCount = 2; // At max concurrency
+          return b;
+        })(),
+        createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      expect(result.url).toBe('http://high-prio:11434'); // Skip cache-hit backend, use high priority
+    });
+
+    it('should return lowest priority cache-matching backend when all have similar cache matches', () => {
+      const backends = [
+        createMockBackendWithCache('http://lowest-prio:11434', true, 1, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.95 }
+        }),
+        createMockBackendWithCache('http://middle-prio:11434', true, 3, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.85 }
+        }),
+        createMockBackendWithCache('http://highest-prio:11434', true, 5, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.90 }
+        })
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      // All have cache hits >= 0.8, so highest priority backend wins
+      expect(result.url).toBe('http://highest-prio:11434');
+    });
+
+    it('should select backend with highest similarity among same-priority backends', () => {
+      const backends = [
+        createMockBackendWithCache('http://backend1:11434', true, 5, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.85 }
+        }),
+        createMockBackendWithCache('http://backend2:11434', true, 5, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.95 }
+        })
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      // Same priority, so index tie-breaker applies (backend1 wins)
+      expect(result.url).toBe('http://backend1:11434');
+    });
+
+    it('should fallback to standard selection when promptBody is null', () => {
+      const backends = [
+        createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {}),
+        createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        null
+      );
+
+      expect(result.url).toBe('http://high-prio:11434'); // Falls back to standard selection
+    });
+
+    it('should fallback to standard selection when modelString is null', () => {
+      const backends = [
+        createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.95 }
+        }),
+        createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        null,
+        'write a story'
+      );
+
+      expect(result.url).toBe('http://high-prio:11434'); // Falls back to standard selection
+    });
+
+    it('should ignore cache matches below 80% similarity threshold', () => {
+      const backends = [
+        createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.75 } // Below threshold
+        }),
+        createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      expect(result.url).toBe('http://high-prio:11434'); // Cache match ignored (below threshold)
+    });
+
+    it('should select by cache hit similarity when backend has capacity but others dont', () => {
+      const backends = [
+        createMockBackendWithCache('http://cache-hit:11434', true, 3, ['llama3'], {
+          'write a story': { model: 'llama3', similarity: 0.95 }
+        }),
+        (() => {
+          const b = createMockBackendWithCache('http://high-prio-full:11434', true, 10, ['llama3'], {});
+          b.activeRequestCount = 2; // At max concurrency
+          return b;
+        })()
+      ];
+
+      const result = selector.selectBackendWithCache(
+        backends,
+        { modelString: 'llama3' },
+        'write a story'
+      );
+
+      expect(result.url).toBe('http://cache-hit:11434'); // High-prio backend is full, use cache hit
+    });
+  });
 });

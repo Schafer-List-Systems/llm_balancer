@@ -296,6 +296,81 @@ function findBackendForCriterion(criterion) {
 
 ---
 
+### Prompt Cache-Aware Backend Selection
+
+When processing queued requests, the system now checks for **prompt cache matches** before falling back to standard model matching. This enables KV cache reuse for similar prompts.
+
+```javascript
+// Cache-aware selection flow
+function selectBackendWithCache(backends, criterion, promptBody) {
+  const modelString = criterion?.modelString
+
+  // Step 1: Check prompt cache on all healthy backends
+  const cacheMatches = []
+
+  for (const backend of backends) {
+    if (!backend.healthy || backend.atMaxCapacity) continue
+
+    const cacheMatch = backend.findCacheMatch(promptBody, modelString)
+    if (cacheMatch && cacheMatch.similarity >= 0.8) {
+      cacheMatches.push({ backend, similarity: cacheMatch.similarity })
+    }
+  }
+
+  // Step 2: If cache matches found, select by priority
+  if (cacheMatches.length > 0) {
+    cacheMatches.sort((a, b) => b.priority - a.priority)
+    return cacheMatches[0].backend  // Highest priority cache hit
+  }
+
+  // Step 3: No cache match - fallback to standard selection
+  return selectBackend(backends, { models: [modelString] })
+}
+```
+
+**Selection Priority:**
+1. **Cache Hit (Priority)**: If a backend has a cached prompt with ≥80% similarity, it is selected first
+2. **Model Matching**: If no cache hit, fall back to model-based selection
+3. **Priority Sorting**: Among cache hits, highest priority backend wins
+
+**Example Scenario:**
+```
+Queue: [Request with prompt "Write a story about..."]
+Backend1: Priority=10, has cached prompt (similarity=95%), available
+Backend2: Priority=20, no cache match, available
+
+Result: Backend1 is selected despite lower priority, because it has a cache hit!
+```
+
+**Why This Matters:**
+- KV cache reuse can significantly reduce generation time
+- Backends with cached prompts can serve similar requests faster
+- Cache hit prioritization maximizes the benefit of cached prompts
+
+```mermaid
+flowchart TD
+    subgraph CacheAwareSelection ["Cache-Aware Selection Flow"]
+        Start[Request queued] --> ExtractPrompt[Extract prompt body]
+        ExtractPrompt --> CheckCache{Check cache on<br/>all backends}
+
+        CheckCache -->|Cache hit found| FindCacheMatch[Find backend with<br/>similarity ≥80%]
+        FindCacheMatch --> HasCapacity{Backend<br/>has capacity?}
+        HasCapacity -->|Yes| SelectCache[Select cache-matching<br/>backend by priority]
+        HasCapacity -->|No| TryNext[Try next request]
+
+        CheckCache -->|No cache hit| Fallback[Standard model<br/>matching]
+        Fallback --> SelectModel[Select by model match]
+        SelectModel --> HasCapacity2{Backend<br/>has capacity?}
+        HasCapacity2 -->|Yes| SelectModel2[Select model-matching<br/>backend by priority]
+        HasCapacity2 -->|No| TryNext2[Try next request]
+    end
+
+    SelectCache --> Process[Process request with<br/>KV cache benefit]
+    SelectModel2 --> Process
+```
+
+---
+
 ### Backend Selection Algorithm
 
 The backend selection follows these steps:
@@ -550,6 +625,7 @@ classDiagram
 
     class BackendSelector {
         +selectBackend(backends, options)  // Returns single Backend
+        +selectBackendWithCache(backends, criterion, promptBody)  // Cache-aware selection
         +getAvailableBackends(backends)  // Returns sorted array
         +hasAvailableBackend(backends, models)
         +getModelAvailabilityStats(backends)

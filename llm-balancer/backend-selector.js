@@ -192,6 +192,72 @@ class BackendSelector {
   }
 
   /**
+   * Select backend with prompt cache consideration
+   * First tries to find a backend with a prompt cache match, then falls back
+   * to standard criterion-based selection
+   * @param {Array} backends - Array of backend objects
+   * @param {Object} criterion - Selection criterion with modelString and apiType
+   * @param {string} promptBody - Request body/prompt for cache matching
+   * @returns {Object|null} Selected backend or null
+   */
+  selectBackendWithCache(backends, criterion, promptBody) {
+    // Extract model from criterion
+    const modelString = criterion?.modelString;
+    if (!promptBody || !modelString) {
+      // No cache data, fallback to standard selection
+      return this.selectBackend(backends, { models: modelString ? [modelString] : [] });
+    }
+
+    // Step 1: Check prompt cache on all healthy backends with capacity
+    const cacheMatches = [];
+
+    for (const backend of backends) {
+      // Only consider healthy backends with capacity
+      if (!backend.healthy || backend.activeRequestCount >= backend.maxConcurrency) {
+        continue;
+      }
+
+      // Check for prompt cache match
+      if (!backend.findCacheMatch) {
+        continue; // Backend doesn't support cache lookup
+      }
+
+      const cacheMatch = backend.findCacheMatch(promptBody, modelString);
+      if (cacheMatch && cacheMatch.similarity >= 0.8) {
+        cacheMatches.push({
+          backend,
+          similarity: cacheMatch.similarity,
+          matchType: cacheMatch.matchType
+        });
+      }
+    }
+
+    // Step 2: If cache matches found, select by priority
+    if (cacheMatches.length > 0) {
+      console.debug(`[BackendSelector] ${cacheMatches.length} backends with prompt cache hits`);
+
+      // Sort cache matches by backend priority (highest first)
+      cacheMatches.sort((a, b) => {
+        const priorityA = a.backend.priority || 0;
+        const priorityB = b.backend.priority || 0;
+        if (priorityB !== priorityA) return priorityB - priorityA;
+
+        // Tie-breaker: maintain original order
+        const backendsArray = Array.isArray(backends) ? backends : [];
+        return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
+      });
+
+      // Return highest priority backend with cache match
+      const selected = cacheMatches[0];
+      console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)})`);
+      return selected.backend;
+    }
+
+    // Step 3: No cache match - fallback to standard criterion-based selection
+    return this.selectBackend(backends, { models: modelString ? [modelString] : [] });
+  }
+
+  /**
    * Get statistics about model availability across backends
    * @param {Array} backends - Array of backend objects
    * @returns {Object} Statistics object
