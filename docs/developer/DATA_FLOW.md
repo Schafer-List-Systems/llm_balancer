@@ -233,6 +233,69 @@ sequenceDiagram
     RequestProcessor-->>Client: Final response
 ```
 
+### Queue Processing with Selection Criteria
+
+When requests are queued, each request is assigned a **selection criterion** object that captures what backends can serve it:
+
+```javascript
+{
+  modelString: 'llama3',     // The matched model
+  apiType: 'openai'          // The primary API type
+}
+```
+
+The criterion is created when the request arrives and stored with the queued request.
+
+When a backend becomes available, `processQueueWhenBackendAvailable()` iterates through the queue:
+1. Checks each request's criterion
+2. Uses `findBackendForCriterion()` to find a matching backend
+3. **Skips requests** where no backend matches the criterion
+4. **Processes requests** where a suitable backend exists
+
+This allows requests to be processed out of FIFO order when earlier requests have no suitable backends.
+
+**Example Scenario:**
+```
+Queue: [Request ModelA, Request ModelB]
+Backend1: Has ModelA, busy
+Backend2: Has ModelB, available
+
+Result: Request ModelB is processed on Backend2
+        Request ModelA remains queued until Backend1 is free
+```
+
+---
+
+### Criterion-Based Backend Selection
+
+The `findBackendForCriterion()` method uses BackendPool filtering:
+
+```javascript
+// Criterion-based selection flow
+function findBackendForCriterion(criterion) {
+  // Step 1: Get healthy backends
+  let candidates = backendPool.filter({ healthy: true }).getAll()
+
+  // Step 2: Filter by API type if specified
+  if (criterion.apiType) {
+    candidates = candidates.filter(b => b.supportsApi(criterion.apiType))
+  }
+
+  // Step 3: Match models using regex
+  if (criterion.modelString) {
+    const result = ModelMatcher.findBestMatchAcrossBackends(
+      criterion.modelString, candidates
+    )
+    return result.backend || null
+  }
+
+  // Step 4: Fallback to priority selection
+  return selectBackend(candidates)
+}
+```
+
+---
+
 ### Backend Selection Algorithm
 
 The backend selection follows these steps:
@@ -257,6 +320,8 @@ function selectBackend(backends, options = {}) {
   return selectByPriority(candidates)
 }
 ```
+
+---
 
 ### BackendPool Filter Interface
 
