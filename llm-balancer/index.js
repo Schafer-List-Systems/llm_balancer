@@ -101,7 +101,17 @@ app.all('/v1/chat/completions*', async (req, res) => {
     matchedModel = result.actualModel;
 
     if (!backend) {
-      const queuedPromise = balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
+      // Create selection criterion for queued request
+      // This captures what backends can serve this request
+      const criterion = {
+        modelString: matchedModel,
+        apiType: config.primaryApiType || 'openai'
+      };
+
+      const queuedPromise = balancer.queueRequestWithRequestData({
+        req, res, config, matchedModel,
+        criterion  // NEW: include selection criterion
+      });
       backend = await queuedPromise;
     }
 
@@ -142,7 +152,17 @@ app.all('/v1/messages*', async (req, res) => {
     matchedModel = result.actualModel;
 
     if (!backend) {
-      const queuedRequest = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
+      // Create selection criterion for queued request
+      // This captures what backends can serve this request
+      const criterion = {
+        modelString: matchedModel,
+        apiType: config.primaryApiType || 'anthropic'
+      };
+
+      const queuedRequest = await balancer.queueRequestWithRequestData({
+        req, res, config, matchedModel,
+        criterion  // NEW: include selection criterion
+      });
       backend = queuedRequest;
     }
 
@@ -183,7 +203,17 @@ app.all('/api/*', async (req, res) => {
     matchedModel = result.actualModel;
 
     if (!backend) {
-      const queuedRequest = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
+      // Create selection criterion for queued request
+      // This captures what backends can serve this request
+      const criterion = {
+        modelString: matchedModel,
+        apiType: config.primaryApiType || 'ollama'
+      };
+
+      const queuedRequest = await balancer.queueRequestWithRequestData({
+        req, res, config, matchedModel,
+        criterion  // NEW: include selection criterion
+      });
       backend = queuedRequest;
     }
 

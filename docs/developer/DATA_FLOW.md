@@ -36,11 +36,12 @@ flowchart TB
 
         subgraph Core["Core Components"]
             Balancer["Balancer<br/>(FIFO Queuing)"]
-            BackendSelector["BackendSelector"]
+            BackendSelector["BackendSelector<br/>(Selection Logic)"]
+            BackendPool["BackendPool<br/>(Data Ownership)"]
         end
     end
 
-    subgraph Backends["Backend Pool"]
+    subgraph Backends["Backend Collection"]
         Backend1["Backend 1<br/>(Priority 1)"]
         Backend2["Backend 2<br/>(Priority 2)"]
         Backend3["Backend 3<br/>(Priority 3)"]
@@ -74,11 +75,33 @@ flowchart TB
 
     style Balancer fill:#e1f5fe
     style BackendSelector fill:#e1f5fe
+    style BackendPool fill:#e8f5e9
     style HealthChecker fill:#fff3e0
     style BackendInfo fill:#fff3e0
     style Backend1 fill:#f3e5f5
     style Backend2 fill:#f3e5f5
     style Backend3 fill:#f3e5f5
+```
+
+### BackendPool vs BackendSelector Distinction
+
+| Aspect | BackendPool | BackendSelector |
+|--------|-------------|-----------------|
+| **Responsibility** | Owns the backend collection (source of truth) | Selects the best backend from a list |
+| **Returns** | New `BackendPool` instance (filtered collection) | Single `Backend` object (or null) |
+| **State** | Stateful (`this._backends`) | Stateless (takes backends as parameter) |
+| **Interface** | `filter(criteria)` - unified criteria object | `selectBackend(backends, options)` |
+| **Pattern** | Collection pattern (filtered views) | Strategy pattern (selection algorithms) |
+
+**Example Usage:**
+```javascript
+// BackendPool owns and filters backends
+const pool = new BackendPool(backends);
+const filteredPool = pool.filter({ healthy: true, models: ['llama3'] });
+
+// BackendSelector picks best backend from filtered list
+const candidates = filteredPool.getAll();
+const bestBackend = selector.selectBackend(candidates, { models: ['llama3'] });
 ```
 
 ---
@@ -92,6 +115,7 @@ sequenceDiagram
     participant BackendInfo as BackendInfo
     participant Backend as Backend
     participant HealthChecker as HealthChecker
+    participant BackendPool as BackendPool
 
     Note over Main,Config: Phase 1: Configuration Loading
     Main->>Config: loadConfig()
@@ -119,7 +143,11 @@ sequenceDiagram
     Main->>Backend: Assign API-specific health checker
     Backend->>Backend: backend.healthChecker = <API-specific checker>
 
-    Note over Main,HealthChecker: Phase 5: Start Health Checking
+    Note over Main,BackendPool: Phase 5: Pool Initialization
+    Main->>BackendPool: new BackendPool(backends)
+    BackendPool-->>Main: pool with all backends
+
+    Note over Main,HealthChecker: Phase 6: Start Health Checking
     Main->>HealthChecker: healthChecker.start()
     HealthChecker->>HealthChecker: checkAll() (immediate)
     HealthChecker->>HealthChecker: Interval-based checks
@@ -142,16 +170,20 @@ sequenceDiagram
     participant Routes
     participant Balancer
     participant BackendSelector
+    participant BackendPool
     participant Backend
     participant RequestProcessor
-    participant BackendPool
+    participant RequestQueue
 
     Client->>Routes: HTTP POST /v1/chat/completions
     Routes->>Balancer: extractModelsFromRequest()
 
-    Note over Balancer: Backend Selection
+    Note over Balancer,BackendPool: Backend Selection
 
-    Balancer->>BackendSelector: getNextBackendForModelWithMatch(models)
+    Balancer->>BackendPool: getAll()
+    BackendPool-->>Balancer: all backends
+
+    Balancer->>BackendSelector: selectBackend(backends, {models})
     BackendSelector->>BackendSelector: _filterByHealthAndAvailability()
     BackendSelector->>BackendSelector: ModelMatcher.findBestMatchAcrossBackends()
     BackendSelector-->>Balancer: backend + matchedModel
@@ -159,7 +191,7 @@ sequenceDiagram
     alt Backend Available Immediately
         Balancer-->>Routes: backend (direct assignment)
     else No Backend Available
-        Balancer->>Balancer: queueRequestWithRequestData()
+        Balancer->>RequestQueue: queueRequestWithRequestData()
         Balancer-->>Routes: backend (after queue processing)
     end
 
@@ -176,15 +208,13 @@ sequenceDiagram
     Note over RequestProcessor: - Remove hop-by-hop headers
 
     alt isStreaming == true
-        RequestProcessor->>RequestProcessor: handleStreamingRequest()
-        RequestProcessor->>BackendPool: http.request()
-        BackendPool-->>RequestProcessor: stream response chunks
+        RequestProcessor->>Backend: http.request()
+        Backend-->>RequestProcessor: stream response chunks
         RequestProcessor->>RequestProcessor: Parse streaming stats
         RequestProcessor->>RequestProcessor: extractTokenCounts from chunks
     else isStreaming == false
-        RequestProcessor->>RequestProcessor: handleNonStreamingRequest()
-        RequestProcessor->>BackendPool: http.request()
-        BackendPool-->>RequestProcessor: full response
+        RequestProcessor->>Backend: http.request()
+        Backend-->>RequestProcessor: full response
         RequestProcessor->>RequestProcessor: extractTokenCounts from response
     end
 
@@ -228,6 +258,32 @@ function selectBackend(backends, options = {}) {
 }
 ```
 
+### BackendPool Filter Interface
+
+BackendPool provides a unified filter interface:
+
+```javascript
+// Filter criteria object
+{
+  healthy: boolean,           // true = only healthy, false = only unhealthy
+  available: boolean,         // true = has capacity, false = at max
+  models: string[],           // Filter backends supporting these models
+  custom: function(backend)   // Custom filter function
+}
+
+// Usage examples
+const healthyPool = pool.filter({ healthy: true });
+const availablePool = pool.filter({ available: true });
+const modelPool = pool.filter({ models: ['llama3', 'qwen'] });
+const combinedPool = pool.filter({ healthy: true, available: true });
+
+// Chaining (immutable pattern)
+const result = pool
+  .filter({ healthy: true })
+  .filter({ available: true })
+  .filter({ models: ['llama3'] });
+```
+
 ---
 
 ## Queue Processing Flow
@@ -235,7 +291,8 @@ function selectBackend(backends, options = {}) {
 ```mermaid
 sequenceDiagram
     participant Balancer
-    participant Queue
+    participant BackendPool
+    participant RequestQueue
     participant Backend1
     participant Backend2
     participant Backend3
@@ -243,14 +300,16 @@ sequenceDiagram
     Note over Balancer: Initial State
 
     alt No Queue
+        Balancer->>BackendPool: getAll()
+        BackendPool-->>Balancer: all backends
         Balancer->>BackendSelector: Select backend
         BackendSelector-->>Balancer: Return backend
     else Queue Not Empty
-        Balancer->>Queue: Push request
-        Queue->>Queue: Add to end of queue
+        Balancer->>RequestQueue: Push request
+        RequestQueue->>RequestQueue: Add to end of queue
     end
 
-    Note over Queue: Queue: [req1, req2, req3]
+    Note over RequestQueue: Queue: [req1, req2, req3]
 
     Balancer->>Backend1: Process request
     Backend1->>Backend1: activeRequestCount++
@@ -261,7 +320,7 @@ sequenceDiagram
         Backend2-->>Balancer: No available
         Balancer->>Backend3: Try next backend
         Backend3-->>Balancer: No available
-        Balancer->>Queue: Queue request
+        Balancer->>RequestQueue: Queue request
     else Backend available
         Backend1-->>Balancer: Completed
         Backend1->>Balancer: releaseBackend()
@@ -269,9 +328,9 @@ sequenceDiagram
     end
 
     Balancer->>Balancer: notifyBackendAvailable()
-    Balancer->>Queue: Check queue head
+    Balancer->>RequestQueue: Check queue head
 
-    Queue-->>Balancer: Return req2
+    RequestQueue-->>Balancer: Return req2
 
     alt Queue has requests
         Balancer->>Backend1: Process next request
@@ -282,7 +341,7 @@ sequenceDiagram
     end
 
     Note over Backend1,Backend3: Maintain FIFO order
-    Note over Queue: Only one global queue
+    Note over RequestQueue: Only one global queue
 ```
 
 ---
@@ -344,7 +403,8 @@ graph TB
 
     subgraph BalancerCore["Balancer Core"]
         Balancer["Balancer"]
-        BackendSelector["BackendSelector"]
+        BackendSelector["BackendSelector<br/>(Selection)"]
+        BackendPool["BackendPool<br/>(Data Ownership)"]
         ModelMatcher["ModelMatcher"]
     end
 
@@ -372,7 +432,10 @@ graph TB
     Balancer --> BackendSelector
     BackendSelector --> ModelMatcher
 
-    BackendSelector --> Backend
+    Balancer --> BackendPool
+    BackendPool --> Backend : contains (multiple)
+    BackendSelector --> BackendPool : operates on
+
     Backend --> BackendInfo
     Backend --> APIHealthCheckers
 
@@ -391,6 +454,7 @@ graph TB
     style Balancer fill:#e1f5fe
     style Backend fill:#f3e5f5
     style BackendSelector fill:#e1f5fe
+    style BackendPool fill:#e8f5e9
     style RequestProcessor fill:#fff3e0
     style HealthCheckerMain fill:#fff3e0
     style APIHealthCheckers fill:#f1f8e9
@@ -404,6 +468,38 @@ graph TB
 
 ```mermaid
 classDiagram
+    class BackendPool {
+        +Array _backends  // Private, source of truth
+        +filter(criteria)  // Returns new BackendPool
+        +healthy()  // Convenience filter
+        +available()  // Convenience filter
+        +byModel(models)  // Convenience filter
+        +healthyAndAvailable()  // Combined filter
+        +getAll()  // Returns all backends
+        +some(criteria)  // Check if any match
+        +getStats()  // Pool statistics
+        +add(backend)  // Add backend
+        +remove(url)  // Remove backend
+        +getByUrl(url)  // Find backend
+    }
+
+    class BackendSelector {
+        +selectBackend(backends, options)  // Returns single Backend
+        +getAvailableBackends(backends)  // Returns sorted array
+        +hasAvailableBackend(backends, models)
+        +getModelAvailabilityStats(backends)
+        +_filterByHealthAndAvailability(backends)
+        +_sortCandidates(candidates)
+        +_selectByPriority(candidates)
+    }
+
+    class ModelMatcher {
+        +matches(requested, available)
+        +findMatches(requested, available)
+        +parseModelString(modelString)
+        +findBestMatchAcrossBackends(models, backends)
+    }
+
     class Backend {
         +string url
         +int priority
@@ -428,14 +524,23 @@ classDiagram
     class PromptCache {
         +int maxSize
         +float similarityThreshold
-        +Entry[] entries  // LRU list
-        +Map idMap
+        +Entry[] entries  // LRU list, front = MRU
+        +Map idMap  // ID -> entry mapping
         +Stats stats
-        +fingerprint()
-        +cosineSimilarity()
-        +findBestMatch()
-        +addOrUpdate()
+        +fingerprint(text)
+        +cosineSimilarity(fp1, fp2)
+        +findBestMatch(prompt, model, id)
+        +addOrUpdate(prompt, model, id)
         +getStats()
+    }
+
+    class PromptCacheEntry {
+        +string prompt
+        +string model
+        +int[] fingerprint  // 64-element hash array
+        +date lastAccessed
+        +string id  // Optional backend response ID
+        +int hitCount
     }
 
     class BackendInfo {
@@ -460,30 +565,16 @@ classDiagram
     }
 
     class Balancer {
-        +Backend[] backends
+        +BackendPool backendPool  // Owns backends
+        +BackendSelector selector  // Selection strategy
         +int maxQueueSize
         +int queueTimeout
         +Request[] queue
-        +BackendSelector selector
         +queueRequest()
         +getNextBackend()
         +processQueueWhenBackendAvailable()
         +getStats()
-    }
-
-    class BackendSelector {
-        +selectBackend()
-        +getAvailableBackends()
-        +_filterByHealthAndAvailability()
-        +_sortCandidates()
-        +_selectByPriority()
-    }
-
-    class ModelMatcher {
-        +matches()
-        +findMatches()
-        +parseModelString()
-        +findBestMatchAcrossBackends()
+        +hasHealthyBackends()
     }
 
     class RequestProcessor {
@@ -495,11 +586,15 @@ classDiagram
         +extractTokenCounts()
     }
 
+    BackendPool --> Backend : contains (multiple)
+    BackendPool --> BackendPool : filter() returns new
+    BackendSelector --> BackendPool : operates on getAll()
+    Balancer --> BackendPool : owns
+    Balancer --> BackendSelector : uses
+
     Backend --> BackendInfo : composition
     Backend --> HealthChecker : delegation
-    Balancer --> Backend : contains
-    Balancer --> BackendSelector : uses
-    BackendSelector --> ModelMatcher : uses
+    Backend --> PromptCache : owns
     Backend --> RequestProcessor : delegates to
     RequestProcessor --> Backend : updates stats
 ```
@@ -517,10 +612,10 @@ timeline
         2ms : Route handler extracts models
     section Backend Selection
         3ms : Balancer calls BackendSelector
-        4ms : Filter by health/availability
-        5ms : Model matching (regex search)
-        6ms : Sort by priority
-        7ms : Return backend
+        4ms : BackendSelector filters by health/availability
+        5ms : ModelMatcher regex matching
+        6ms : BackendSelector sorts by priority
+        7ms : Return selected backend
     section Request Processing
         8ms : RequestProcessor increments counters
         9ms : Prepare proxy headers
@@ -548,8 +643,10 @@ timeline
 2. **Composition over Duplication**: `BackendInfo` (capability detection results) is composed into `Backend` rather than duplicated
 3. **Priority-First Model Matching**: When multiple backends match a model pattern, the highest priority healthy backend wins
 4. **Single Global Queue**: All queued requests use one FIFO queue, processed when any backend becomes available
+5. **Collection Pattern**: `BackendPool` owns data and provides filtered views
+6. **Strategy Pattern**: `BackendSelector` encapsulates selection algorithms independently of data ownership
 
-`─────────────────────────────────────────────────────`
+**─────────────────────────────────────────────────────**
 
 ---
 

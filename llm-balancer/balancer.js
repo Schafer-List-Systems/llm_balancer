@@ -115,7 +115,7 @@ class Balancer {
   /**
    * Queue a request with request data attached
    * This is used when requests need to be queued and the request data needs to be preserved
-   * @param {Object} requestData - Object containing req, res, config, matchedModel
+   * @param {Object} requestData - Object containing req, res, config, matchedModel, and criterion
    * @returns {Promise} Promise that resolves when a backend is available
    */
   async queueRequestWithRequestData(requestData) {
@@ -147,6 +147,9 @@ class Balancer {
             return;
         }
 
+        // Extract and validate the selection criterion
+        const criterion = requestData.criterion || this._createCriterionFromRequestData(requestData);
+
         const request = {
             resolve,
             reject,
@@ -154,12 +157,36 @@ class Balancer {
             timeout: setTimeout(() => {
                 reject(new Error('Request timeout'));
             }, this.queueTimeout),
-            requestData: requestData
+            requestData: requestData,
+            criterion: criterion
         };
 
         queue.push(request);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
     });
+  }
+
+  /**
+   * Create a selection criterion from request data
+   * A criterion captures what backends can serve this request
+   * @param {Object} requestData - Object containing req, config, matchedModel
+   * @returns {Object} Selection criterion with modelString and apiType
+   */
+  _createCriterionFromRequestData(requestData) {
+    const { config, matchedModel } = requestData;
+
+    // If criterion already exists, return it
+    if (requestData.criterion) {
+      return requestData.criterion;
+    }
+
+    // Extract API type from config (primary API type for the route)
+    const apiType = config && config.primaryApiType ? config.primaryApiType : null;
+
+    return {
+      modelString: matchedModel || null,
+      apiType: apiType
+    };
   }
 
   /**
@@ -219,8 +246,44 @@ class Balancer {
   }
 
   /**
-   * Process queued requests - tries to forward as many as possible
-   * @param {Object} request - The queued request object (must contain body with prompt/model/id)
+   * Find a backend that matches the selection criterion
+   * Uses BackendPool filtering and model matching to find suitable backends
+   * @param {Object} criterion - Selection criterion with modelString and apiType
+   * @returns {Object|null} Backend that matches the criterion or null
+   */
+  findBackendForCriterion(criterion) {
+    if (!criterion) {
+      return this.getNextBackend();
+    }
+
+    const backends = this.backendPool.getAll();
+
+    // Start with healthy backends only
+    let candidates = this.backendPool.filter({ healthy: true }).getAll();
+
+    // Filter by API type if specified
+    if (criterion.apiType) {
+      candidates = candidates.filter(b => b.supportsApi && b.supportsApi(criterion.apiType));
+    }
+
+    // Filter by model matching if modelString is specified
+    if (criterion.modelString) {
+      const result = ModelMatcher.findBestMatchAcrossBackends(
+        criterion.modelString,
+        candidates
+      );
+      return result.backend || null;
+    }
+
+    // Fallback to priority-based selection
+    return this.selector.selectBackend(candidates);
+  }
+
+  /**
+   * Process queued requests using criterion-based selection
+   * Tries to process ONE request per call (maintaining backward compatibility)
+   * Uses criterion-based matching to find suitable backends
+   * If the first request has no suitable backend, skips to next eligible request
    */
   processQueueWhenBackendAvailable() {
     const queue = this.queue;
@@ -229,33 +292,40 @@ class Balancer {
       return;
     }
 
-    const request = queue[0];
+    // Try to process ONE request
+    for (let i = 0; i < queue.length; i++) {
+      const request = queue[i];
 
-    // Skip timed-out requests
-    if (request.timedOut) {
-      queue.splice(0, 1);
-      this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
-      return;
-    }
-
-    // Try to get a backend for this request
-    const backend = this.getNextBackend();
-
-    if (backend) {
-      // Backend found - forward this request
-      if (request.timeout) {
-        clearTimeout(request.timeout);
-        request.timeout = null;
+      // Skip timed-out requests
+      if (request.timedOut) {
+        queue.splice(i, 1);
+        this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+        // Try next request
+        continue;
       }
 
-      // Remove from queue and resolve
-      queue.splice(0, 1);
-      this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+      // Try to find a backend matching this request's criterion
+      const backend = this.findBackendForCriterion(request.criterion);
 
-      // Trigger the actual request processing
-      // Note: requestData may be null for simple queueRequest() calls
-      this.triggerRequestProcessing(request, backend, null);
+      if (backend) {
+        // Backend found - process this request
+        if (request.timeout) {
+          clearTimeout(request.timeout);
+          request.timeout = null;
+        }
+
+        // Remove from queue and resolve
+        queue.splice(i, 1);
+        this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+
+        // Trigger the actual request processing
+        this.triggerRequestProcessing(request, backend, null);
+        // Done - only process one request per call
+        return;
+      }
+      // Else: skip this request, try next one in queue
     }
+    // No suitable request found - queue remains unchanged
   }
 
   /**
