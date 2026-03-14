@@ -498,8 +498,8 @@ graph TB
     BackendSelector --> ModelMatcher
 
     Balancer --> BackendPool
-    BackendPool --> Backend : contains (multiple)
-    BackendSelector --> BackendPool : operates on
+    BackendPool --> Backend
+    BackendSelector --> BackendPool
 
     Backend --> BackendInfo
     Backend --> APIHealthCheckers
@@ -651,11 +651,11 @@ classDiagram
         +extractTokenCounts()
     }
 
-    BackendPool --> Backend : contains (multiple)
-    BackendPool --> BackendPool : filter() returns new
-    BackendSelector --> BackendPool : operates on getAll()
-    Balancer --> BackendPool : owns
-    Balancer --> BackendSelector : uses
+    BackendPool --> Backend
+    BackendPool --> BackendPool
+    BackendSelector --> BackendPool
+    Balancer --> BackendPool
+    Balancer --> BackendSelector
 
     Backend --> BackendInfo : composition
     Backend --> HealthChecker : delegation
