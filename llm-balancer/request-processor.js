@@ -288,7 +288,7 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
  * Handle streaming response request
  * @private
  */
-function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers) {
+function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
   const targetUrl = new URL(req.url, backend.url);
   const options = {
     hostname: targetUrl.hostname,
@@ -558,7 +558,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
  * Handle non-streaming response request
  * @private
  */
-function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers) {
+function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
   console.debug(`[Gateway] handleNonStreamingRequest to ${backend.url}`);
   const targetUrl = new URL(req.url, backend.url);
   const options = {
