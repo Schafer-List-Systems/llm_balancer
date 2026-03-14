@@ -407,6 +407,7 @@ class Backend {
       console.warn(`[Backend] ${this.url}: Prompt cache not initialized, skipping cachePrompt`);
       return;
     }
+    console.debug(`[Backend] ${this.url}: Caching prompt for model: ${model}, id: ${id || 'none'}`);
     this.promptCache.addOrUpdate(prompt, model, id);
   }
 
@@ -424,7 +425,14 @@ class Backend {
     if (!this.promptCache) {
       return null;
     }
-    return this.promptCache.findBestMatch(prompt, model, id);
+    console.debug(`[Backend] ${this.url}: Looking for cache match - model: ${model}, id: ${id || 'none'}`);
+    const result = this.promptCache.findBestMatch(prompt, model, id);
+    if (result) {
+      console.debug(`[Backend] ${this.url}: Cache hit found - similarity: ${result.similarity.toFixed(4)}, type: ${result.matchType}`);
+    } else {
+      console.debug(`[Backend] ${this.url}: No cache match found`);
+    }
+    return result;
   }
 
   /**
@@ -436,13 +444,8 @@ class Backend {
       return null;
     }
     const stats = this.promptCache.getStats();
-    // Add cached prompt text for debugging
-    stats.cachedPrompts = this.promptCache.entries.map(entry => ({
-      model: entry.model,
-      prompt: entry.prompt.substring(0, 500) + (entry.prompt.length > 500 ? '...' : ''),
-      lastAccessed: entry.lastAccessed,
-      hitCount: entry.hitCount
-    }));
+    // Add cached prompt with metadata for debugging
+    stats.cachedPrompts = this.promptCache.entries.map(entry => entry.getDebugData());
     return stats;
   }
 }

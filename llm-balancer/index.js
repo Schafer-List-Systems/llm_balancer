@@ -86,36 +86,32 @@ function forwardRequest(req, res, backend, matchedModel = null) {
 
 /**
  * Route: OpenAI-compatible API routes (with queuing support)
+ * Queue-first architecture: all requests go through the queue for cache-aware selection
  */
 app.all('/v1/chat/completions*', async (req, res) => {
   try {
-    // Extract model from request body for backend selection
+    // Extract model from request body for backend selection and caching
     const models = extractModelsFromRequest(req);
+    // extractModelsFromRequest returns either a string or array of strings
+    const requestModel = Array.isArray(models) ? models[0] : models || null;
 
-    let backend;
-    let matchedModel = null;
+    // Create selection criterion for queued request
+    // This captures what backends can serve this request
+    // Model matching (regex resolution) happens later in BackendSelector.selectBackendWithCache()
+    // when the backend is actually selected - not when the request arrives
+    const criterion = {
+      modelString: requestModel,
+      apiType: config.primaryApiType || 'openai'
+    };
 
-    // Get backend using normal selection with model matching
-    const result = balancer.getNextBackendForModelWithMatch(models);
-    backend = result.backend;
-    matchedModel = result.actualModel;
+    // Queue-first architecture: all requests go through the queue
+    // This ensures cache-aware selection via selectBackendWithCache()
+    const result = await balancer.queueRequestWithRequestData({
+      req, res, config, criterion,
+      requestModel // Pass original model for potential use
+    });
 
-    if (!backend) {
-      // Create selection criterion for queued request
-      // This captures what backends can serve this request
-      const criterion = {
-        modelString: matchedModel,
-        apiType: config.primaryApiType || 'openai'
-      };
-
-      const queuedPromise = balancer.queueRequestWithRequestData({
-        req, res, config, matchedModel,
-        criterion  // NEW: include selection criterion
-      });
-      backend = await queuedPromise;
-    }
-
-    if (!backend) {
+    if (!result) {
       return res.status(503).json({
         error: 'Service Unavailable',
         message: 'No backends configured or all backends unhealthy',
@@ -124,7 +120,10 @@ app.all('/v1/chat/completions*', async (req, res) => {
       });
     }
 
-    forwardRequest(req, res, backend, matchedModel);
+    // result is the backend instance (backward compatible)
+    const backend = result;
+
+    forwardRequest(req, res, backend, requestModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -137,34 +136,30 @@ app.all('/v1/chat/completions*', async (req, res) => {
 
 /**
  * Route: Anthropic API routes (with queuing support)
+ * Queue-first architecture: all requests go through the queue for cache-aware selection
  */
 app.all('/v1/messages*', async (req, res) => {
   try {
-    // Extract model from request body for backend selection
+    // Extract model from request body for backend selection and caching
     const models = extractModelsFromRequest(req);
+    // extractModelsFromRequest returns either a string or array of strings
+    const requestModel = Array.isArray(models) ? models[0] : models || null;
 
-    let backend;
-    let matchedModel = null;
+    let matchedModel = requestModel;
 
-    // Get backend using normal selection with model matching
-    const result = balancer.getNextBackendForModelWithMatch(models);
-    backend = result.backend;
-    matchedModel = result.actualModel;
+    // Create selection criterion for queued request
+    // This captures what backends can serve this request
+    const criterion = {
+      modelString: matchedModel,
+      apiType: config.primaryApiType || 'anthropic'
+    };
 
-    if (!backend) {
-      // Create selection criterion for queued request
-      // This captures what backends can serve this request
-      const criterion = {
-        modelString: matchedModel,
-        apiType: config.primaryApiType || 'anthropic'
-      };
-
-      const queuedRequest = await balancer.queueRequestWithRequestData({
-        req, res, config, matchedModel,
-        criterion  // NEW: include selection criterion
-      });
-      backend = queuedRequest;
-    }
+    // Queue-first architecture: all requests go through the queue
+    // This ensures cache-aware selection via selectBackendWithCache()
+    const backend = await balancer.queueRequestWithRequestData({
+      req, res, config, matchedModel,
+      criterion
+    });
 
     if (!backend) {
       return res.status(503).json({

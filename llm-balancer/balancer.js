@@ -64,30 +64,15 @@ class Balancer {
 
   /**
    * Queue a request for processing when a backend becomes available
-   * If there's no backlog (queue empty), get an immediate backend
-   * Otherwise, maintain FIFO by queuing the request
+   * All requests are enqueued first - queue processing handles all backend selection uniformly
+   * This ensures every request goes through cache-aware selection via BackendSelector
    * @returns {Promise} Promise that resolves when a backend is available
    */
   async queueRequest() {
-    console.log(`[${getTimestamp()}] [Balancer] queueRequest() called, queue length: ${this.queue.length}, backends at max concurrency: ${this.backendPool.getAll().filter(b => b.activeRequestCount >= b.maxConcurrency).length}`);
-
     // Check if any healthy backends exist before queuing
     if (!this.hasHealthyBackends()) {
         console.log(`[${getTimestamp()}] [Balancer] No healthy backends available`);
         return Promise.reject(new Error('No healthy backends available'));
-    }
-
-    // If queue is empty, try to get immediate backend
-    if (this.queue.length === 0) {
-        console.log(`[${getTimestamp()}] [Balancer] Queue empty, trying to get immediate backend`);
-        const backend = this.getNextBackend();
-        if (backend) {
-            console.log(`[${getTimestamp()}] [Balancer] Direct assignment to backend ${backend.url}`);
-            return Promise.resolve(backend);
-        } else {
-            console.log(`[${getTimestamp()}] [Balancer] No available backend found, queuing request`);
-            // Fall through to queueing logic below
-        }
     }
 
     return new Promise((resolve, reject) => {
@@ -109,6 +94,9 @@ class Balancer {
 
         queue.push(request);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
+
+        // Try to process queue immediately - this ensures requests are processed as soon as backends are available
+        this.processQueueWhenBackendAvailable();
     });
   }
 
@@ -125,20 +113,8 @@ class Balancer {
         throw new Error('No healthy backends available');
     }
 
-    // If queue is empty, try to get immediate backend
-    if (this.queue.length === 0) {
-        const backend = this.getNextBackend();
-        if (backend) {
-            // Store requestData in the backend for later use
-            backend.pendingRequestData = requestData;
-            console.log(`[${getTimestamp()}] [Balancer] Direct assignment to backend ${backend.url}`);
-            return Promise.resolve(backend);
-        } else {
-            console.log(`[${getTimestamp()}] [Balancer] No available backend found, queuing request`);
-            // Fall through to queueing logic
-        }
-    }
-
+    // Always enqueue first - queue processing handles all backend selection uniformly
+    // This ensures every request goes through cache-aware selection
     return new Promise((resolve, reject) => {
         const queue = this.queue;
 
@@ -163,6 +139,9 @@ class Balancer {
 
         queue.push(request);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
+
+        // Try to process queue immediately - this ensures requests are processed as soon as backends are available
+        this.processQueueWhenBackendAvailable();
     });
   }
 
@@ -308,11 +287,14 @@ class Balancer {
       const promptBody = this._extractPromptBody(request);
 
       // Use selector with cache awareness
-      const backend = this.selector.selectBackendWithCache(
+      const selectionResult = this.selector.selectBackendWithCache(
         this.backendPool.getAll(),
         request.criterion,
         promptBody
       );
+
+      // selectionResult is { backend, actualModel }
+      const backend = selectionResult?.backend;
 
       if (backend) {
         // Backend found (either cache hit or model match)
@@ -419,7 +401,7 @@ class Balancer {
       return;
     }
 
-    const { req, res, config, matchedModel } = requestData;
+    const { req, res, config, requestModel, matchedModel } = requestData;
 
     // Call the request processor directly
     try {
@@ -428,10 +410,12 @@ class Balancer {
       // Note: activeRequestCount is incremented in processRequest, not here
       // This ensures the count is only incremented once per request
 
+      // Use requestModel if available (from index.js), otherwise matchedModel for legacy compatibility
+      const modelForProcessing = requestModel || matchedModel;
       processRequest(this, backend, req, res, () => {
         // Request completed callback
         // Backend will decrement activeRequestCount and notify queue
-      }, config, matchedModel);
+      }, config, modelForProcessing);
     } catch (error) {
       console.error(`[${this._getTimestamp()}] [Balancer] Failed to process request:`, error);
       // Release backend if it was already assigned (activeRequestCount was incremented)

@@ -198,14 +198,15 @@ class BackendSelector {
    * @param {Array} backends - Array of backend objects
    * @param {Object} criterion - Selection criterion with modelString and apiType
    * @param {string} promptBody - Request body/prompt for cache matching
-   * @returns {Object|null} Selected backend or null
+   * @returns {{ backend: Object|null, actualModel: string|null }} Selected backend and matched model or null
    */
   selectBackendWithCache(backends, criterion, promptBody) {
     // Extract model from criterion
     const modelString = criterion?.modelString;
     if (!promptBody || !modelString) {
       // No cache data, fallback to standard selection
-      return this.selectBackend(backends, { models: modelString ? [modelString] : [] });
+      const backend = this.selectBackend(backends, { models: modelString ? [modelString] : [] });
+      return { backend, actualModel: modelString || null };
     }
 
     // Step 1: Check prompt cache on all healthy backends with capacity
@@ -250,11 +251,20 @@ class BackendSelector {
       // Return highest priority backend with cache match
       const selected = cacheMatches[0];
       console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)})`);
-      return selected.backend;
+      return { backend: selected.backend, actualModel: modelString };
     }
 
-    // Step 3: No cache match - fallback to standard criterion-based selection
-    return this.selectBackend(backends, { models: modelString ? [modelString] : [] });
+    // Step 3: No cache match - fallback to standard criterion-based selection with regex matching
+    // This is where actual model name resolution happens
+    const candidates = this._filterByHealthAndAvailability(backends);
+
+    // Use _selectBackendByPriorityFirst which properly sorts by priority among matches
+    const result = this._selectBackendByPriorityFirst(candidates, modelString);
+
+    return {
+      backend: result,
+      actualModel: modelString || null
+    };
   }
 
   /**

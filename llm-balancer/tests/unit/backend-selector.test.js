@@ -544,7 +544,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.url).toBe('http://low-prio:11434'); // Cache hit wins despite lower priority
+      expect(result.backend.url).toBe('http://low-prio:11434'); // Cache hit wins despite lower priority
     });
 
     it('should fall back to regular selection when no cache match exists', () => {
@@ -559,7 +559,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.url).toBe('http://high-prio:11434'); // Regular selection (highest priority)
+      expect(result.backend.url).toBe('http://high-prio:11434'); // Regular selection (highest priority)
     });
 
     it('should skip backend with cache hit if backend is at max concurrency', () => {
@@ -580,7 +580,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.url).toBe('http://high-prio:11434'); // Skip cache-hit backend, use high priority
+      expect(result.backend.url).toBe('http://high-prio:11434'); // Skip cache-hit backend, use high priority
     });
 
     it('should return lowest priority cache-matching backend when all have similar cache matches', () => {
@@ -603,7 +603,7 @@ describe('BackendSelector', () => {
       );
 
       // All have cache hits >= 0.8, so highest priority backend wins
-      expect(result.url).toBe('http://highest-prio:11434');
+      expect(result.backend.url).toBe('http://highest-prio:11434');
     });
 
     it('should select backend with highest similarity among same-priority backends', () => {
@@ -623,7 +623,7 @@ describe('BackendSelector', () => {
       );
 
       // Same priority, so index tie-breaker applies (backend1 wins)
-      expect(result.url).toBe('http://backend1:11434');
+      expect(result.backend.url).toBe('http://backend1:11434');
     });
 
     it('should fallback to standard selection when promptBody is null', () => {
@@ -638,7 +638,7 @@ describe('BackendSelector', () => {
         null
       );
 
-      expect(result.url).toBe('http://high-prio:11434'); // Falls back to standard selection
+      expect(result.backend.url).toBe('http://high-prio:11434'); // Falls back to standard selection
     });
 
     it('should fallback to standard selection when modelString is null', () => {
@@ -655,7 +655,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.url).toBe('http://high-prio:11434'); // Falls back to standard selection
+      expect(result.backend.url).toBe('http://high-prio:11434'); // Falls back to standard selection
     });
 
     it('should ignore cache matches below 80% similarity threshold', () => {
@@ -672,7 +672,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.url).toBe('http://high-prio:11434'); // Cache match ignored (below threshold)
+      expect(result.backend.url).toBe('http://high-prio:11434'); // Cache match ignored (below threshold)
     });
 
     it('should select by cache hit similarity when backend has capacity but others dont', () => {
@@ -693,7 +693,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.url).toBe('http://cache-hit:11434'); // High-prio backend is full, use cache hit
+      expect(result.backend.url).toBe('http://cache-hit:11434'); // High-prio backend is full, use cache hit
     });
   });
 });

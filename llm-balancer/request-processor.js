@@ -622,8 +622,35 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
       onRequestComplete();
 
       // Cache the completed request for KV cache reuse
+      // Extract prompt body (messages only) for better cache hit detection
+      let cacheBody = requestBody;
+      if (typeof requestBody === 'string') {
+        try {
+          const bodyObj = JSON.parse(requestBody);
+          // Extract messages array for consistent cache key
+          if (bodyObj.messages) {
+            cacheBody = JSON.stringify(bodyObj.messages);
+          } else if (bodyObj.prompt) {
+            cacheBody = bodyObj.prompt;
+          }
+        } catch (e) {
+          // Keep original requestBody if parsing fails
+        }
+      } else if (typeof requestBody === 'object') {
+        // Extract messages array for consistent cache key
+        if (requestBody.messages) {
+          cacheBody = JSON.stringify(requestBody.messages);
+        } else if (requestBody.prompt) {
+          cacheBody = requestBody.prompt;
+        }
+      }
+
+      console.debug(`[${getTimestamp()}] [RequestProcessor] Checking cache - matchedModel: ${matchedModel}, cacheBody length: ${cacheBody ? cacheBody.length : 0}`);
       if (matchedModel) {
-        backend.cachePrompt(requestBody, matchedModel);
+        console.debug(`[${getTimestamp()}] [RequestProcessor] Calling cachePrompt with model: ${matchedModel}, cacheBody: ${cacheBody}`);
+        backend.cachePrompt(cacheBody, matchedModel);
+      } else {
+        console.warn(`[${getTimestamp()}] [RequestProcessor] Skipped caching - matchedModel is null/undefined`);
       }
     });
   });
