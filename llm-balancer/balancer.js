@@ -361,17 +361,17 @@ class Balancer {
       const promptBody = this._extractPromptBody(request);
 
       // Use selector with cache awareness
-      const selectionResult = this.selector.selectBackendWithCache(
+      // Returns: { status: 'found'|'busy'|'none', backend, actualModel, message }
+      const result = this.selector.selectBackendWithCache(
         this.backendPool.getAll(),
         request.criterion,
         promptBody
       );
 
-      // selectionResult is { backend, actualModel }
-      const backend = selectionResult?.backend;
+      const model = request.criterion?.modelString || 'unknown';
 
-      if (backend) {
-        // Backend found (either cache hit or model match)
+      if (result.status === 'found') {
+        // Backend found and available
         if (request.timeout) {
           clearTimeout(request.timeout);
           request.timeout = null;
@@ -383,9 +383,8 @@ class Balancer {
 
         // Debug: Log successful backend selection
         if (this.debug) {
-          const model = request.criterion?.modelString || 'unknown';
           console.log(`\n[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================`);
-          console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] BACKEND SELECTED: ${backend.url}`);
+          console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] BACKEND SELECTED: ${result.backend.url}`);
           console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Model: ${model}`);
           if (request.requestData && request.requestData.req) {
             const preview = this._getRequestContentPreview(request.requestData, request.internalRequestId);
@@ -398,14 +397,34 @@ class Balancer {
         }
 
         // Trigger the actual request processing
-        this.triggerRequestProcessing(request, backend, null);
+        this.triggerRequestProcessing(request, result.backend, null);
         // Done - only process one request per call
         return;
       }
-      // Else: skip this request, try next one in queue
-      // Always log with internal ID (even without debug mode) for request tracking
-      const model = request.criterion?.modelString || 'unknown';
-      console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] No suitable backend found for request. Model: ${model}. Criterion:`, request.criterion);
+
+      if (result.status === 'none') {
+        // No backend supports this model - reject immediately
+        console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ${result.message || 'No backend supports this model'}. Rejecting request.`);
+
+        // Clear timeout and remove from queue
+        if (request.timeout) {
+          clearTimeout(request.timeout);
+          request.timeout = null;
+        }
+        queue.splice(i, 1);
+        this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+
+        // Reject the request
+        if (request.reject) {
+          request.reject(new Error(result.message || `No backend available for model "${model}".`));
+        }
+        // Continue to next request (don't return - try to process other queued requests)
+        continue;
+      }
+
+      // status === 'busy' - backend exists for this model but all are currently busy
+      // Request should stay in queue
+      console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ${result.message || 'No backend currently available'}. Request stays in queue.`);
     }
     // No suitable request found - queue remains unchanged
   }
@@ -500,9 +519,9 @@ class Balancer {
     req.internalRequestId = request.internalRequestId;
 
     // Call the request processor directly
-    try {
-      const { processRequest, releaseBackend } = require('./request-processor');
+    const { processRequest, releaseBackend } = require('./request-processor');
 
+    try {
       // Note: activeRequestCount is incremented in processRequest, not here
       // This ensures the count is only incremented once per request
 

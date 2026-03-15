@@ -177,13 +177,6 @@ function executeProxyRequest(backend, options, config, onData, onEnd, onError) {
 }
 
 /**
- * Helper function to get formatted timestamp
- */
-function getTimestamp() {
-  return new Date().toISOString();
-}
-
-/**
  * Send request body to the proxy request
  * @param {Object} proxyReq - HTTP request object
  * @param {string|Buffer} body - Request body

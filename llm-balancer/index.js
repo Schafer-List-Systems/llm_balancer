@@ -452,6 +452,33 @@ app.get('/queue/stats', (req, res) => {
 });
 
 /**
+ * Route: View queue contents (debug)
+ */
+app.get('/queue/contents', (req, res) => {
+  const queue = balancer.queue;
+  const contents = queue.map((req, index) => ({
+    index,
+    timestamp: req.timestamp,
+    age: Date.now() - req.timestamp,
+    criterion: req.criterion,
+    hasRequestData: !!req.requestData,
+    hasTimeout: !!req.timeout,
+    timedOut: req.timedOut || false,
+    requestData: req.requestData ? {
+      model: req.requestData.req?.body?.model,
+      apiType: req.requestData.req?.body?.messages ? 'chat/completions' : (req.requestData.req?.body?.prompt ? 'ollama' : 'unknown')
+    } : null
+  }));
+
+  res.json({
+    totalQueued: queue.length,
+    maxQueueSize: config.maxQueueSize,
+    queueTimeout: config.queueTimeout,
+    contents
+  });
+});
+
+/**
  * Route: Queue status for a specific priority tier
  */
 app.get('/queue/stats/:priority', (req, res) => {
