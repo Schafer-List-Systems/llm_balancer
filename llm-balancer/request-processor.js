@@ -143,12 +143,13 @@ function executeProxyRequest(backend, options, config, onData, onEnd, onError) {
     timeout: config.requestTimeout
   };
 
-  console.debug(`[Gateway] executeProxyRequest to ${backend.url}: ${options.method} ${options.path}`);
+  const requestId = req.internalRequestId || 'N/A';
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] executeProxyRequest to ${backend.url}: ${options.method} ${options.path}`);
 
   const req = protocol.request(requestOptions, (proxyRes) => {
-    console.debug(`[Gateway] Proxy response from ${backend.url}: ${proxyRes.statusCode}`);
+    console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Proxy response from ${backend.url}: ${proxyRes.statusCode}`);
     req.on('timeout', () => {
-      console.error(`[Gateway] Timeout after 60s for request to ${backend.url}`);
+      console.error(`[${getTimestamp()}] [Gateway][${requestId}] Timeout after 60s for request to ${backend.url}`);
       req.destroy();
     });
     // Remove hop-by-hop headers from response
@@ -173,6 +174,13 @@ function executeProxyRequest(backend, options, config, onData, onEnd, onError) {
   .on('error', (err) => {
     onError(err, backend.url);
   });
+}
+
+/**
+ * Helper function to get formatted timestamp
+ */
+function getTimestamp() {
+  return new Date().toISOString();
 }
 
 /**
@@ -219,10 +227,11 @@ function releaseBackend(balancer, backend) {
  * @param {string} [matchedModel] - Actual model name from regex matching (optional)
  */
 function processRequest(balancer, backend, req, res, onRequestComplete, config, matchedModel = null) {
-  console.debug(`[Gateway] processRequest called for backend ${backend.id} (${backend.url})`);
-  console.debug(`[Gateway] req.is('raw'):`, req?.is?.('raw') ?? 'N/A');
-  console.debug(`[Gateway] req.headers['content-type']:`, req?.headers?.['content-type'] ?? 'N/A');
-  console.debug(`[Gateway] req.body type:`, typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body));
+  const requestId = req.internalRequestId || 'N/A';
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] processRequest called for backend ${backend.id} (${backend.url})`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] req.is('raw'):`, req?.is?.('raw') ?? 'N/A');
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] req.headers['content-type']:`, req?.headers?.['content-type'] ?? 'N/A');
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] req.body type:`, typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body));
 
   // Increment active request count for this backend
   backend.activeRequestCount++;
@@ -246,7 +255,7 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
       const replacedBody = replaceModelInRequestBody(parsedBody, matchedModel);
       originalBody = JSON.stringify(replacedBody);
     } catch (e) {
-      console.warn(`Failed to parse request body for model replacement:`, e.message);
+      console.warn(`[${getTimestamp()}] [Gateway][${requestId}] Failed to parse request body for model replacement:`, e.message);
     }
   } else if (matchedModel && typeof originalBody === 'object' && !Buffer.isBuffer(originalBody)) {
     // Handle object body directly
@@ -276,10 +285,10 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
                       (typeof requestBody === 'string' && requestBody.includes('"stream":true'));
 
   if (isStreaming) {
-    console.log(`[Gateway] Using handleStreamingRequest (stream: true detected in body)`);
+    console.log(`[${getTimestamp()}] [Gateway][${requestId}] Using handleStreamingRequest (stream: true detected in body)`);
     handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel);
   } else {
-    console.log(`[Gateway] Using handleNonStreamingRequest`);
+    console.log(`[${getTimestamp()}] [Gateway][${requestId}] Using handleNonStreamingRequest`);
     handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel);
   }
 }
@@ -289,6 +298,7 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
  * @private
  */
 function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
+  const requestId = req.internalRequestId || 'N/A';
   const targetUrl = new URL(req.url, backend.url);
   const options = {
     hostname: targetUrl.hostname,
@@ -299,14 +309,14 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     timeout: config.requestTimeout
   };
 
-  console.debug(`[Gateway] handleStreamingRequest to ${backend.url}: ${options.method} ${options.path}`);
-  console.debug(`[Gateway] Request headers: ${JSON.stringify(req.headers)}`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] handleStreamingRequest to ${backend.url}: ${options.method} ${options.path}`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Request headers: ${JSON.stringify(req.headers)}`);
 
   const proxyReq = http.request(options);
 
   // Attach all handlers BEFORE the request is sent
   proxyReq.on('error', (err) => {
-    console.error(`[Gateway] Proxy request error to ${backend.url}:`, err.message);
+    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request error to ${backend.url}:`, err.message);
     balancer.markFailed(backend.url);
     // Ensure backend is released on error
     releaseBackend(balancer, backend);
@@ -322,7 +332,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
   });
 
   proxyReq.setTimeout(config.requestTimeout, () => {
-    console.error(`[Gateway] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
+    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
     releaseBackend(balancer, backend);
@@ -362,7 +372,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     // Handle streaming response with token tracking
     // Note: Node.js normalizes headers to lowercase
     const contentType = proxyRes.headers['content-type'] || proxyRes.headers['Content-Type'];
-    console.debug(`[Gateway] Streaming content-type check: ${contentType}`);
+    console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming content-type check: ${contentType}`);
 
     if (contentType?.includes('stream')) {
       let data = '';
@@ -374,7 +384,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         if (firstChunkTimestamp === null) {
           firstChunkTimestamp = Date.now();
           const timeToFirstChunk = firstChunkTimestamp - requestSentTime;
-          console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: firstChunkArrived=${firstChunkTimestamp}, timeToFirstChunk=${timeToFirstChunk}ms, chunkNumber=${chunkCount}`);
+          console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming Timing: firstChunkArrived=${firstChunkTimestamp}, timeToFirstChunk=${timeToFirstChunk}ms, chunkNumber=${chunkCount}`);
         }
         // Accumulate data for token extraction
         data += Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
@@ -392,7 +402,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         const totalCompletionTimeMs = Date.now() - requestSentTime;
         const firstChunkTimeMs = firstChunkTimestamp !== null ? firstChunkTimestamp - requestSentTime : 0;
 
-        console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, firstChunk=${firstChunkTimestamp}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, timeFromFirstChunk=${timeFromFirstChunk}ms, totalTime=${totalTime}ms, chunkCount=${chunkCount}`);
+        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, firstChunk=${firstChunkTimestamp}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, timeFromFirstChunk=${timeFromFirstChunk}ms, totalTime=${totalTime}ms, chunkCount=${chunkCount}`);
 
         // Parse streaming response to extract token counts from final usage object
         // Note: vLLM streaming format doesn't include usage in chunks, only [DONE] at end
@@ -434,7 +444,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
               firstChunkTimeMs,
               totalCompletionTimeMs
             );
-            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated: ${promptTokens ?? 'N/A'} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens ?? 'N/A'} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+            console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming stats updated: ${promptTokens ?? 'N/A'} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens ?? 'N/A'} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
           } else if (chunkCount > 0) {
             // Use chunk counting for completion tokens (vLLM-style backends without usage)
             // Each SSE chunk ≈ 1 completion token (empirically verified)
@@ -444,13 +454,13 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
               firstChunkTimeMs,
               totalCompletionTimeMs
             );
-            console.debug(`[${getTimestamp()}] [RequestProcessor] Streaming stats updated (chunk count): ~${chunkCount} completion tokens in ${firstChunkTimeMs}ms to ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+            console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming stats updated (chunk count): ~${chunkCount} completion tokens in ${firstChunkTimeMs}ms to ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
           } else {
             // No usable data - log for debugging
-            console.warn(`[${getTimestamp()}] [RequestProcessor] No streaming stats to track: chunkCount=${chunkCount}, usageFound=${usageFound}`);
+            console.warn(`[${getTimestamp()}] [Gateway][${requestId}] No streaming stats to track: chunkCount=${chunkCount}, usageFound=${usageFound}`);
           }
         } catch (e) {
-          console.warn(`[${getTimestamp()}] [RequestProcessor] Failed to parse streaming response for stats:`, e.message);
+          console.warn(`[${getTimestamp()}] [Gateway][${requestId}] Failed to parse streaming response for stats:`, e.message);
         }
 
         // The [DONE] message is already included in the chunks from the backend
@@ -525,7 +535,8 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
  * @private
  */
 function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
-  console.debug(`[Gateway] handleNonStreamingRequest to ${backend.url}`);
+  const requestId = req.internalRequestId || 'N/A';
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] handleNonStreamingRequest to ${backend.url}`);
   const targetUrl = new URL(req.url, backend.url);
   const options = {
     hostname: targetUrl.hostname,
@@ -535,13 +546,13 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     headers: headers
   };
 
-  console.debug(`[Gateway] Creating http.request to ${options.hostname}:${options.port}${options.path}`);
-  console.debug(`[Gateway] Proxy request options: ${JSON.stringify(options)}`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Creating http.request to ${options.hostname}:${options.port}${options.path}`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request options: ${JSON.stringify(options)}`);
   const proxyReq = http.request(options);
 
   // Set request timeout
   proxyReq.setTimeout(config.requestTimeout, () => {
-    console.error(`[Gateway] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
+    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
     releaseBackend(balancer, backend);
@@ -556,7 +567,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
 
   // Attach error handler BEFORE the request is sent
   proxyReq.on('error', (err) => {
-    console.error(`[Gateway] Proxy request error to ${backend.url}:`, err.message);
+    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request error to ${backend.url}:`, err.message);
     balancer.markFailed(backend.url);
     // Ensure backend is released on error
     releaseBackend(balancer, backend);
@@ -578,7 +589,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     // Record when headers are received from backend
     const headersReceivedTime = Date.now();
     const timeToFirstHeader = headersReceivedTime - requestSentTime;
-    console.debug(`[${getTimestamp()}] [RequestProcessor] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, timeToFirstHeader=${timeToFirstHeader}ms, statusCode=${proxyRes.statusCode}`);
+    console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, timeToFirstHeader=${timeToFirstHeader}ms, statusCode=${proxyRes.statusCode}`);
 
     // Record start time for performance tracking (when response starts arriving)
     const startTime = Date.now();
@@ -594,7 +605,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
       const timeFromHeaders = fullResponseTime - headersReceivedTime;
       const totalTime = fullResponseTime - requestSentTime;
       const responseTimeMs = fullResponseTime - startTime;
-      console.debug(`[${getTimestamp()}] [RequestProcessor] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, totalTime=${totalTime}ms, responseTimeMs=${responseTimeMs}, dataLength=${data.length}`);
+      console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, totalTime=${totalTime}ms, responseTimeMs=${responseTimeMs}, dataLength=${data.length}`);
       const parsedResponse = JSON.parse(data);
       responseBody = parsedResponse;
       const tokenCounts = extractTokenCounts(responseBody);
@@ -606,7 +617,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
           totalTime,
           timeToFirstHeader  // Prompt processing time (time to first header)
         );
-        console.debug(`[${getTimestamp()}] [RequestProcessor] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
+        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
       }
 
       if (!res.headersSent) {
@@ -645,18 +656,18 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         }
       }
 
-      console.debug(`[${getTimestamp()}] [RequestProcessor] Checking cache - matchedModel: ${matchedModel}, cacheBody length: ${cacheBody ? cacheBody.length : 0}`);
+      console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Checking cache - matchedModel: ${matchedModel}, cacheBody length: ${cacheBody ? cacheBody.length : 0}`);
       if (matchedModel) {
-        console.debug(`[${getTimestamp()}] [RequestProcessor] Calling cachePrompt with model: ${matchedModel}, cacheBody: ${cacheBody}`);
+        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Calling cachePrompt with model: ${matchedModel}, cacheBody: ${cacheBody}`);
         backend.cachePrompt(cacheBody, matchedModel);
       } else {
-        console.warn(`[${getTimestamp()}] [RequestProcessor] Skipped caching - matchedModel is null/undefined`);
+        console.warn(`[${getTimestamp()}] [Gateway][${requestId}] Skipped caching - matchedModel is null/undefined`);
       }
     });
   });
 
-  console.debug(`[Gateway] Request body type: ${typeof requestBody}, isBuffer: ${Buffer.isBuffer(requestBody)}, length: ${requestBody ? (Buffer.isBuffer(requestBody) ? requestBody.length : requestBody.length) : 'null'}`);
-  console.debug(`[Gateway] Sending request body to ${backend.url}`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Request body type: ${typeof requestBody}, isBuffer: ${Buffer.isBuffer(requestBody)}, length: ${requestBody ? (Buffer.isBuffer(requestBody) ? requestBody.length : requestBody.length) : 'null'}`);
+  console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Sending request body to ${backend.url}`);
   sendRequestBody(proxyReq, requestBody);
 }
 

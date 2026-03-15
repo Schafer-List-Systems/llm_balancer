@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
+    environment:
+      - DEBUG=true
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
       interval: 10s

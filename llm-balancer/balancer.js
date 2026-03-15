@@ -28,12 +28,25 @@ class Balancer {
     this.queueTimeout = queueTimeout;
     this.queue = []; // Single global queue
 
+    // Debug request ID counter (internal, separate from user-provided IDs)
+    this._internalRequestIdCounter = 0;
+
     // Debug configuration
     this.debug = debug;
     this.debugRequestHistorySize = debugRequestHistorySize;
 
     // Initialize backend selector for decoupled selection logic
     this.selector = new BackendSelector();
+  }
+
+  /**
+   * Generate a unique internal request ID for tracking/debugging
+   * This is separate from any user-provided IDs in the request body
+   * @returns {string} Unique request ID in format "req-NNNN"
+   */
+  _generateInternalRequestId() {
+    this._internalRequestIdCounter++;
+    return `req-${String(this._internalRequestIdCounter).padStart(4, '0')}`;
   }
 
   /**
@@ -52,6 +65,27 @@ class Balancer {
       oldestRequestAge: queue.length > 0 ? now - queue[0].timestamp : 0,
       isFull: queue.length >= this.maxQueueSize
     };
+  }
+
+  /**
+   * Get queue contents (debug endpoint support)
+   * Returns array of queued requests with their details
+   * @returns {Array} Array of queued request info
+   */
+  getQueueList() {
+    const queue = this.queue;
+    return queue.map((req, index) => ({
+      index,
+      timestamp: req.timestamp,
+      age: Date.now() - req.timestamp,
+      criterion: req.criterion,
+      timedOut: req.timedOut || false,
+      hasRequestData: !!req.requestData,
+      requestData: req.requestData ? {
+        model: req.requestData.req?.body?.model || req.requestData.matchedModel || null,
+        apiType: req.criterion?.apiType || null
+      } : null
+    }));
   }
 
   /**
@@ -87,13 +121,26 @@ class Balancer {
             resolve,
             reject,
             timestamp: Date.now(),
+            // Internal request ID (separate from user-provided IDs)
+            internalRequestId: this._generateInternalRequestId(),
+            timedOut: false,
             timeout: setTimeout(() => {
+                request.timedOut = true;
+                console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Request timeout fired, rejecting promise`);
                 reject(new Error('Request timeout'));
             }, this.queueTimeout)
         };
 
         queue.push(request);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
+
+        // Debug: Log when request is queued (simple queueRequest without requestData)
+        if (this.debug) {
+            console.log(`\n[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================`);
+            console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] NEW REQUEST (no requestData) queued`);
+            console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Queue depth: ${queue.length}`);
+            console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================\n`);
+        }
 
         // Try to process queue immediately - this ensures requests are processed as soon as backends are available
         this.processQueueWhenBackendAvailable();
@@ -130,7 +177,12 @@ class Balancer {
             resolve,
             reject,
             timestamp: Date.now(),
+            // Internal request ID (separate from user-provided IDs)
+            internalRequestId: this._generateInternalRequestId(),
+            timedOut: false,
             timeout: setTimeout(() => {
+                request.timedOut = true;
+                console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Request timeout fired, rejecting promise`);
                 reject(new Error('Request timeout'));
             }, this.queueTimeout),
             requestData: requestData,
@@ -139,6 +191,27 @@ class Balancer {
 
         queue.push(request);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) + 1);
+
+        // Debug: Log when request is queued (with requestData)
+        if (this.debug) {
+            const model = requestData.req?.body?.model || requestData.matchedModel || 'unknown';
+            console.log(`\n[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================`);
+            console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] NEW REQUEST: model="${model}"`);
+            console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Queue depth: ${queue.length}`);
+
+            if (requestData && requestData.req) {
+                const preview = this._getRequestContentPreview(requestData, request.internalRequestId);
+                if (preview.firstPreview) {
+                    console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] First paragraphs:`);
+                    console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ${preview.firstPreview}`);
+                }
+                if (preview.lastPreview) {
+                    console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Last paragraphs:`);
+                    console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ${preview.lastPreview}`);
+                }
+                console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================\n`);
+            }
+        }
 
         // Try to process queue immediately - this ensures requests are processed as soon as backends are available
         this.processQueueWhenBackendAvailable();
@@ -279,6 +352,7 @@ class Balancer {
       if (request.timedOut) {
         queue.splice(i, 1);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+        console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Request timed out, removing from queue`);
         // Try next request
         continue;
       }
@@ -307,12 +381,31 @@ class Balancer {
         queue.splice(i, 1);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
 
+        // Debug: Log successful backend selection
+        if (this.debug) {
+          const model = request.criterion?.modelString || 'unknown';
+          console.log(`\n[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================`);
+          console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] BACKEND SELECTED: ${backend.url}`);
+          console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] Model: ${model}`);
+          if (request.requestData && request.requestData.req) {
+            const preview = this._getRequestContentPreview(request.requestData, request.internalRequestId);
+            if (preview.firstPreview) {
+              console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] First paragraphs:`);
+              console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ${preview.firstPreview}`);
+            }
+          }
+          console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] ====================\n`);
+        }
+
         // Trigger the actual request processing
         this.triggerRequestProcessing(request, backend, null);
         // Done - only process one request per call
         return;
       }
       // Else: skip this request, try next one in queue
+      // Always log with internal ID (even without debug mode) for request tracking
+      const model = request.criterion?.modelString || 'unknown';
+      console.log(`[${getTimestamp()}] [Balancer][${request.internalRequestId}] No suitable backend found for request. Model: ${model}. Criterion:`, request.criterion);
     }
     // No suitable request found - queue remains unchanged
   }
@@ -403,6 +496,9 @@ class Balancer {
 
     const { req, res, config, requestModel, matchedModel } = requestData;
 
+    // Attach internal request ID to the request object for tracking throughout the lifecycle
+    req.internalRequestId = request.internalRequestId;
+
     // Call the request processor directly
     try {
       const { processRequest, releaseBackend } = require('./request-processor');
@@ -433,6 +529,144 @@ class Balancer {
   notifyBackendAvailable() {
     console.log(`[${this._getTimestamp()}] [Balancer] Backend became available, processing queue`);
     this.processQueueWhenBackendAvailable();
+  }
+
+  /**
+   * Extract first N paragraphs from text content
+   * @param {string} text - Text to extract from
+   * @param {number} numParagraphs - Number of paragraphs to extract (default: 2)
+   * @returns {string} Extracted paragraphs joined with separator
+   */
+  _extractFirstParagraphs(text, numParagraphs = 2) {
+    if (!text || typeof text !== 'string') return '';
+
+    // Split on double newlines (paragraph breaks) or long sequences of newlines
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+    if (paragraphs.length === 0) return '';
+
+    const firstN = paragraphs.slice(0, numParagraphs);
+    const snippet = firstN.join('\n\n');
+
+    // Truncate if too long
+    const maxLength = 300;
+    if (snippet.length <= maxLength) return snippet;
+
+    return snippet.substring(0, maxLength).trim() + '...';
+  }
+
+  /**
+   * Extract last N paragraphs from text content
+   * @param {string} text - Text to extract from
+   * @param {number} numParagraphs - Number of paragraphs to extract (default: 2)
+   * @returns {string} Extracted paragraphs joined with separator
+   */
+  _extractLastParagraphs(text, numParagraphs = 2) {
+    if (!text || typeof text !== 'string') return '';
+
+    // Split on double newlines (paragraph breaks) or long sequences of newlines
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+    if (paragraphs.length === 0) return '';
+
+    const lastN = paragraphs.slice(-numParagraphs);
+    return lastN.join('\n\n');
+  }
+
+  /**
+   * Extract text content from a message object
+   * Handles various message formats: simple text, nested content arrays, etc.
+   * @param {any} msg - Message object
+   * @returns {string} Extracted text content
+   */
+  _extractMessageText(msg) {
+    if (!msg) return '';
+
+    // Simple text case
+    if (typeof msg === 'string') {
+      return msg;
+    }
+
+    // Object with content property
+    if (typeof msg === 'object') {
+      // Direct text content
+      if (typeof msg.content === 'string') {
+        return msg.content;
+      }
+
+      // Array of content items (OpenAI multimodal format)
+      if (Array.isArray(msg.content)) {
+        return msg.content
+          .map(item => {
+            if (typeof item === 'object' && item.text) {
+              return item.text;
+            }
+            if (typeof item === 'string') {
+              return item;
+            }
+            return '';
+          })
+          .join(' ');
+      }
+
+      // Nested text property
+      if (msg.text) {
+        return msg.text;
+      }
+
+      // value property (alternative format)
+      if (msg.value) {
+        return msg.value;
+      }
+    }
+
+    // Fallback to JSON string representation (truncated)
+    return JSON.stringify(msg).substring(0, 200);
+  }
+
+  /**
+   * Get a brief preview of request content for debugging
+   * Shows first/last paragraphs with internal request ID
+   * @param {Object} requestData - Request data containing req body
+   * @param {string} internalRequestId - Internal request ID for tracking
+   * @returns {Object} Object with firstPreview and lastPreview strings
+   */
+  _getRequestContentPreview(requestData, internalRequestId) {
+    if (!requestData || !requestData.req || !requestData.req.body) {
+      return { firstPreview: '', lastPreview: '' };
+    }
+
+    const body = requestData.req.body;
+    let content = '';
+
+    // Extract content from various API formats
+    if (body.prompt !== undefined) {
+      content = body.prompt;
+    } else if (body.messages !== undefined) {
+      // For chat APIs, extract text from messages
+      if (Array.isArray(body.messages)) {
+        content = body.messages
+          .map(msg => this._extractMessageText(msg))
+          .join('\n\n');
+      } else if (typeof body.messages === 'object') {
+        // Single message object
+        content = this._extractMessageText(body.messages);
+      }
+    } else if (body.content !== undefined) {
+      content = body.content;
+    } else if (body.input !== undefined) {
+      content = body.input;
+    }
+
+    // Normalize to string
+    if (typeof content !== 'string') {
+      content = JSON.stringify(content).substring(0, 500);
+    }
+
+    return {
+      firstPreview: this._extractFirstParagraphs(content),
+      lastPreview: this._extractLastParagraphs(content)
+    };
   }
 
   /**
