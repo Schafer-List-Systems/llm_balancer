@@ -302,6 +302,24 @@ class PromptCache {
       maxSize: this.maxSize
     };
   }
+
+  /**
+   * Clear all entries from the cache
+   * Resets stats and removes all cached prompts
+   */
+  clear() {
+    console.debug(`[PromptCache] Clearing cache - size:${this.entries.length}`);
+    this.entries = [];
+    this.byId.clear();
+    this.stats = {
+      hits: 0,
+      misses: 0,
+      evictions: 0,
+      idMatches: 0,
+      similarityMatches: 0
+    };
+    console.debug(`[PromptCache] Cache cleared successfully`);
+  }
 }
 
 module.exports = { PromptCache, PromptCacheEntry, fnv1a64 };

@@ -177,6 +177,32 @@ class BackendPool {
   getByUrl(url) {
     return this._backends.find(b => b.url === url) || null;
   }
+
+  /**
+   * Reset prompt caches for all or specific backends in this pool
+   * @param {string|string[]} backendUrls - Optional URL(s) of backend(s) to reset. If null/undefined, resets all.
+   * @returns {Array} Array of results { url, success, message }
+   */
+  resetCaches(backendUrls = null) {
+    const targets = backendUrls
+      ? Array.isArray(backendUrls)
+        ? backendUrls
+        : [backendUrls]
+      : [];
+
+    const filteredTargets = targets.length > 0
+      ? this._backends.filter(b => targets.includes(b.url))
+      : this._backends;
+
+    return filteredTargets.map(backend => {
+      const result = backend.resetPromptCache();
+      return {
+        url: backend.url,
+        success: result.success,
+        message: result.message
+      };
+    });
+  }
 }
 
 module.exports = BackendPool;

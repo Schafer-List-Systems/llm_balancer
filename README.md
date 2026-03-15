@@ -120,6 +120,9 @@ The load balancer will be available at http://localhost:3001 and the dashboard a
 | `/health` | Health check | `GET /health` |
 | `/backends` | Backend statistics | `GET /backends` |
 | `/stats` | Complete system statistics | `GET /stats` |
+| `/queue/stats` | Queue statistics (debug mode) | `GET /queue/stats` |
+| `/queue/contents` | View queued requests (debug mode) | `GET /queue/contents` |
+| `/cache/reset` | Reset prompt caches (debug mode) | `POST /cache/reset` |
 | `/` | Service info | `GET /` |
 
 ## Example Usage
@@ -155,6 +158,26 @@ curl http://localhost:3001/health
 
 ```bash
 curl http://localhost:3001/backends
+```
+
+### Reset Prompt Caches (Debug Mode)
+
+```bash
+# Reset all backend caches
+curl -X POST http://localhost:3001/cache/reset
+
+# Reset specific backend cache
+curl -X POST "http://localhost:3001/cache/reset?backend=http://localhost:11434"
+```
+
+### View Queue Contents (Debug Mode)
+
+```bash
+# View all queued requests
+curl http://localhost:3001/queue/contents
+
+# View queue statistics
+curl http://localhost:3001/queue/stats
 ```
 
 ## Environment Variables

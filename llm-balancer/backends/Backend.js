@@ -448,6 +448,20 @@ class Backend {
     stats.cachedPrompts = this.promptCache.entries.map(entry => entry.getDebugData());
     return stats;
   }
+
+  /**
+   * Reset the prompt cache for this backend
+   * Clears all cached prompts and resets cache statistics
+   */
+  resetPromptCache() {
+    if (!this.promptCache) {
+      console.warn(`[Backend] ${this.url}: Prompt cache not initialized`);
+      return { success: false, message: 'Cache not initialized' };
+    }
+    this.promptCache.clear();
+    console.info(`[Backend] ${this.url}: Prompt cache reset completed`);
+    return { success: true, message: 'Cache reset successfully' };
+  }
 }
 
 module.exports = Backend;

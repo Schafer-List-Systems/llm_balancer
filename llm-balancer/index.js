@@ -42,6 +42,10 @@ const backends = config.backends.map(backendConfig => {
   return new Backend(backendConfig.url, backendConfig.maxConcurrency);
 });
 
+// Initialize BackendPool for unified backend management
+const BackendPool = require('./backend-pool');
+const backendPool = new BackendPool(backends);
+
 // Initialize load balancer and health checker with Backend instances
 const balancer = new Balancer(backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
 const healthChecker = new HealthChecker(backends, config);
@@ -441,76 +445,117 @@ app.get('/backends', (req, res) => {
 });
 
 /**
- * Route: Queue statistics
+ * Debug endpoints - only available when debug mode is enabled (config.debug === true)
  */
-app.get('/queue/stats', (req, res) => {
-  res.json({
-    maxQueueSize: config.maxQueueSize,
-    queueTimeout: config.queueTimeout,
-    queues: balancer.getAllQueueStats()
-  });
-});
-
-/**
- * Route: View queue contents (debug)
- */
-app.get('/queue/contents', (req, res) => {
-  const queue = balancer.queue;
-  const contents = queue.map((req, index) => ({
-    index,
-    timestamp: req.timestamp,
-    age: Date.now() - req.timestamp,
-    criterion: req.criterion,
-    hasRequestData: !!req.requestData,
-    hasTimeout: !!req.timeout,
-    timedOut: req.timedOut || false,
-    requestData: req.requestData ? {
-      model: req.requestData.req?.body?.model,
-      apiType: req.requestData.req?.body?.messages ? 'chat/completions' : (req.requestData.req?.body?.prompt ? 'ollama' : 'unknown')
-    } : null
-  }));
-
-  res.json({
-    totalQueued: queue.length,
-    maxQueueSize: config.maxQueueSize,
-    queueTimeout: config.queueTimeout,
-    contents
-  });
-});
-
-/**
- * Route: Queue status for a specific priority tier
- */
-app.get('/queue/stats/:priority', (req, res) => {
-  const priority = parseInt(req.params.priority) || 0;
-  const queueStats = balancer.getQueueStats(priority);
-
-  if (!queueStats) {
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `No queue found for priority ${priority}`
+if (config.debug) {
+  /**
+   * Route: Queue statistics
+   */
+  app.get('/queue/stats', (req, res) => {
+    res.json({
+      maxQueueSize: config.maxQueueSize,
+      queueTimeout: config.queueTimeout,
+      queues: balancer.getAllQueueStats()
     });
-  }
+  });
 
-  res.json(queueStats);
-});
+  /**
+   * Route: View queue contents
+   */
+  app.get('/queue/contents', (req, res) => {
+    const queue = balancer.queue;
+    const contents = queue.map((req, index) => ({
+      index,
+      timestamp: req.timestamp,
+      age: Date.now() - req.timestamp,
+      criterion: req.criterion,
+      hasRequestData: !!req.requestData,
+      hasTimeout: !!req.timeout,
+      timedOut: req.timedOut || false,
+      requestData: req.requestData ? {
+        model: req.requestData.req?.body?.model,
+        apiType: req.requestData.req?.body?.messages ? 'chat/completions' : (req.requestData.req?.body?.prompt ? 'ollama' : 'unknown')
+      } : null
+    }));
 
-/**
- * Route: Queue list for a specific priority tier
- */
-app.get('/queue/list/:priority', (req, res) => {
-  const priority = parseInt(req.params.priority) || 0;
-  const queueInfo = balancer.getQueueList(priority);
-
-  if (!queueInfo) {
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `No queue found for priority ${priority}`
+    res.json({
+      totalQueued: queue.length,
+      maxQueueSize: config.maxQueueSize,
+      queueTimeout: config.queueTimeout,
+      contents
     });
-  }
+  });
 
-  res.json(queueInfo);
-});
+  /**
+   * Route: Queue status for a specific priority tier
+   */
+  app.get('/queue/stats/:priority', (req, res) => {
+    const priority = parseInt(req.params.priority) || 0;
+    const queueStats = balancer.getQueueStats(priority);
+
+    if (!queueStats) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `No queue found for priority ${priority}`
+      });
+    }
+
+    res.json(queueStats);
+  });
+
+  /**
+   * Route: Queue list for a specific priority tier
+   */
+  app.get('/queue/list/:priority', (req, res) => {
+    const priority = parseInt(req.params.priority) || 0;
+    const queueInfo = balancer.getQueueList(priority);
+
+    if (!queueInfo) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: `No queue found for priority ${priority}`
+      });
+    }
+
+    res.json(queueInfo);
+  });
+
+  /**
+   * Route: Reset prompt caches
+   * POST /cache/reset - Reset all backend caches
+   * POST /cache/reset?backend=<url> - Reset specific backend cache
+   */
+  app.post('/cache/reset', (req, res) => {
+    const { backend } = req.query;
+
+    if (backend) {
+      // Reset specific backend cache
+      const targetBackend = backends.find(b => b.url === backend);
+      if (!targetBackend) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: `Backend not found: ${backend}`
+        });
+      }
+
+      const result = targetBackend.resetPromptCache();
+      res.json({
+        success: result.success,
+        message: result.message,
+        backend: backend,
+        cacheStats: targetBackend.getPromptCacheStats()
+      });
+    } else {
+      // Reset all backend caches via BackendPool
+      const results = backendPool.resetCaches();
+      res.json({
+        success: results.every(r => r.success),
+        message: `Reset ${results.filter(r => r.success).length}/${results.length} backend caches`,
+        results
+      });
+    }
+  });
+}
 
 /**
  * Route: Model availability statistics
