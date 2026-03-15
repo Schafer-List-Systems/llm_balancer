@@ -183,6 +183,78 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
         </section>
+
+        <!-- ==============================================
+             BENCHMARKS SECTION
+             ============================================== -->
+        <section class="backends-section">
+          <div class="section-header">
+            <h2 class="section-title">Benchmarks <span class="section-subtitle">(Performance testing for backends)</span></h2>
+            <button id="toggleBenchmarks" class="toggle-button">Show Benchmarks</button>
+          </div>
+          <div id="benchmarkSection" class="benchmark-section" style="display: none;">
+            <!-- Single Backend Benchmarks -->
+            <div id="singleBackendBenchmarks" class="benchmark-panel">
+              <h3 class="benchmark-panel-title">Single Backend Benchmarks</h3>
+              <p class="benchmark-panel-description">Run performance tests on individual backends</p>
+
+              <div id="benchmarkBackendsGrid" class="benchmark-backends-grid">
+                <!-- Benchmark cards will be rendered here -->
+              </div>
+            </div>
+
+            <!-- Multi-Backend Benchmarks -->
+            <div id="multiBackendBenchmarks" class="benchmark-panel">
+              <h3 class="benchmark-panel-title">Multi-Backend Benchmarks</h3>
+              <p class="benchmark-panel-description">Run benchmarks that test the balancer's coordination across backends</p>
+
+              <div class="benchmark-controls">
+                <div class="benchmark-option-group">
+                  <label class="benchmark-option-label">Number of Prompts</label>
+                  <input type="number" id="benchmarkNumPrompts" class="benchmark-option-input" value="4" min="1" max="16" />
+                </div>
+
+                <div class="benchmark-option-group">
+                  <label class="benchmark-option-label">Tokens per Prompt</label>
+                  <input type="number" id="benchmarkTokens" class="benchmark-option-input" value="5000" min="100" max="50000" />
+                </div>
+
+                <div class="benchmark-option-group">
+                  <label class="benchmark-option-label">Model</label>
+                  <input type="text" id="benchmarkModel" class="benchmark-option-input" value="qwen/qwen3.5-35b-a3b" />
+                </div>
+
+                <button id="runPrefixMatchBenchmark" class="button button-primary">
+                  Run Prefix Matching Benchmark
+                </button>
+              </div>
+
+              <div id="multiBenchmarkProgress" class="benchmark-progress" style="display: none;">
+                <div class="benchmark-progress-bar">
+                  <div class="benchmark-progress-fill" id="benchmarkProgressFill"></div>
+                </div>
+                <span id="benchmarkProgressText" class="benchmark-progress-text">Running benchmark...</span>
+              </div>
+            </div>
+
+            <!-- Benchmark Results -->
+            <div id="benchmarkResults" class="benchmark-panel">
+              <div class="benchmark-panel-header">
+                <h3 class="benchmark-panel-title">Benchmark Results</h3>
+                <button id="refreshBenchmarkResults" class="button button-secondary button-small">
+                  Refresh Results
+                </button>
+                <button id="clearBenchmarkResults" class="button button-secondary button-small">
+                  Clear All
+                </button>
+              </div>
+
+              <div id="benchmarkResultsList" class="benchmark-results-list">
+                <p class="benchmark-empty">No benchmark results yet. Run a benchmark to see results here.</p>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer class="footer">
@@ -1263,6 +1335,80 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    // ============================================================
+    // BENCHMARK SECTION INITIALIZATION
+    // ============================================================
+
+    // Toggle benchmark section
+    const toggleBenchmarksButton = document.getElementById('toggleBenchmarks');
+    if (toggleBenchmarksButton) {
+      toggleBenchmarksButton.addEventListener('click', () => {
+        const benchmarkSection = document.getElementById('benchmarkSection');
+        if (benchmarkSection.style.display === 'none') {
+          benchmarkSection.style.display = 'block';
+          toggleBenchmarksButton.textContent = 'Hide Benchmarks';
+          toggleBenchmarksButton.classList.add('active');
+          renderBenchmarkBackends();
+        } else {
+          benchmarkSection.style.display = 'none';
+          toggleBenchmarksButton.textContent = 'Show Benchmarks';
+          toggleBenchmarksButton.classList.remove('active');
+        }
+      });
+    }
+
+    // Refresh benchmark results button
+    const refreshBenchmarkResultsBtn = document.getElementById('refreshBenchmarkResults');
+    if (refreshBenchmarkResultsBtn) {
+      refreshBenchmarkResultsBtn.addEventListener('click', () => {
+        loadBenchmarkResults();
+      });
+    }
+
+    // Clear benchmark results button
+    const clearBenchmarkResultsBtn = document.getElementById('clearBenchmarkResults');
+    if (clearBenchmarkResultsBtn) {
+      clearBenchmarkResultsBtn.addEventListener('click', () => {
+        if (confirm('Clear all benchmark results?')) {
+          // Clear all results by deleting each one
+          apiClient.listBenchmarkResults().then(result => {
+            if (result.success && result.data?.results) {
+              result.data.results.forEach(r => {
+                apiClient.deleteBenchmarkResult(r.jobId).catch(() => {});
+              });
+            }
+            loadBenchmarkResults();
+          });
+        }
+      });
+    }
+
+    // Run prefix match benchmark button
+    const runPrefixMatchBtn = document.getElementById('runPrefixMatchBenchmark');
+    if (runPrefixMatchBtn) {
+      runPrefixMatchBtn.addEventListener('click', () => {
+        runPrefixMatchBenchmark();
+      });
+    }
+
+    // Start polling for benchmark results (when section is visible)
+    setInterval(() => {
+      const section = document.getElementById('benchmarkSection');
+      if (section && section.style.display !== 'none') {
+        // Check for completed benchmark jobs
+        apiClient.listBenchmarkResults().then(result => {
+          if (result.success && result.data?.results) {
+            const container = document.getElementById('benchmarkResultsList');
+            if (container && container.querySelector('.benchmark-empty')) {
+              if (result.data.results.length > 0) {
+                loadBenchmarkResults();
+              }
+            }
+          }
+        });
+      }
+    }, 2000);
+
     // Start polling
 
     // Initial data fetch
@@ -1303,6 +1449,377 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       showNotification('Failed to load dashboard data', 'error');
     }
+  }
+
+  // ============================================================
+  // BENCHMARK FUNCTIONS
+  // ============================================================
+
+  /**
+   * Render benchmark backend cards
+   */
+  function renderBenchmarkBackends() {
+    const container = document.getElementById('benchmarkBackendsGrid');
+    if (!container) return;
+
+    // Get backend data from cache
+    const data = apiClient.getData();
+    if (!data?.backends?.backends) {
+      container.innerHTML = '<p class="benchmark-empty">No backend data available</p>';
+      return;
+    }
+
+    const backends = data.backends.backends;
+
+    if (backends.length === 0) {
+      container.innerHTML = '<p class="benchmark-empty">No backends configured</p>';
+      return;
+    }
+
+    // Build benchmark cards
+    container.innerHTML = backends.map(backend => `
+      <div class="benchmark-card" data-backend-url="${encodeURIComponent(backend.url)}">
+        <div class="benchmark-card-header">
+          <div class="benchmark-card-title">
+            <span class="benchmark-backend-name">${formatUrl(backend.url)}</span>
+            <span class="benchmark-backend-status ${backend.healthy ? 'healthy' : 'unhealthy'}">
+              ${backend.healthy ? 'Healthy' : 'Unhealthy'}
+            </span>
+          </div>
+        </div>
+
+        <div class="benchmark-card-controls">
+          <div class="benchmark-type-select">
+            <select class="benchmark-type-dropdown" data-backend-url="${encodeURIComponent(backend.url)}">
+              <option value="">Select benchmark type...</option>
+              <option value="speed">Speed Test</option>
+              <option value="streaming">Streaming Test</option>
+            </select>
+          </div>
+
+          <button class="benchmark-run-btn button button-secondary button-small" data-backend-url="${encodeURIComponent(backend.url)}" disabled>
+            Run Benchmark
+          </button>
+        </div>
+
+        <div class="benchmark-card-status" data-backend-url="${encodeURIComponent(backend.url)}">
+          <span class="benchmark-status-text">Ready</span>
+        </div>
+      </div>
+    `).join('');
+
+    // Add event listeners for benchmark run buttons
+    container.querySelectorAll('.benchmark-run-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const backendUrl = decodeURIComponent(btn.dataset.backendUrl);
+        const card = container.querySelector(`[data-backend-url="${encodeURIComponent(backendUrl)}"]`);
+        const select = card ? card.querySelector('select') : null;
+
+        if (!select) {
+          showNotification('Unable to find benchmark select control', 'error');
+          return;
+        }
+
+        const type = select.value;
+
+        if (!type) {
+          showNotification('Please select a benchmark type', 'error');
+          return;
+        }
+
+        runSingleBackendBenchmark(backendUrl, type);
+      });
+    });
+
+    // Update button state when dropdown changes
+    container.querySelectorAll('select').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const backendUrl = decodeURIComponent(e.target.dataset.backendUrl);
+        const btn = container.querySelector(`[data-backend-url="${encodeURIComponent(backendUrl)}"] .benchmark-run-btn`);
+        if (btn) {
+          btn.disabled = !e.target.value;
+        }
+      });
+    });
+  }
+
+  /**
+   * Run a single-backend benchmark (speed or streaming)
+   */
+  async function runSingleBackendBenchmark(backendUrl, type) {
+    const container = document.getElementById('benchmarkBackendsGrid');
+    const card = container ? container.querySelector(`[data-backend-url="${encodeURIComponent(backendUrl)}"]`) : null;
+
+    if (!card) {
+      showNotification('Unable to find benchmark card', 'error');
+      return;
+    }
+
+    const statusEl = card.querySelector('.benchmark-status-text');
+    const btn = card.querySelector('.benchmark-run-btn');
+
+    if (!statusEl || !btn) {
+      showNotification('Unable to find benchmark controls', 'error');
+      return;
+    }
+
+    statusEl.textContent = 'Running...';
+    btn.disabled = true;
+
+    let result;
+    if (type === 'speed') {
+      result = await apiClient.runSpeedBenchmark(backendUrl, { tokens: 5000, maxTokens: 10 });
+    } else if (type === 'streaming') {
+      result = await apiClient.runStreamingBenchmark(backendUrl, { tokens: 2000, maxTokens: 50 });
+    }
+
+    if (result.success) {
+      statusEl.textContent = 'Benchmark started (job: ' + result.data.jobId.slice(0, 8) + '...)';
+      // Poll for result
+      pollBenchmarkResult(result.data.jobId);
+    } else {
+      statusEl.textContent = 'Error: ' + result.error;
+      btn.disabled = false;
+    }
+  }
+
+  /**
+   * Poll for a benchmark result
+   */
+  async function pollBenchmarkResult(jobId) {
+    const poll = async () => {
+      const result = await apiClient.getBenchmarkResult(jobId);
+
+      if (result.success) {
+        const data = result.data;
+
+        if (data.status === 'completed') {
+          // Add result to results list
+          loadBenchmarkResults();
+          // Remove from polling
+          return;
+        } else if (data.status === 'failed') {
+          showNotification('Benchmark failed: ' + (data.error || 'Unknown error'), 'error');
+          return;
+        }
+      }
+
+      // Continue polling
+      setTimeout(poll, 500);
+    };
+
+    poll();
+  }
+
+  /**
+   * Run prefix matching benchmark
+   */
+  async function runPrefixMatchBenchmark() {
+    const progress = document.getElementById('multiBenchmarkProgress');
+    const progressFill = document.getElementById('benchmarkProgressFill');
+    const progressText = document.getElementById('benchmarkProgressText');
+    const btn = document.getElementById('runPrefixMatchBenchmark');
+
+    // Get options
+    const numPrompts = parseInt(document.getElementById('benchmarkNumPrompts').value) || 4;
+    const tokens = parseInt(document.getElementById('benchmarkTokens').value) || 5000;
+    const model = document.getElementById('benchmarkModel').value || 'qwen/qwen3.5-35b-a3b';
+
+    progress.style.display = 'block';
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Initializing benchmark...';
+    btn.disabled = true;
+
+    const result = await apiClient.runPrefixMatchBenchmark({ numPrompts, tokens, model });
+
+    if (result.success) {
+      progressFill.style.width = '10%';
+      progressText.textContent = 'Benchmark started (job: ' + result.data.jobId.slice(0, 8) + '...)';
+
+      // Poll for completion
+      const poll = async () => {
+        const checkResult = await apiClient.getBenchmarkResult(result.data.jobId);
+
+        if (checkResult.success) {
+          const data = checkResult.data;
+
+          if (data.status === 'completed') {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Benchmark completed!';
+            loadBenchmarkResults();
+            btn.disabled = false;
+
+            // Hide progress after 3 seconds
+            setTimeout(() => {
+              progress.style.display = 'none';
+            }, 3000);
+            return;
+          } else if (data.status === 'failed') {
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Benchmark failed: ' + (data.error || 'Unknown error');
+            btn.disabled = false;
+
+            setTimeout(() => {
+              progress.style.display = 'none';
+            }, 5000);
+            return;
+          }
+
+          // Update progress based on status
+          const progressPct = data.status === 'running' ? 50 : 25;
+          progressFill.style.width = progressPct + '%';
+          progressText.textContent = 'Running benchmark...' + (data.status === 'running' ? ' (testing ' + numPrompts + ' backends)' : '');
+        }
+
+        setTimeout(poll, 500);
+      };
+
+      poll();
+    } else {
+      progress.style.display = 'none';
+      btn.disabled = false;
+      showNotification('Failed to start benchmark: ' + result.error, 'error');
+    }
+  }
+
+  /**
+   * Load and display benchmark results
+   */
+  async function loadBenchmarkResults() {
+    const container = document.getElementById('benchmarkResultsList');
+    if (!container) return;
+
+    const result = await apiClient.listBenchmarkResults();
+
+    if (!result.success || !result.data?.results || result.data.results.length === 0) {
+      container.innerHTML = '<p class="benchmark-empty">No benchmark results yet. Run a benchmark to see results here.</p>';
+      return;
+    }
+
+    // Render results
+    container.innerHTML = result.data.results.map(item => {
+      const statusClass = item.status === 'completed' ? 'status-completed' : (item.status === 'failed' ? 'status-failed' : 'status-running');
+      const statusText = item.status === 'completed' ? 'Completed' : (item.status === 'failed' ? 'Failed' : 'Running');
+
+      const resultData = item.result || {};
+      const results = resultData.results || {};
+
+      let resultPreview = '';
+      if (item.type === 'speed' && results.firstRequest) {
+        const first = results.firstRequest;
+        const second = results.secondRequest || {};
+        resultPreview = `
+          <div class="benchmark-result-speed">
+            <div class="result-row">
+              <span class="result-label">First Request</span>
+              <span class="result-value">${first.elapsed_ms ? first.elapsed_ms.toFixed(0) + 'ms' : 'N/A'} (${first.prompt_speed.toFixed(1)} t/s)</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label">Second Request</span>
+              <span class="result-value">${second.elapsed_ms ? second.elapsed_ms.toFixed(0) + 'ms' : 'N/A'} (${second.prompt_speed.toFixed(1)} t/s)</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label">Speedup</span>
+              <span class="result-value">${results.speedup ? results.speedup.toFixed(2) + 'x' : 'N/A'}</span>
+            </div>
+          </div>
+        `;
+      } else if (item.type === 'streaming') {
+        const streaming = results || {};
+        resultPreview = `
+          <div class="benchmark-result-streaming">
+            <div class="result-row">
+              <span class="result-label">Time to First Chunk</span>
+              <span class="result-value">${streaming.timeToFirstChunkMs ? streaming.timeToFirstChunkMs.toFixed(0) + 'ms' : 'N/A'}</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label">Throughput</span>
+              <span class="result-value">${streaming.throughputTokensPerSecond ? streaming.throughputTokensPerSecond + ' t/s' : 'N/A'}</span>
+            </div>
+          </div>
+        `;
+      } else if (item.type === 'prefix-match') {
+        const prefix = results || {};
+        resultPreview = `
+          <div class="benchmark-result-prefix">
+            <div class="result-row">
+              <span class="result-label">Successful Pairs</span>
+              <span class="result-value">${prefix.successfulPairs || 0}/${prefix.totalPairs || 0}</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label">Overall Speedup</span>
+              <span class="result-value">${prefix.overallSpeedup ? prefix.overallSpeedup + 'x' : 'N/A'}</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label">Improvement</span>
+              <span class="result-value">${prefix.improvementPercent ? prefix.improvementPercent + '%' : 'N/A'}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="benchmark-result-card" data-job-id="${item.jobId}">
+          <div class="benchmark-result-header">
+            <div class="benchmark-result-meta">
+              <span class="benchmark-result-type">${item.type}</span>
+              <span class="benchmark-result-status ${statusClass}">${statusText}</span>
+              <span class="benchmark-result-time">${new Date(item.createdAt).toLocaleString()}</span>
+            </div>
+            <div class="benchmark-result-actions">
+              ${item.status === 'completed' ? `
+                <button class="button button-secondary button-small result-actions-btn" data-job-id="${item.jobId}" data-action="view">
+                  View Details
+                </button>
+                <button class="button button-secondary button-small result-actions-btn" data-job-id="${item.jobId}" data-action="download">
+                  Download
+                </button>
+              ` : ''}
+              <button class="button button-danger button-small result-actions-btn" data-job-id="${item.jobId}" data-action="delete">
+                Delete
+              </button>
+            </div>
+          </div>
+
+          ${item.status === 'completed' ? resultPreview : ''}
+
+          <div class="benchmark-result-details" data-job-id="${item.jobId}" style="display: none;">
+            <pre>${JSON.stringify(item, null, 2)}</pre>
+          </div>
+
+          ${item.error ? `<div class="benchmark-result-error">Error: ${item.error}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    // Add event listeners
+    container.querySelectorAll('.result-actions-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const jobId = e.target.dataset.jobId;
+        const action = e.target.dataset.action;
+
+        if (action === 'delete') {
+          if (confirm('Delete this benchmark result?')) {
+            await apiClient.deleteBenchmarkResult(jobId);
+            loadBenchmarkResults();
+          }
+        } else if (action === 'view') {
+          const details = container.querySelector(`.benchmark-result-details[data-job-id="${jobId}"]`);
+          details.style.display = details.style.display === 'none' ? 'block' : 'none';
+        } else if (action === 'download') {
+          const result = await apiClient.getBenchmarkResult(jobId);
+          if (result.success && result.data) {
+            const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `benchmark-${jobId}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+        }
+      });
+    });
   }
 
   // Start the dashboard

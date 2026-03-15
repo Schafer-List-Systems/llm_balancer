@@ -434,6 +434,129 @@ class ApiClient {
     this.dataCache = null;
     window.updateCallback = null;
   }
+
+  // ============================================================
+  // BENCHMARK API METHODS
+  // ============================================================
+
+  /**
+   * Get available single-backend benchmark types
+   */
+  async getBenchmarkEndpoints() {
+    try {
+      const data = await this.request('/benchmark/single-endpoints');
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Run a speed test benchmark on a specific backend
+   * @param {string} backendUrl - URL of the backend to test
+   * @param {Object} options - Benchmark options
+   * @returns {Promise<{jobId: string, status: string}>}
+   */
+  async runSpeedBenchmark(backendUrl, options = {}) {
+    try {
+      const data = await this.request('/benchmark/single/speed', {
+        method: 'POST',
+        body: JSON.stringify({ backendUrl, options })
+      });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Run a streaming benchmark on a specific backend
+   * @param {string} backendUrl - URL of the backend to test
+   * @param {Object} options - Benchmark options
+   * @returns {Promise<{jobId: string, status: string}>}
+   */
+  async runStreamingBenchmark(backendUrl, options = {}) {
+    try {
+      const data = await this.request('/benchmark/streaming', {
+        method: 'POST',
+        body: JSON.stringify({ backendUrl, options })
+      });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Run prefix matching benchmark across all backends
+   * @param {Object} options - Benchmark options
+   * @returns {Promise<{jobId: string, status: string}>}
+   */
+  async runPrefixMatchBenchmark(options = {}) {
+    try {
+      const data = await this.request('/benchmark/prefix-match', {
+        method: 'POST',
+        body: JSON.stringify({ options })
+      });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get benchmark result by job ID
+   * @param {string} jobId - The benchmark job ID
+   * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+   */
+  async getBenchmarkResult(jobId) {
+    try {
+      const data = await this.request(`/benchmark/results/${jobId}`);
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * List all completed benchmark results
+   * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+   */
+  async listBenchmarkResults() {
+    try {
+      const data = await this.request('/benchmark/results');
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Delete a benchmark result by job ID
+   * @param {string} jobId - The benchmark job ID
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async deleteBenchmarkResult(jobId) {
+    try {
+      await this.request(`/benchmark/results/${jobId}`, { method: 'DELETE' });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Trigger cleanup of expired benchmark results
+   * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+   */
+  async cleanupBenchmarkResults() {
+    try {
+      const data = await this.request('/benchmark/cleanup', { method: 'POST' });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 // Use API base URL from config
