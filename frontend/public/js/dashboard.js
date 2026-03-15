@@ -139,51 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </section>
 
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Configuration <span class="section-subtitle">(API endpoint URL for your applications)</span></h2>
-          </div>
-          <div id="configSection" class="config-section">
-            <!-- Configuration will be rendered here -->
-          </div>
-        </section>
-
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Debug <span class="section-subtitle">(Prompt cache statistics and performance metrics)</span></h2>
-            <button id="toggleDebug" class="toggle-button">Show Debug</button>
-          </div>
-          <div id="debugSection" class="debug-section" style="display: none;">
-            <div class="debug-header-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-              <button id="refreshDebug" class="button button-secondary">Refresh</button>
-            </div>
-
-            <div class="debug-stats">
-              <div class="debug-stat-item">
-                <span class="debug-stat-label">Debug Enabled</span>
-                <span class="debug-stat-value" id="debugEnabled">-</span>
-              </div>
-            </div>
-
-            <!-- Cache Control Buttons -->
-            <div id="cacheControls" class="debug-controls" style="display: none;">
-              <h3 class="debug-section-header">Cache Management</h3>
-              <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
-            </div>
-
-            <!-- Queue Viewer -->
-            <div id="queueViewer" class="queue-viewer" style="display: none;">
-              <h3 class="debug-section-header">Request Queue</h3>
-              <div id="queueStatsSummary" class="queue-stats-summary"></div>
-              <div id="queueContents" class="queue-contents"></div>
-            </div>
-
-            <div id="debugBackendStatsContainer" class="debug-backend-stats-container">
-              <p class="debug-empty">Loading debug data...</p>
-            </div>
-          </div>
-        </section>
-
         <!-- ==============================================
              BENCHMARKS SECTION
              ============================================== -->
@@ -253,6 +208,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p class="benchmark-empty">No benchmark results yet. Run a benchmark to see results here.</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="backends-section">
+          <div class="section-header">
+            <h2 class="section-title">Debug <span class="section-subtitle">(Prompt cache statistics and performance metrics)</span></h2>
+            <button id="toggleDebug" class="toggle-button">Show Debug</button>
+          </div>
+          <div id="debugSection" class="debug-section" style="display: none;">
+            <div class="debug-header-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+              <button id="refreshDebug" class="button button-secondary">Refresh</button>
+            </div>
+
+            <div class="debug-stats">
+              <div class="debug-stat-item">
+                <span class="debug-stat-label">Debug Enabled</span>
+                <span class="debug-stat-value" id="debugEnabled">-</span>
+              </div>
+            </div>
+
+            <!-- Cache Control Buttons -->
+            <div id="cacheControls" class="debug-controls" style="display: none;">
+              <h3 class="debug-section-header">Cache Management</h3>
+              <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
+            </div>
+
+            <!-- Queue Viewer -->
+            <div id="queueViewer" class="queue-viewer" style="display: none;">
+              <h3 class="debug-section-header">Request Queue</h3>
+              <div id="queueStatsSummary" class="queue-stats-summary"></div>
+              <div id="queueContents" class="queue-contents"></div>
+            </div>
+
+            <div id="debugBackendStatsContainer" class="debug-backend-stats-container">
+              <p class="debug-empty">Loading debug data...</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="backends-section">
+          <div class="section-header">
+            <h2 class="section-title">Configuration <span class="section-subtitle">(API endpoint URL for your applications)</span></h2>
+          </div>
+          <div id="configSection" class="config-section">
+            <!-- Configuration will be rendered here -->
           </div>
         </section>
       </main>
