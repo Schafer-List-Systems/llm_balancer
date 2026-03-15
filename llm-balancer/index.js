@@ -748,6 +748,12 @@ app.get('/health/:backendUrl', (req, res) => {
 });
 
 /**
+ * Mount benchmark router
+ */
+const benchmarkRouter = require('./routes/benchmark');
+app.use('/benchmark', benchmarkRouter);
+
+/**
  * 404 handler
  */
 app.use((req, res) => {

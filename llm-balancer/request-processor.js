@@ -279,9 +279,11 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
 
   if (isStreaming) {
     console.log(`[${getTimestamp()}] [Gateway][${requestId}] Using handleStreamingRequest (stream: true detected in body)`);
+    console.log(`[${getTimestamp()}] [Gateway][${requestId}] Request body preview: ${JSON.stringify(originalBody).substring(0, 500)}`);
     handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel);
   } else {
     console.log(`[${getTimestamp()}] [Gateway][${requestId}] Using handleNonStreamingRequest`);
+    console.log(`[${getTimestamp()}] [Gateway][${requestId}] Request body preview: ${JSON.stringify(originalBody).substring(0, 500)}`);
     handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel);
   }
 }
@@ -342,6 +344,11 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
 
   // Record when request is sent to backend
   const requestSentTime = Date.now();
+
+  // Send request body to backend - this MUST be called before response handlers
+  // to ensure the backend receives the complete request
+  const requestBodyToForward = getRequestBody(req);
+  proxyReq.end(requestBodyToForward);
 
   proxyReq.on('response', (proxyRes) => {
     // Record when headers are received from backend
@@ -460,6 +467,9 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         // Just end the response (only if headers not already sent)
         if (!res.headersSent) {
           res.end();
+        } else {
+          // Ensure response is properly closed even if headers already sent
+          res.destroy();
         }
 
         releaseBackend(balancer, backend);
@@ -516,11 +526,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
       });
     }
   });
-
-  // End the request - this sends the body and completes the request
-  // This must be called AFTER all handlers are registered but triggers immediately
-  console.debug(`[Gateway] Sending request body to ${backend.url}`);
-  proxyReq.end(getRequestBody(req));
 }
 
 /**
@@ -687,5 +692,7 @@ module.exports = {
   getRequestBody,
   extractModelsFromRequest,
   replaceModelInRequestBody,
-  extractTokenCounts
+  extractTokenCounts,
+  handleStreamingRequest,
+  handleNonStreamingRequest
 };
