@@ -236,6 +236,6 @@ Response format:
 
 ## Related Documentation
 
-- [Configuration](CONFIGURATION.md) - Queue configuration options
-- [API Reference](API.md) - Error responses
-- [Architecture](../../developer/ARCHITECTURE.md) - System architecture overview
+- [Configuration](CONFIGURATION.md#configuration) - Queue configuration options
+- [API Reference](API.md#api-reference) - Error responses
+- [Architecture](../../developer/ARCHITECTURE.md#system-architecture) - System architecture overview

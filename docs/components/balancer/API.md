@@ -180,6 +180,6 @@ curl http://localhost:3001/health/http://host1:11434
 
 ## Related Documentation
 
-- [API Reference](../../api/ENDPOINTS.md) - Complete API documentation
-- [Request/Response Formats](../../api/REQUEST_RESPONSE.md) - Data structures
-- [Usage Guide](../../user/USAGE.md) - Usage examples
+- [API Reference](../../api/ENDPOINTS.md#api-reference) - Complete API documentation
+- [Request/Response Formats](../../api/REQUEST_RESPONSE.md#requestresponse-formats) - Data structures
+- [Usage Guide](../../user/USAGE.md#configuration) - Usage examples

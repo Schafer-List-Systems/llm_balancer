@@ -365,7 +365,6 @@ Statement   | Branch  | Function  | Lines
 
 ## Related Documentation
 
-- [System Architecture](ARCHITECTURE.md) - Architecture overview
-- [Class Hierarchy](CLASSES.md) - Class documentation
-- [Data Flow](DATA_FLOW.md) - Request processing details
-- [Requirements](../../REQUIREMENTS.md) - Requirements specification
+- [System Architecture](ARCHITECTURE.md#system-architecture) - Architecture overview
+- [Class Hierarchy](CLASSES.md#class-hierarchy) - Class documentation
+- [Data Flow](DATA_FLOW.md#data-flow) - Request processing details

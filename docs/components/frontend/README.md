@@ -22,8 +22,8 @@ The frontend provides:
 
 ## Documentation
 
-- [Configuration](CONFIGURATION.md) - Frontend configuration
-- [Customization](CUSTOMIZATION.md) - How to customize the dashboard
+- [Configuration](CONFIGURATION.md#configuration) - Frontend configuration
+- [Customization](CUSTOMIZATION.md#customization) - How to customize the dashboard
 
 ## Quick Start
 
@@ -39,4 +39,4 @@ Dashboard available at http://localhost:3080
 
 ## Architecture
 
-See [System Architecture](../../../docs/developer/ARCHITECTURE.md) for details.
+See [System Architecture](../../../docs/developer/ARCHITECTURE.md#system-architecture) for details.

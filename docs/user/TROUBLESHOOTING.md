@@ -350,10 +350,10 @@ docker compose logs -f
 
 ### Check Documentation
 
-- [Installation Guide](INSTALLATION.md) - Installation options
-- [Usage Guide](USAGE.md) - Configuration and usage
-- [API Reference](../api/ENDPOINTS.md) - API documentation
-- [Developer Debugging](../developer/DEBUGGING.md) - Developer debugging guide
+- [Installation Guide](INSTALLATION.md#getting-started) - Installation options
+- [Usage Guide](USAGE.md#configuration) - Configuration and usage
+- [API Reference](../api/ENDPOINTS.md#api-reference) - API documentation
+- [Developer Debugging](../developer/DEBUGGING.md#debug-endpoints) - Developer debugging guide
 
 ### Debug Endpoints
 

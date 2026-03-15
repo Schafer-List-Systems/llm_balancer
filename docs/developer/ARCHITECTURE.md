@@ -661,7 +661,7 @@ Add more backends without downtime:
 
 ## Related Documentation
 
-- [Class Hierarchy](CLASSES.md) - Detailed class documentation
-- [Data Flow](DATA_FLOW.md) - Request processing details
-- [Testing Guide](TESTING.md) - Testing architecture
-- [Debugging Guide](DEBUGGING.md) - Debug features
+- [Class Hierarchy](CLASSES.md#class-hierarchy) - Detailed class documentation
+- [Data Flow](DATA_FLOW.md#data-flow) - Request processing details
+- [Testing Guide](TESTING.md#testing-guide) - Testing architecture
+- [Debugging Guide](DEBUGGING.md#debug-features) - Debug features

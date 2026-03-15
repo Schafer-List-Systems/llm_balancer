@@ -178,10 +178,10 @@ See also: [README.md#troubleshooting](../../README.md#troubleshooting)
 
 ## Related Documentation
 
-- [CONFIGURATION.md](CONFIGURATION.md) - Balancer configuration options
+- [CONFIGURATION.md](CONFIGURATION.md#configuration) - Balancer configuration options
 - [DATA_FLOW.md](../../developer/DATA_FLOW.md#prompt-cache-system) - Data flow with prompt cache
-- [ARCHITECTURE.md](../../developer/ARCHITECTURE.md) - System architecture overview
-- [DOCUMENTATION_GUIDE.md](../../DOCUMENTATION_GUIDE.md) - Find documentation by role
+- [ARCHITECTURE.md](../../developer/ARCHITECTURE.md#system-architecture) - System architecture overview
+- [DOCUMENTATION_GUIDE.md](../../DOCUMENTATION_GUIDE.md#documentation-guide) - Find documentation by role
 
 ---
 
@@ -189,7 +189,7 @@ See also: [README.md#troubleshooting](../../README.md#troubleshooting)
 
 If you can't find the documentation you need:
 
-1. Check the [DOCUMENTATION_GUIDE.md](../../DOCUMENTATION_GUIDE.md) for role-based navigation
-2. Review the [README.md](../../README.md) for project overview and quick links
-3. Check the [docs/OVERVIEW.md](../../OVERVIEW.md) for system architecture
+1. Check the [DOCUMENTATION_GUIDE.md](../../DOCUMENTATION_GUIDE.md#documentation-guide) for role-based navigation
+2. Review the [README.md](../../README.md#overview) for project overview and quick links
+3. Check the [docs/OVERVIEW.md](../../OVERVIEW.md#system-overview) for system architecture
 4. File an issue to request new documentation

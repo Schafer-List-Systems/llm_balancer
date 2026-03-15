@@ -68,5 +68,5 @@ npm run dev:build
 
 ## Related Documentation
 
-- [Configuration](CONFIGURATION.md) - Configuration options
-- [Usage Guide](../../user/USAGE.md) - Usage examples
+- [Configuration](CONFIGURATION.md#configuration) - Configuration options
+- [Usage Guide](../../user/USAGE.md#configuration) - Usage examples

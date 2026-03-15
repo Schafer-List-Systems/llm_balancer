@@ -450,6 +450,6 @@ print(f"Request took {duration:.2f}s")
 
 ## Next Steps
 
-- [API Endpoints](ENDPOINTS.md) - Complete API reference
-- [Request/Response Formats](REQUEST_RESPONSE.md) - Data structures
-- [Usage Guide](../user/USAGE.md) - Configuration and usage
+- [API Endpoints](ENDPOINTS.md#api-reference) - Complete API reference
+- [Request/Response Formats](REQUEST_RESPONSE.md#requestresponse-formats) - Data structures
+- [Usage Guide](../user/USAGE.md#configuration) - Configuration and usage

@@ -26,7 +26,7 @@ Docker provides:
 
 ## Documentation
 
-- [Deployment](DEPLOYMENT.md) - Production deployment guide
+- [Deployment](DEPLOYMENT.md#production-deployment) - Production deployment guide
 
 ## Quick Start
 
@@ -43,5 +43,5 @@ docker compose down
 
 ## Related Documentation
 
-- [Installation](../../user/INSTALLATION.md) - Installation options
-- [Usage Guide](../../user/USAGE.md) - Usage examples
+- [Installation](../../user/INSTALLATION.md#getting-started) - Installation options
+- [Usage Guide](../../user/USAGE.md#configuration) - Usage examples

@@ -806,6 +806,6 @@ module.exports = {
 
 ## Related Documentation
 
-- [System Architecture](ARCHITECTURE.md) - High-level architecture
-- [Data Flow](DATA_FLOW.md) - Request processing details
-- [Testing Guide](TESTING.md) - Testing classes and interfaces
+- [System Architecture](ARCHITECTURE.md#system-architecture) - High-level architecture
+- [Data Flow](DATA_FLOW.md#data-flow) - Request processing details
+- [Testing Guide](TESTING.md#testing-guide) - Testing classes and interfaces

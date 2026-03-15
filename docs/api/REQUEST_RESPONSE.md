@@ -556,5 +556,5 @@ The balancer evaluates both patterns and routes to the first backend that matche
 
 ## Next Steps
 
-- [Integration Guide](INTEGRATION.md) - Integration examples
-- [API Endpoints](ENDPOINTS.md) - Complete API reference
+- [Integration Guide](INTEGRATION.md#integration-guide) - Integration examples
+- [API Endpoints](ENDPOINTS.md#api-reference) - Complete API reference

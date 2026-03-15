@@ -255,12 +255,12 @@ curl http://localhost:3001/api/tags
 
 ## Next Steps
 
-- [Usage Guide](USAGE.md) - Configure and use the balancer
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
-- [API Reference](../api/ENDPOINTS.md) - API documentation
+- [Usage Guide](USAGE.md#configuration) - Configure and use the balancer
+- [Troubleshooting](TROUBLESHOOTING.md#common-issues) - Common issues and solutions
+- [API Reference](../api/ENDPOINTS.md#api-reference) - API documentation
 
 ---
 
 ## Docker-Specific Installation
 
-For Docker-specific deployment details, see [../components/docker/DEPLOYMENT.md](../components/docker/DEPLOYMENT.md).
+For Docker-specific deployment details, see [../components/docker/DEPLOYMENT.md#production-deployment](../components/docker/DEPLOYMENT.md#production-deployment).

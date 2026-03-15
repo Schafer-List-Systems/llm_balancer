@@ -292,13 +292,13 @@ Debug endpoints:
 
 ## Related Documentation
 
-- [README.md](../README.md) - Project overview and quick start
-- [docs/user/INSTALLATION.md](user/INSTALLATION.md) - Installation instructions
-- [docs/user/USAGE.md](user/USAGE.md) - Usage guide
-- [docs/developer/ARCHITECTURE.md](developer/ARCHITECTURE.md) - Detailed architecture
-- [docs/developer/CLASSES.md](developer/CLASSES.md) - Class hierarchy
-- [docs/developer/DATA_FLOW.md](developer/DATA_FLOW.md) - Data flow documentation
-- [docs/api/ENDPOINTS.md](api/ENDPOINTS.md) - API reference
+- [README.md](../README.md#quick-start) - Project overview and quick start
+- [docs/user/INSTALLATION.md](user/INSTALLATION.md#getting-started) - Installation instructions
+- [docs/user/USAGE.md](user/USAGE.md#configuration) - Usage guide
+- [docs/developer/ARCHITECTURE.md](developer/ARCHITECTURE.md#system-architecture) - Detailed architecture
+- [docs/developer/CLASSES.md](developer/CLASSES.md#class-hierarchy) - Class hierarchy
+- [docs/developer/DATA_FLOW.md](developer/DATA_FLOW.md#data-flow) - Data flow documentation
+- [docs/api/ENDPOINTS.md](api/ENDPOINTS.md#api-reference) - API reference
 
 ---
 

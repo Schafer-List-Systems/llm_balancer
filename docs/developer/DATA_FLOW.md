@@ -939,7 +939,7 @@ Cache State:
 
 This is critical for KV cache benefits:
 
-- **Sequential**: Second request benefits from first request's cached KV prefixes
+- **Sequential**: Second request benefits from first request's cached KV cache
 - **Concurrent**: Neither request may benefit from cache reuse
 
 **Configuration Impact:**
@@ -950,7 +950,7 @@ This is critical for KV cache benefits:
 
 ## Related Documentation
 
-- [System Architecture](ARCHITECTURE.md) - High-level architecture
-- [Class Hierarchy](CLASSES.md) - Class documentation
-- [Testing Guide](TESTING.md) - Testing data flows
-- [Debugging Guide](DEBUGGING.md) - Debug features and troubleshooting
+- [System Architecture](ARCHITECTURE.md#system-architecture) - High-level architecture
+- [Class Hierarchy](CLASSES.md#class-hierarchy) - Class documentation
+- [Testing Guide](TESTING.md#testing-guide) - Testing data flows
+- [Debugging Guide](DEBUGGING.md#debug-features) - Debug features and troubleshooting

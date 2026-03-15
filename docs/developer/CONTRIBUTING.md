@@ -290,7 +290,7 @@ npm test -- --coverage
 
 ### Writing Tests
 
-See [Testing Guide](TESTING.md) for detailed testing guidelines.
+See [Testing Guide](TESTING.md#testing-guide) for detailed testing guidelines.
 
 ### Test Requirements
 

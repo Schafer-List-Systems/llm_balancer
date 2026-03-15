@@ -116,7 +116,7 @@ llm_balancer/
 ├── DOCUMENTATION_GUIDE.md             # This file: Navigation guide for finding documentation by role
 │
 ├── docs/
-│   ├── OVERVIEW.md                    # Overall architecture, system design, development workflow
+│   ├── OVERVIEW.md                    # System architecture and high-level design
 │   │
 │   ├── user/                          # User-facing documentation
 │   │   ├── INSTALLATION.md            # Installation (Docker, manual, development)
@@ -142,7 +142,8 @@ llm_balancer/
 │       │   ├── README.md              # Balancer overview, features
 │       │   ├── CONFIGURATION.md       # Balancer-specific configuration
 │       │   ├── API.md                 # Balancer API details
-│       │   └── PROMPT_CACHE.md        # Prompt cache (KV cache) behavior, selection, monitoring
+│       │   ├── PROMPT_CACHE.md        # Prompt cache (KV cache) behavior, selection, monitoring
+│       │   └── QUEUE_PROCESSING.md    # Queue processing flow and behavior
 │       │
 │       ├── frontend/
 │       │   ├── README.md              # Frontend overview, features

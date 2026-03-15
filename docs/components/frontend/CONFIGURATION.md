@@ -38,5 +38,5 @@ REFRESH_INTERVAL=10000
 
 ## Related Documentation
 
-- [Usage Guide](../../user/USAGE.md) - How to use the dashboard
-- [Installation](../../user/INSTALLATION.md) - Installation options
+- [Usage Guide](../../user/USAGE.md#configuration) - How to use the dashboard
+- [Installation](../../user/INSTALLATION.md#getting-started) - Installation options

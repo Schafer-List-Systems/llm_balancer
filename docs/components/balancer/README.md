@@ -22,10 +22,10 @@ The balancer provides:
 
 ## Documentation
 
-- [Configuration](CONFIGURATION.md) - Balancer-specific configuration
-- [API](API.md) - Balancer API details
-- [Queue Processing](QUEUE_PROCESSING.md) - Queue processing flow and behavior
-- [Usage](../../user/USAGE.md) - How to use the balancer
+- [Configuration](CONFIGURATION.md#configuration) - Balancer-specific configuration
+- [API](API.md#api-reference) - Balancer API details
+- [Queue Processing](QUEUE_PROCESSING.md#queue-processing) - Queue processing flow and behavior
+- [Usage](../../user/USAGE.md#configuration) - How to use the balancer
 
 ## Quick Start
 
@@ -37,4 +37,4 @@ npm start
 
 ## Architecture
 
-See [System Architecture](../../../docs/developer/ARCHITECTURE.md) for detailed architecture.
+See [System Architecture](../../../docs/developer/ARCHITECTURE.md#system-architecture) for detailed architecture.

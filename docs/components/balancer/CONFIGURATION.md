@@ -132,6 +132,6 @@ MAX_QUEUE_SIZE=200
 
 ## Related Documentation
 
-- [Usage Guide](../../user/USAGE.md) - Complete usage guide
-- [Installation](../../user/INSTALLATION.md) - Installation options
-- [Troubleshooting](../../user/TROUBLESHOOTING.md) - Common issues
+- [Usage Guide](../../user/USAGE.md#configuration) - Complete usage guide
+- [Installation](../../user/INSTALLATION.md#getting-started) - Installation options
+- [Troubleshooting](../../user/TROUBLESHOOTING.md#common-issues) - Common issues

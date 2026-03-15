@@ -42,7 +42,7 @@ No. You can install manually:
 - **Manual**: Direct installation on your system
 - **Development**: Simplified setup for testing
 
-See [Installation Guide](INSTALLATION.md) for details.
+See [Installation Guide](INSTALLATION.md#installation-options) for details.
 
 ### What are the system requirements?
 
@@ -349,7 +349,7 @@ No. Debug mode:
 
 ## Next Steps
 
-- [Installation Guide](INSTALLATION.md) - Installation options
-- [Usage Guide](USAGE.md) - Configuration and usage
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues
-- [API Reference](../api/ENDPOINTS.md) - API documentation
+- [Installation Guide](INSTALLATION.md#getting-started) - Installation options
+- [Usage Guide](USAGE.md#configuration) - Configuration and usage
+- [Troubleshooting](TROUBLESHOOTING.md#common-issues) - Common issues
+- [API Reference](../api/ENDPOINTS.md#api-reference) - API documentation

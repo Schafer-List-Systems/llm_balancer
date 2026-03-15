@@ -126,7 +126,7 @@ The balancer uses standard JavaScript regular expressions:
 |---------|-------------|---------------|
 | `exact` | Exact model name match | `llama3` → only "llama3" |
 | `.*` | Wildcard (any characters) | `.*` → any model name |
-| `^prefix.*` | Starts with prefix | `^llama.*` → llama3, llama-3-8b, Llama-2 |
+| `^prefix.*` | Starts with prefix (for prompt caching) | `^llama.*` → llama3, llama-3-8b, Llama-2 |
 | `.*suffix$` | Ends with suffix | `.*70B$` → llama-3-70b, mistral-7b-70B |
 | `pattern1\|pattern2` | Alternation (OR) | `llama.*\|^qwen.*` → any llama OR qwen models |
 
@@ -434,6 +434,6 @@ kill -TERM <pid>
 
 ## Next Steps
 
-- [Installation Guide](INSTALLATION.md) - Installation options
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues
-- [API Reference](../api/ENDPOINTS.md) - Complete API documentation
+- [Installation Guide](INSTALLATION.md#getting-started) - Installation options
+- [Troubleshooting](TROUBLESHOOTING.md#common-issues) - Common issues
+- [API Reference](../api/ENDPOINTS.md#api-reference) - Complete API documentation

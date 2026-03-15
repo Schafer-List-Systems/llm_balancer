@@ -181,6 +181,6 @@ docker compose up -d
 
 ## Related Documentation
 
-- [Installation](../../user/INSTALLATION.md) - Installation options
-- [Usage Guide](../../user/USAGE.md) - Usage examples
-- [Troubleshooting](../../user/TROUBLESHOOTING.md) - Common issues
+- [Installation](../../user/INSTALLATION.md#getting-started) - Installation options
+- [Usage Guide](../../user/USAGE.md#configuration) - Usage examples
+- [Troubleshooting](../../user/TROUBLESHOOTING.md#common-issues) - Common issues

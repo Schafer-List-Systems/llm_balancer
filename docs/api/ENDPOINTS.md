@@ -731,5 +731,5 @@ Currently, the balancer does not implement authentication. For production use, c
 
 ## Next Steps
 
-- [Request/Response Formats](REQUEST_RESPONSE.md) - Data structures
-- [Integration Guide](INTEGRATION.md) - Integration examples
+- [Request/Response Formats](REQUEST_RESPONSE.md#requestresponse-formats) - Data structures
+- [Integration Guide](INTEGRATION.md#integration-guide) - Integration examples
