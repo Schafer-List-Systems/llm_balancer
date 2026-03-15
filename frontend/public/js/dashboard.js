@@ -404,6 +404,24 @@ document.addEventListener('DOMContentLoaded', () => {
         failsRow.className = `info-value ${backend.failCount > 0 ? 'text-danger' : ''}`;
       }
 
+      // Update API badges
+      const apiBadgesContainer = card.querySelector('.api-badges');
+      if (apiBadgesContainer && backend.apiTypes && Array.isArray(backend.apiTypes)) {
+        const apiTypeLabels = {
+          'openai': 'OpenAI',
+          'anthropic': 'Anthropic',
+          'google': 'Gemini',
+          'ollama': 'Ollama',
+          'groq': 'Groq'
+        };
+
+        apiBadgesContainer.innerHTML = backend.apiTypes
+          .filter(apiType => apiType && apiType !== 'unknown')
+          .map(apiType =>
+            `<div class="api-badge ${apiType}">${apiTypeLabels[apiType] || apiType.toUpperCase()}</div>`
+          ).join('');
+      }
+
       // Update performance metrics section
       const perfMetrics = card.querySelector('.performance-metrics');
       const perfStats = backend.performanceStats || {};
@@ -971,8 +989,8 @@ document.addEventListener('DOMContentLoaded', () => {
               <span class="queue-value">${typeof req.criterion === 'string' ? req.criterion : JSON.stringify(req.criterion)}</span>
             </div>
             <div class="queue-info-row">
-              <span class="queue-label">Model</span>
-              <span class="queue-value">${req.requestData?.model || 'N/A'}</span>
+              <span class="queue-label">Client IP</span>
+              <span class="queue-value">${req.clientIp || 'unknown'}</span>
             </div>
             <div class="queue-info-row">
               <span class="queue-label">API Type</span>
