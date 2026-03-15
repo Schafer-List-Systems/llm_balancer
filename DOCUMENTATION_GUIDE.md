@@ -95,6 +95,7 @@ This guide helps you quickly find the documentation you need based on your role 
 - [docs/components/balancer/README.md](docs/components/balancer/README.md) - Balancer overview, features
 - [docs/components/balancer/CONFIGURATION.md](docs/components/balancer/CONFIGURATION.md) - Balancer-specific configuration
 - [docs/components/balancer/API.md](docs/components/balancer/API.md) - Balancer API details
+- [docs/components/balancer/PROMPT_CACHE.md](docs/components/balancer/PROMPT_CACHE.md) - Prompt cache (KV cache) behavior, selection, and monitoring
 
 #### Frontend Component
 - [docs/components/frontend/README.md](docs/components/frontend/README.md) - Frontend overview, features
@@ -140,7 +141,8 @@ llm_balancer/
 │       ├── balancer/
 │       │   ├── README.md              # Balancer overview, features
 │       │   ├── CONFIGURATION.md       # Balancer-specific configuration
-│       │   └── API.md                 # Balancer API details
+│       │   ├── API.md                 # Balancer API details
+│       │   └── PROMPT_CACHE.md        # Prompt cache (KV cache) behavior, selection, monitoring
 │       │
 │       ├── frontend/
 │       │   ├── README.md              # Frontend overview, features

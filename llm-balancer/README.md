@@ -45,6 +45,10 @@ HEALTH_CHECK_TIMEOUT=5000
 
 # Maximum number of retries per request
 MAX_RETRIES=3
+
+# Prompt cache configuration
+MAX_PROMPT_CACHE_SIZE=5
+PROMPT_CACHE_SIMILARITY_THRESHOLD=0.85
 ```
 
 ## Usage
@@ -205,7 +209,7 @@ The load balancer automatically detects which APIs each backend supports using a
 
 ## Prompt Cache
 
-The load balancer supports prompt cache (KV cache) reuse to reduce compute costs and latency. When a prompt is already cached on a backend, the backend can reuse the previously computed key-value pairs, significantly speeding up response generation. See [PROMPT_CACHE.md](PROMPT_CACHE.md) for detailed documentation on cache matching, backend selection, and monitoring.
+The load balancer supports prompt cache (KV cache) reuse to reduce compute costs and latency. When a prompt is already cached on a backend, the backend can reuse the previously computed key-value pairs, significantly speeding up response generation. See [docs/components/balancer/PROMPT_CACHE.md](../docs/components/balancer/PROMPT_CACHE.md) for detailed documentation on cache matching, backend selection, and monitoring.
 
 Detected APIs include:
 - **OpenAI-compatible** - `/v1/models`, `/v1/chat/completions`

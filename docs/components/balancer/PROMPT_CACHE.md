@@ -1,8 +1,8 @@
 # Prompt Cache Documentation
 
 > **Note**: This document covers prompt cache behavior, backend selection with cache, and monitoring. For related documentation:
-> - [README.md#api-detection](../README.md#api-detection) - API detection
-> - [README.md#prompt-cache](../README.md#prompt-cache) - Overview
+> - [README.md#api-detection](../../README.md#api-detection) - API detection
+> - [README.md#prompt-cache](../../README.md#prompt-cache) - Overview
 
 ## Table of Contents
 
@@ -27,9 +27,9 @@
 The load balancer supports prompt cache (KV cache) reuse to reduce compute costs and latency. When a prompt is already cached on a backend, the backend can reuse the previously computed key-value pairs, significantly speeding up response generation.
 
 This feature is implemented in:
-- **BackendSelector**: [`selectBackendWithCache()`](../backend-selector.js#L234) - Cache-aware backend selection
-- **PromptCache**: [`PromptCache`](../backends/PromptCache.js) - Per-backend cache storage
-- **Balancer**: [`processQueueWhenBackendAvailable()`](../balancer.js#L340) - Queue processing with cache awareness
+- **BackendSelector**: [`selectBackendWithCache()`](../../llm-balancer/backend-selector.js#L234) - Cache-aware backend selection
+- **PromptCache**: [`PromptCache`](../../llm-balancer/backends/PromptCache.js) - Per-backend cache storage
+- **Balancer**: [`processQueueWhenBackendAvailable()`](../../llm-balancer/balancer.js#L340) - Queue processing with cache awareness
 
 See also: [PROMPT_CACHE.md#how-cache-matching-works](#how-cache-matching-works)
 
@@ -74,7 +74,7 @@ Request 2: model="qwen2.5", prompt="write a story"
           Backend must compute new KV pairs from scratch
 ```
 
-See tests: [backend-selector-cache-model-mismatch.test.js](../tests/unit/backend-selector-cache-model-mismatch.test.js)
+See tests: [backend-selector-cache-model-mismatch.test.js](../../llm-balancer/tests/unit/backend-selector-cache-model-mismatch.test.js)
 
 ## Backend Selection with Cache
 
@@ -87,7 +87,7 @@ The `BackendSelector.selectBackendWithCache()` method uses the following logic:
 3. **Prefer cache hits** - If cache matches found, prefer that backend even if busy (for queuing)
 4. **Fallback to priority** - If no cache matches, select by priority/availability
 
-Implementation: [backend-selector.js#L234-L352](../backend-selector.js#L234-L352)
+Implementation: [backend-selector.js#L234-L352](../../llm-balancer/backend-selector.js#L234-L352)
 
 ### Queue Behavior for Cache-Hit Backends
 
@@ -105,16 +105,16 @@ Decision: Return Backend 1 with status='busy'
 
 This behavior achieves **~90%+ cache hit rates** instead of distributing requests across all backends.
 
-See implementation: [balancer.js#L425-L428](../balancer.js#L425-L428)
+See implementation: [balancer.js#L425-L428](../../llm-balancer/balancer.js#L425-L428)
 
 ## Configuration
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `MAX_PROMPT_CACHE_SIZE` | 100 | Maximum number of cached prompts per backend |
-| `PROMPT_CACHE_SIMILARITY_THRESHOLD` | 0.8 | Minimum similarity score for cache hit (0.0 to 1.0) |
+| `MAX_PROMPT_CACHE_SIZE` | 5 | Maximum number of cached prompts per backend |
+| `PROMPT_CACHE_SIMILARITY_THRESHOLD` | 0.85 | Minimum similarity score for cache hit (0.0 to 1.0) |
 
-See configuration: [config.js](../config.js)
+See configuration: [config.js](../../llm-balancer/config.js)
 
 ## Monitoring
 
@@ -136,7 +136,7 @@ The `/debug/stats` endpoint provides per-backend cache statistics:
 }
 ```
 
-See implementation: [backend.ts#L442-L450](../backends/Backend.js#L442-L450)
+See implementation: [Backend.js#L442-L450](../../llm-balancer/backends/Backend.js#L442-L450)
 
 ### Cache Debug Endpoint
 
@@ -146,7 +146,7 @@ Enable debug mode (`DEBUG=true` in `.env`) to access:
 |-------|-------------|
 | `/debug/stats` | Summary statistics with cache metrics per backend |
 
-See: [README.md#debug-features](../README.md#debug-features)
+See: [README.md#debug-features](../../README.md#debug-features)
 
 ## Testing
 
@@ -154,9 +154,9 @@ Unit tests verify cache behavior:
 
 | Test File | Purpose |
 |-----------|---------|
-| [backend-selector-cache-busy.test.js](../tests/unit/backend-selector-cache-busy.test.js) | Cache prioritization when backends are busy |
-| [backend-selector-cache-model-mismatch.test.js](../tests/unit/backend-selector-cache-model-mismatch.test.js) | Model-specific cache matching |
-| [cache-prompt-caching.test.js](../tests/unit/cache-prompt-caching.test.js) | Cache storage and retrieval |
+| [backend-selector-cache-busy.test.js](../../llm-balancer/tests/unit/backend-selector-cache-busy.test.js) | Cache prioritization when backends are busy |
+| [backend-selector-cache-model-mismatch.test.js](../../llm-balancer/tests/unit/backend-selector-cache-model-mismatch.test.js) | Model-specific cache matching |
+| [cache-prompt-caching.test.js](../../llm-balancer/tests/unit/cache-prompt-caching.test.js) | Cache storage and retrieval |
 
 ## Limitations
 
@@ -172,4 +172,24 @@ Unit tests verify cache behavior:
 3. **Monitor cache hit rates** - Use `/debug/stats` to track effectiveness
 4. **Adjust threshold carefully** - Lower threshold increases cache hits but may reduce accuracy
 
-See also: [README.md#troubleshooting](../README.md#troubleshooting)
+See also: [README.md#troubleshooting](../../README.md#troubleshooting)
+
+---
+
+## Related Documentation
+
+- [CONFIGURATION.md](CONFIGURATION.md) - Balancer configuration options
+- [DATA_FLOW.md](../../developer/DATA_FLOW.md#prompt-cache-system) - Data flow with prompt cache
+- [ARCHITECTURE.md](../../developer/ARCHITECTURE.md) - System architecture overview
+- [DOCUMENTATION_GUIDE.md](../../DOCUMENTATION_GUIDE.md) - Find documentation by role
+
+---
+
+## Need Help?
+
+If you can't find the documentation you need:
+
+1. Check the [DOCUMENTATION_GUIDE.md](../../DOCUMENTATION_GUIDE.md) for role-based navigation
+2. Review the [README.md](../../README.md) for project overview and quick links
+3. Check the [docs/OVERVIEW.md](../../OVERVIEW.md) for system architecture
+4. File an issue to request new documentation
