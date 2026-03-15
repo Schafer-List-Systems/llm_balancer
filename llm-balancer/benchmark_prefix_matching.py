@@ -195,7 +195,24 @@ def send_request(balancer_url: str, prompt: str, model: str, stream: bool, confi
                 print(f"    [DEBUG] message.reasoning={repr(reasoning_val[:30] if reasoning_val else None)}")
 
             # Handle both 'content' and 'reasoning' fields (content may be null in some backends)
-            content = message.get('content') or message.get('reasoning') or ''
+            # Note: Some models (like Qwen) return content in the 'reasoning' or 'reasoning_content' field
+            # instead of 'content', so we check multiple fields
+            content = message.get('content') or message.get('reasoning') or message.get('reasoning_content') or ''
+
+            # Validate response - if both content and reasoning are null/empty, this is an error
+            # This can happen when backends return invalid responses
+            if not content or len(content.strip()) == 0:
+                # Log the actual response for debugging
+                if config and config.debug:
+                    print(f"    [DEBUG] Empty response received - message={message}")
+                return RequestResult(
+                    success=False,
+                    prompt_id=0,
+                    first_chunk_time_ms=first_chunk_time_ms,
+                    total_time_ms=total_time_ms,
+                    response_content=None,
+                    error=f"Empty response from backend (content={message.get('content')}, reasoning={message.get('reasoning')})"
+                )
 
             return RequestResult(
                 success=True,
@@ -276,6 +293,19 @@ def send_request_streaming(balancer_url: str, prompt: str, model: str, config: O
             # Debug: show raw response details
             if config.debug:
                 print(f"    [DEBUG] delta.reasoning={repr(reasoning[:30] if reasoning else None)}")
+
+        # Validate response - if content is empty, this is an error
+        if not content or len(content.strip()) == 0:
+            if config and config.debug:
+                print(f"    [DEBUG] Empty streaming response - full_response={full_response}")
+            return RequestResult(
+                success=False,
+                prompt_id=0,
+                first_chunk_time_ms=first_chunk_time_ms,
+                total_time_ms=total_time_ms,
+                response_content=None,
+                error="Empty response from backend (streaming)"
+            )
 
         return RequestResult(
             success=True,
