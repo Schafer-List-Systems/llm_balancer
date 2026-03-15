@@ -175,15 +175,19 @@ const stats = pool.getStats();  // { totalBackends, healthyBackends, availableBa
 **Responsibilities**:
 - Select the best backend from a list
 - Implement priority-based selection algorithm
-- Model matching using regex patterns
+- Model matching using regex patterns (priority-first matching)
 - Health and availability filtering
+- Prompt cache hit detection and selection
+- Model support validation (distinguishes "busy" from "none")
 
 **Key Methods:**
 ```javascript
 selectBackend(backends, options) -> Backend|null  // Select best backend
 getAvailableBackends(backends) -> Backend[]       // Get sorted available backends
 hasAvailableBackend(backends, models) -> boolean  // Check if any backend available
+hasBackendForModel(backends, models) -> boolean   // Check model support (regardless of availability)
 getModelAvailabilityStats(backends) -> Object     // Get model availability stats
+selectBackendWithCache(backends, criterion, promptBody) -> ResultObject
 ```
 
 **Selection Algorithm:**
@@ -191,6 +195,44 @@ getModelAvailabilityStats(backends) -> Object     // Get model availability stat
 2. Sort by priority (descending)
 3. Select first available backend
 4. If none available, queue request
+
+**selectBackendWithCache() Return Object:**
+
+Returns a status-based result object:
+
+```javascript
+{
+  status: 'found' | 'busy' | 'none',
+  backend: Backend|null,
+  actualModel: string|null,
+  message: string|null
+}
+```
+
+**Status Values:**
+
+| Status | Meaning | Queue Behavior |
+|--------|---------|----------------|
+| `'found'` | Backend found and available | Process immediately |
+| `'busy'` | Backend exists for model but all are currently busy | Stay in queue |
+| `'none'` | No backend supports this model at all | Reject immediately (queue depth = 0) |
+
+**Example Usage:**
+
+```javascript
+const result = selector.selectBackendWithCache(backends, criterion, promptBody);
+
+if (result.status === 'found') {
+  // Backend available - process the request
+  processRequest(request, result.backend);
+} else if (result.status === 'busy') {
+  // Backend exists but all busy - stay in queue
+  queueRequest(request);
+} else if (result.status === 'none') {
+  // No backend supports model - reject immediately
+  reject(request, new Error(result.message));
+}
+```
 
 ---
 

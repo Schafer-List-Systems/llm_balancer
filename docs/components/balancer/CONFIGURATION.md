@@ -92,6 +92,17 @@ QUEUE_TIMEOUT=30000
 - Requests are queued when all backends are busy
 - FIFO ordering within queue
 - Requests rejected if queue is full or timeout expires
+- Requests rejected immediately if no backend supports the model (queue depth stays at 0)
+
+### Rejection Reasons
+
+Requests may be rejected for three reasons:
+
+| Reason | Condition | Queue Depth |
+|--------|-----------|-------------|
+| Queue Full | `queue.length >= MAX_QUEUE_SIZE` | Full (at capacity) |
+| Timeout Expired | Request waited longer than `QUEUE_TIMEOUT` | Being cleared |
+| No Backend Supports Model | Model not available on any healthy backend | Always 0 |
 
 ## Example Configuration
 

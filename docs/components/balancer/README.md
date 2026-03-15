@@ -18,11 +18,13 @@ The balancer provides:
 - **Concurrency Limiting**: Configurable max parallel requests per backend
 - **Health Monitoring**: Automatic detection of unhealthy backends
 - **Multi-API Support**: Auto-detects OpenAI, Anthropic, Google, and Ollama APIs
+- **Model Validation**: Requests for unsupported models are rejected immediately (queue depth stays at 0)
 
 ## Documentation
 
 - [Configuration](CONFIGURATION.md) - Balancer-specific configuration
 - [API](API.md) - Balancer API details
+- [Queue Processing](QUEUE_PROCESSING.md) - Queue processing flow and behavior
 - [Usage](../../user/USAGE.md) - How to use the balancer
 
 ## Quick Start

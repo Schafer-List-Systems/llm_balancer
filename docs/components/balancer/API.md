@@ -143,10 +143,28 @@ curl http://localhost:3001/health/http://host1:11434
 
 ### 503 Service Unavailable
 
+**No backends configured or all backends unhealthy:**
+
 ```json
 {
   "error": "Service Unavailable",
   "message": "No backends configured or all backends unhealthy"
+}
+```
+
+**No backend supports this model:**
+
+```json
+{
+  "error": "Service Unavailable",
+  "message": "No backend supports this model",
+  "queueStats": [{
+    "depth": 0,
+    "maxQueueSize": 100,
+    "queueTimeout": 900000,
+    "oldestRequestAge": 0,
+    "isFull": false
+  }]
 }
 ```
 
