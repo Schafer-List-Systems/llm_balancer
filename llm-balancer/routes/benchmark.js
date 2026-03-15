@@ -7,7 +7,7 @@ const config = configModule.loadConfig();
 /**
  * Benchmark Router: Async Job Pattern for Long-Running Benchmarks
  *
- * Benchmarks can take minutes to complete (especially full prefix matching tests).
+ * Benchmarks can take minutes to complete (especially full prompt caching tests).
  * Rather than blocking HTTP responses, we use a job queue pattern:
  * 1. POST creates a job with ID and returns {jobId, status: 'queued'}
  * 2. Frontend polls GET /results/{jobId} every 500ms
@@ -255,10 +255,10 @@ router.post('/streaming', async (req, res) => {
 });
 
 /**
- * POST /benchmark/prefix-match
- * Run prefix matching benchmark across multiple backends
+ * POST /benchmark/prompt-caching
+ * Run prompt caching benchmark across multiple backends
  */
-router.post('/prefix-match', async (req, res) => {
+router.post('/prompt-caching', async (req, res) => {
   try {
     const { options } = req.body;
 
@@ -273,10 +273,10 @@ router.post('/prefix-match', async (req, res) => {
     const mergedOptions = { ...defaultOptions, ...options };
 
     // Create job
-    const job = createBenchmarkJob('prefix-match', null, mergedOptions);
+    const job = createBenchmarkJob('prompt-caching', null, mergedOptions);
 
     // Run benchmark in background
-    runPrefixMatchBenchmark(job, mergedOptions)
+    runPromptCachingBenchmark(job, mergedOptions)
       .then(result => setBenchmarkResult(job.jobId, result))
       .catch(error => setBenchmarkError(job.jobId, error));
 
@@ -655,9 +655,9 @@ async function runStreamingBenchmark(job, backendUrl, options) {
 }
 
 /**
- * Prefix Matching Benchmark - Test KV cache reuse across multiple backends
+ * Prompt Caching Benchmark - Test KV cache reuse across multiple backends
  */
-async function runPrefixMatchBenchmark(job, options) {
+async function runPromptCachingBenchmark(job, options) {
   // Get list of backends
   let backendsList;
   try {
@@ -802,7 +802,7 @@ async function runPrefixMatchBenchmark(job, options) {
   const improvement = ((firstAvg - secondAvg) / firstAvg * 100);
 
   return {
-    test: 'prefix-match',
+    test: 'prompt-caching',
     backendsCount: backendsList.length,
     results: {
       successfulPairs: successfulPairs.length,

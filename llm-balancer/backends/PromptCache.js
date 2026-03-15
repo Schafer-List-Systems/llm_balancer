@@ -267,7 +267,7 @@ class PromptCache {
       const sim = this.cosineSimilarity(fp, entry.fingerprint);
       if (sim > 0.99) {
         console.debug(`[PromptCache] Near-exact match found (similarity:${sim.toFixed(4)}) - extending entry`);
-        // Extend existing entry (prefix continuation)
+        // Extend existing entry (prompt caching continuation)
         entry.prompt = prompt;
         if (id) entry.id = id;
         this.moveToFront(entry);

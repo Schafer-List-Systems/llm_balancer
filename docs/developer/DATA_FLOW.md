@@ -795,7 +795,7 @@ timeline
 
 ### Overview
 
-The prompt cache enables KV cache reuse by storing prompts per backend. When similar prompts are detected, backends can reuse cached KV prefixes, significantly reducing generation time.
+The prompt cache enables KV cache reuse by storing prompts per backend. When similar prompts are detected, backends can reuse cached KV cache, significantly reducing generation time.
 
 ### Architecture
 

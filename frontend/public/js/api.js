@@ -488,13 +488,13 @@ class ApiClient {
   }
 
   /**
-   * Run prefix matching benchmark across all backends
+   * Run prompt caching benchmark across all backends
    * @param {Object} options - Benchmark options
    * @returns {Promise<{jobId: string, status: string}>}
    */
-  async runPrefixMatchBenchmark(options = {}) {
+  async runPromptCachingBenchmark(options = {}) {
     try {
-      const data = await this.request('/benchmark/prefix-match', {
+      const data = await this.request('/benchmark/prompt-caching', {
         method: 'POST',
         body: JSON.stringify({ options })
       });

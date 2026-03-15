@@ -179,8 +179,8 @@ document.addEventListener('DOMContentLoaded', () => {
                   <input type="text" id="benchmarkModel" class="benchmark-option-input" value="qwen/qwen3.5-35b-a3b" />
                 </div>
 
-                <button id="runPrefixMatchBenchmark" class="button button-primary">
-                  Run Prefix Matching Benchmark
+                <button id="runPromptCachingBenchmark" class="button button-primary">
+                  Run Prompt Caching Benchmark
                 </button>
               </div>
 
@@ -1383,11 +1383,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Run prefix match benchmark button
-    const runPrefixMatchBtn = document.getElementById('runPrefixMatchBenchmark');
-    if (runPrefixMatchBtn) {
-      runPrefixMatchBtn.addEventListener('click', () => {
-        runPrefixMatchBenchmark();
+    // Run prompt caching benchmark button
+    const runPromptCachingBtn = document.getElementById('runPromptCachingBenchmark');
+    if (runPromptCachingBtn) {
+      runPromptCachingBtn.addEventListener('click', () => {
+        runPromptCachingBenchmark();
       });
     }
 
@@ -1612,13 +1612,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Run prefix matching benchmark
+   * Run prompt caching benchmark
    */
-  async function runPrefixMatchBenchmark() {
+  async function runPromptCachingBenchmark() {
     const progress = document.getElementById('multiBenchmarkProgress');
     const progressFill = document.getElementById('benchmarkProgressFill');
     const progressText = document.getElementById('benchmarkProgressText');
-    const btn = document.getElementById('runPrefixMatchBenchmark');
+    const btn = document.getElementById('runPromptCachingBenchmark');
 
     // Get options
     const numPrompts = parseInt(document.getElementById('benchmarkNumPrompts').value) || 4;
@@ -1630,7 +1630,7 @@ document.addEventListener('DOMContentLoaded', () => {
     progressText.textContent = 'Initializing benchmark...';
     btn.disabled = true;
 
-    const result = await apiClient.runPrefixMatchBenchmark({ numPrompts, tokens, model });
+    const result = await apiClient.runPromptCachingBenchmark({ numPrompts, tokens, model });
 
     if (result.success) {
       progressFill.style.width = '10%';
@@ -1738,21 +1738,21 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
         `;
-      } else if (item.type === 'prefix-match') {
-        const prefix = results || {};
+      } else if (item.type === 'prompt-caching') {
+        const caching = results || {};
         resultPreview = `
-          <div class="benchmark-result-prefix">
+          <div class="benchmark-result-prompt-caching">
             <div class="result-row">
               <span class="result-label">Successful Pairs</span>
-              <span class="result-value">${prefix.successfulPairs || 0}/${prefix.totalPairs || 0}</span>
+              <span class="result-value">${caching.successfulPairs || 0}/${caching.totalPairs || 0}</span>
             </div>
             <div class="result-row">
               <span class="result-label">Overall Speedup</span>
-              <span class="result-value">${prefix.overallSpeedup ? prefix.overallSpeedup + 'x' : 'N/A'}</span>
+              <span class="result-value">${caching.overallSpeedup ? caching.overallSpeedup + 'x' : 'N/A'}</span>
             </div>
             <div class="result-row">
               <span class="result-label">Improvement</span>
-              <span class="result-value">${prefix.improvementPercent ? prefix.improvementPercent + '%' : 'N/A'}</span>
+              <span class="result-value">${caching.improvementPercent ? caching.improvementPercent + '%' : 'N/A'}</span>
             </div>
           </div>
         `;

@@ -137,7 +137,7 @@ describe('ModelMatcher', () => {
       expect(result.actualModel).toBe('Llama-3-70B'); // First model in list
     });
 
-    it('should match using prefix pattern', () => {
+    it('should match using prompt caching pattern', () => {
       const backends = [createMockBackend('http://backend1:11434', true, 1, ['llama-3-8b', 'mistral'])];
       const result = ModelMatcher.findBestMatchAcrossBackends('^llama.*', backends);
 

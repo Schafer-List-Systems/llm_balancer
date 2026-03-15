@@ -2076,7 +2076,7 @@ body.dark-mode .cached-prompt-content::-webkit-scrollbar-track {
 
 .benchmark-result-speed,
 .benchmark-result-streaming,
-.benchmark-result-prefix {
+.benchmark-result-prompt-caching {
   margin-top: 0.75rem;
 }
 
