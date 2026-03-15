@@ -562,7 +562,15 @@ describe('BackendSelector', () => {
       expect(result.backend.url).toBe('http://high-prio:11434'); // Regular selection (highest priority)
     });
 
-    it('should skip backend with cache hit if backend is at max concurrency', () => {
+    it('should return cache-hit backend even when at max concurrency (for queuing)', () => {
+      /**
+       * When a backend has a cache hit for a prompt, that backend should be returned
+       * even if it's at max concurrency. This allows the balancer to queue for that
+       * specific backend, achieving better cache hit rates.
+       *
+       * This is the FIX for the bug where requests were distributed to other backends
+       * when the cache-hit backend was busy, defeating the purpose of prompt caching.
+       */
       const backends = [
         (() => {
           const b = createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {
@@ -580,7 +588,10 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.backend.url).toBe('http://high-prio:11434'); // Skip cache-hit backend, use high priority
+      // Should return cache-hit backend (low priority) even though it's busy
+      // The balancer will queue for this backend, achieving ~90%+ cache hit rate
+      expect(result.backend.url).toBe('http://low-prio:11434');
+      expect(result.status).toBe('busy'); // Status indicates backend is busy but should queue
     });
 
     it('should return lowest priority cache-matching backend when all have similar cache matches', () => {

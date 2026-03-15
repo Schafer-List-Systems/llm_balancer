@@ -203,6 +203,10 @@ The debug stats include per-backend metrics:
 
 The load balancer automatically detects which APIs each backend supports using a probe-based detection algorithm. See [BACKEND_INFO.md](BACKEND_INFO.md) for detailed documentation.
 
+## Prompt Cache
+
+The load balancer supports prompt cache (KV cache) reuse to reduce compute costs and latency. When a prompt is already cached on a backend, the backend can reuse the previously computed key-value pairs, significantly speeding up response generation. See [PROMPT_CACHE.md](PROMPT_CACHE.md) for detailed documentation on cache matching, backend selection, and monitoring.
+
 Detected APIs include:
 - **OpenAI-compatible** - `/v1/models`, `/v1/chat/completions`
 - **Anthropic** - `/v1/messages`
