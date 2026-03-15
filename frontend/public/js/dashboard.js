@@ -154,6 +154,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <button id="toggleDebug" class="toggle-button">Show Debug</button>
           </div>
           <div id="debugSection" class="debug-section" style="display: none;">
+            <div class="debug-header-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+              <button id="refreshDebug" class="button button-secondary">Refresh</button>
+            </div>
+
             <div class="debug-stats">
               <div class="debug-stat-item">
                 <span class="debug-stat-label">Debug Enabled</span>
@@ -161,8 +165,17 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             </div>
 
-            <div class="debug-controls">
-              <button id="refreshDebug" class="button button-secondary">Refresh</button>
+            <!-- Cache Control Buttons -->
+            <div id="cacheControls" class="debug-controls" style="display: none;">
+              <h3 class="debug-section-header">Cache Management</h3>
+              <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
+            </div>
+
+            <!-- Queue Viewer -->
+            <div id="queueViewer" class="queue-viewer" style="display: none;">
+              <h3 class="debug-section-header">Request Queue</h3>
+              <div id="queueStatsSummary" class="queue-stats-summary"></div>
+              <div id="queueContents" class="queue-contents"></div>
             </div>
 
             <div id="debugBackendStatsContainer" class="debug-backend-stats-container">
@@ -264,6 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
       `).join('');
+
+
       return;
     }
 
@@ -770,20 +785,166 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Format age in milliseconds to human readable
+  function formatAge(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;
+    return `${(ms / 3600000).toFixed(1)}h`;
+  }
+
+  // Show toast notification
+  function showToast(message, type = 'info') {
+    // Remove existing toast if any
+    const existingToast = document.getElementById('toastNotification');
+    if (existingToast) existingToast.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'toastNotification';
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${type === 'success' ? 'var(--success-color)' : type === 'error' ? 'var(--danger-color)' : 'var(--primary-color)'};
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      z-index: 10000;
+      font-size: 14px;
+      animation: slideIn 0.3s ease;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  // Clear all caches
+  async function clearAllCaches() {
+    const result = await apiClient.resetCache(null);
+    if (result.success) {
+      showToast('All caches cleared successfully', 'success');
+      loadDebugData(); // Refresh stats
+      if (debugAvailable) loadQueueContents();
+    } else {
+      showToast(`Failed to clear caches: ${result.error}`, 'error');
+    }
+  }
+
+  // Clear specific backend cache
+  async function clearBackendCache(backendUrl) {
+    const result = await apiClient.resetCache(backendUrl);
+    if (result.success) {
+      showToast(`Cache cleared for ${formatUrl(backendUrl)}`, 'success');
+      loadDebugData();
+      if (debugAvailable) loadQueueContents();
+    } else {
+      showToast(`Failed to clear cache: ${result.error}`, 'error');
+    }
+  }
+
+  // Load queue contents
+  async function loadQueueContents() {
+    const [statsResult, contentsResult] = await Promise.all([
+      apiClient.getQueueStats(),
+      apiClient.getQueueContents()
+    ]);
+
+    // Display stats summary
+    const statsSummary = document.getElementById('queueStatsSummary');
+    if (statsResult.success && statsResult.data) {
+      const { maxQueueSize, queueTimeout, queues } = statsResult.data;
+      const totalQueued = contentsResult.data?.totalQueued || 0;
+
+      statsSummary.innerHTML = `
+        <div class="queue-stat-item">
+          <span class="queue-stat-label">Max Queue Size</span>
+          <span class="queue-stat-value">${maxQueueSize}</span>
+        </div>
+        <div class="queue-stat-item">
+          <span class="queue-stat-label">Queue Timeout</span>
+          <span class="queue-stat-value">${queueTimeout}ms</span>
+        </div>
+        <div class="queue-stat-item">
+          <span class="queue-stat-label">Total Queued</span>
+          <span class="queue-stat-value">${totalQueued}</span>
+        </div>
+      `;
+    }
+
+    // Display queue contents
+    const queueContents = document.getElementById('queueContents');
+    if (contentsResult.success && contentsResult.data) {
+      const { contents, totalQueued, maxQueueSize } = contentsResult.data;
+
+      if (contents.length === 0) {
+        queueContents.innerHTML = '<p class="debug-empty">Queue is empty</p>';
+        return;
+      }
+
+      queueContents.innerHTML = contents.map(req => `
+        <div class="queue-item">
+          <div class="queue-item-header">
+            <span class="queue-index">#${req.index}</span>
+            <span class="queue-age">${formatAge(req.age)} old</span>
+          </div>
+          <div class="queue-item-info">
+            <div class="queue-info-row">
+              <span class="queue-label">Criterion</span>
+              <span class="queue-value">${typeof req.criterion === 'string' ? req.criterion : JSON.stringify(req.criterion)}</span>
+            </div>
+            <div class="queue-info-row">
+              <span class="queue-label">Model</span>
+              <span class="queue-value">${req.requestData?.model || 'N/A'}</span>
+            </div>
+            <div class="queue-info-row">
+              <span class="queue-label">API Type</span>
+              <span class="queue-value">${req.requestData?.apiType || 'unknown'}</span>
+            </div>
+            <div class="queue-info-row">
+              <span class="queue-label">Timed Out</span>
+              <span class="queue-value">${req.timedOut ? 'Yes' : 'No'}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
   // Toggle debug section
   function toggleDebugSection() {
     const debugSection = document.getElementById('debugSection');
     const toggleButton = document.getElementById('toggleDebug');
+    const refreshSection = document.getElementById('refreshSection');
+    const cacheControls = document.getElementById('cacheControls');
+    const queueViewer = document.getElementById('queueViewer');
 
     if (debugSection.style.display === 'none') {
       debugSection.style.display = 'block';
       toggleButton.textContent = 'Hide Debug';
       toggleButton.classList.add('active');
+
+      // Show refresh button and debug controls only when debug is shown
+      if (refreshSection) refreshSection.style.display = 'flex';
+      if (cacheControls) cacheControls.style.display = 'block';
+      if (queueViewer) queueViewer.style.display = 'block';
+
       loadDebugData();
+      if (window.debugAvailable) loadQueueContents();
     } else {
       debugSection.style.display = 'none';
       toggleButton.textContent = 'Show Debug';
       toggleButton.classList.remove('active');
+
+      // Hide refresh button and debug controls when debug is hidden
+      if (refreshSection) refreshSection.style.display = 'none';
+      if (cacheControls) cacheControls.style.display = 'none';
+      if (queueViewer) queueViewer.style.display = 'none';
     }
   }
 
@@ -816,7 +977,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    container.innerHTML = backendStats.map(backend => {
+    // Store the HTML to render
+    const html = backendStats.map(backend => {
       const pc = backend.promptCacheStats || {};
       const perf = backend.performanceStats || {};
 
@@ -846,6 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="backend-stats-header">
             <h3 class="backend-name">${formatUrl(backend.url)}</h3>
             <span class="backend-request-count">Requests: ${backend.requestCount || 0}</span>
+            <button class="cache-clear-btn-inline button button-secondary button-small" data-backend-url="${backend.url}">Clear Cache</button>
           </div>
 
           <div class="stats-grid">
@@ -940,6 +1103,18 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
     }).join('');
+
+    // Render the HTML
+    container.innerHTML = html;
+
+    // Add event listeners for cache clear buttons
+    container.querySelectorAll('.cache-clear-btn-inline').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const backendUrl = btn.dataset.backendUrl;
+        clearBackendCache(backendUrl);
+      });
+    });
   }
 
   // Clear debug history - now a no-op since we don't track requests
@@ -991,6 +1166,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const apiClient = window.apiClient;
 
+    // Check if debug endpoints are available
+    const debugCheck = await apiClient.checkDebugAvailability();
+    window.debugAvailable = debugCheck.debugAvailable;
+
     // Add event listener for debug toggle
     const toggleButton = document.getElementById('toggleDebug');
     if (toggleButton) {
@@ -998,14 +1177,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Add event listeners for debug controls
-    const refreshButton = document.getElementById('refreshDebug');
     const clearButton = document.getElementById('clearDebug');
     const backendFilter = document.getElementById('backendFilter');
     const requestLimit = document.getElementById('requestLimit');
-
-    if (refreshButton) {
-      refreshButton.addEventListener('click', loadDebugData);
-    }
 
     if (clearButton) {
       clearButton.addEventListener('click', clearDebugHistory);
@@ -1017,6 +1191,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (requestLimit) {
       requestLimit.addEventListener('change', loadDebugData);
+    }
+
+    // Add event listener for cache clear all button
+    const clearAllCacheBtn = document.getElementById('clearAllCache');
+    if (clearAllCacheBtn) {
+      clearAllCacheBtn.addEventListener('click', clearAllCaches);
     }
 
     // Add event listener for collapsible sections
@@ -1106,6 +1286,14 @@ document.addEventListener('DOMContentLoaded', () => {
       renderDashboard();
 
       loadingContainer.style.display = 'none';
+
+      // Show/hide debug controls based on availability
+      const cacheControls = document.getElementById('cacheControls');
+      const queueViewer = document.getElementById('queueViewer');
+      if (debugCheck.debugAvailable) {
+        if (cacheControls) cacheControls.style.display = 'block';
+        if (queueViewer) queueViewer.style.display = 'block';
+      }
 
       // Start polling for automatic refresh
       apiClient.setUpdateCallback((updatedData) => {

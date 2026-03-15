@@ -209,6 +209,52 @@ class ApiClient {
   }
 
   /**
+   * Reset prompt cache for specific backend or all backends
+   * @param {string|null} backendUrl - Optional backend URL. If null, resets all caches
+   */
+  async resetCache(backendUrl = null) {
+    try {
+      const query = backendUrl ? `?backend=${encodeURIComponent(backendUrl)}` : '';
+      await this.request(`/cache/reset${query}`, { method: 'POST' });
+      this.lastUpdateTime = new Date();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get queue contents (not just stats)
+   */
+  async getQueueContents() {
+    try {
+      const data = await this.request('/queue/contents');
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Detect if debug endpoints are available
+   * Returns { debugAvailable: boolean }
+   */
+  async checkDebugAvailability() {
+    try {
+      const result = await this.getQueueStats();
+      // If response has error or is 404, debug is not available
+      // The queue/stats endpoint returns 404 when debug mode is disabled
+      if (result.success && result.data && !result.data.error) {
+        return { debugAvailable: true };
+      }
+      return { debugAvailable: false };
+    } catch (error) {
+      return { debugAvailable: false };
+    }
+  }
+
+  /**
    * Perform manual health check for a specific backend
    */
   async checkBackendHealth(backendUrl) {
