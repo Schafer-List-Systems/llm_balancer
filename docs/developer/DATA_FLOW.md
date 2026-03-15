@@ -885,6 +885,69 @@ sequenceDiagram
     Backend-->>RequestProcessor: Done
 ```
 
+---
+
+### Sequential vs Concurrent Request Behavior
+
+The timing of requests significantly impacts cache hit behavior:
+
+#### Sequential Requests (Wait for first to complete)
+
+```
+Time →
+Request 1: ━━━━━━━━━━━━▶ Completed
+                    Request 2: ━━━━━━━━━━━━▶ Completed
+
+Cache State:
+- Request 1: Miss → Prompt stored
+- Request 2: Guaranteed Hit → Same backend selected
+```
+
+**Behavior:**
+- First request completes → prompt fingerprint stored in cache
+- Second request sees populated cache → **guaranteed cache hit**
+- **Same backend** serves both requests (deterministic)
+- `hits: 1, misses: 1`
+
+#### Concurrent Requests (Both arrive before first completes)
+
+```
+Time →
+Request 1: ━━━━━━━━━━━━▶ Completed
+Request 2: ━━━━━━━━━━━━▶ Completed
+
+Cache State:
+- Both requests may see empty cache
+- Each may be assigned to different backend
+- First request's cache populated after dequeue
+```
+
+**Behavior:**
+- Both requests queued before either completes
+- Cache lookup happens at dequeue time (cache may be empty)
+- **Different backends** may serve each request
+- `hits: 0, misses: 2` (if both miss)
+
+#### Key Insight
+
+**Sequential requests guarantee cache reuse:**
+
+| Scenario | Cache Hit | Same Backend |
+|----------|-----------|--------------|
+| Sequential (wait) | Guaranteed | Yes |
+| Concurrent (no wait) | Not guaranteed | Not guaranteed |
+
+This is critical for KV cache benefits:
+
+- **Sequential**: Second request benefits from first request's cached KV prefixes
+- **Concurrent**: Neither request may benefit from cache reuse
+
+**Configuration Impact:**
+```javascript
+// High queueTimeout with many concurrent requests → more cache misses
+// Low queueTimeout with sequential requests → more cache hits
+```
+
 ## Related Documentation
 
 - [System Architecture](ARCHITECTURE.md) - High-level architecture

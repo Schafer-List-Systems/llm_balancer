@@ -180,6 +180,42 @@ curl http://localhost:3001/queue/contents
 curl http://localhost:3001/queue/stats
 ```
 
+## Prompt Cache Behavior
+
+The LLM Balancer uses fingerprint-based prompt caching to enable KV cache reuse. Understanding cache behavior is important for optimization:
+
+### Sequential vs Concurrent Requests
+
+- **Sequential requests** (wait for first to complete): Guaranteed cache hit, same backend serves both requests
+- **Concurrent requests** (both arrive before first completes): May have cache misses, different backends may serve each request
+
+This impacts KV cache benefits - sequential requests maximize cache reuse potential.
+
+### Cache Statistics
+
+View cache statistics per backend:
+
+```bash
+curl http://localhost:3001/stats
+```
+
+Look for `promptCacheStats` in the response:
+- `hits`: Successful cache matches
+- `misses`: Cache lookups with no match
+- `size`: Number of cached prompts
+- `similarityMatches`: Similarity-based cache hits
+- `idMatches`: ID-based exact matches
+
+### Cache Configuration
+
+Configure cache behavior via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_FINGERPRINT_TOKENS` | 200 | Maximum tokens for fingerprint computation |
+| `PROMPT_CACHE_SIMILARITY_THRESHOLD` | 0.85 | Minimum similarity for cache match (0-1) |
+| `maxPromptCacheSize` | 100 | Maximum cached prompts per backend |
+
 ## Environment Variables
 
 | Variable | Default | Description |
