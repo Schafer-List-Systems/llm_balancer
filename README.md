@@ -116,7 +116,11 @@ The load balancer will be available at http://localhost:3001 and the dashboard a
 |-------|-------------|---------|
 | `/v1/messages*` | API messages endpoint (Anthropic-compatible) | `POST /v1/messages` |
 | `/api/*` | Ollama API routes | `GET /api/generate`, `POST /api/chat` |
-| `/models*` | Model list endpoint | `GET /models` |
+| `/models*` | Model list endpoint (routes to backend) | `GET /models` |
+| `/v1/models` | **Aggregated models** (OpenAI/Groq backends) | `GET /v1/models` |
+| `/openai/v1/models` | **Aggregated Groq models** | `GET /openai/v1/models` |
+| `/v1beta/models` | **Aggregated Google models** | `GET /v1beta/models` |
+| `/api/tags` | **Aggregated Ollama models** | `GET /api/tags` |
 | `/health` | Health check | `GET /health` |
 | `/backends` | Backend statistics | `GET /backends` |
 | `/stats` | Complete system statistics | `GET /stats` |
@@ -124,6 +128,8 @@ The load balancer will be available at http://localhost:3001 and the dashboard a
 | `/queue/contents` | View queued requests (debug mode) | `GET /queue/contents` |
 | `/cache/reset` | Reset prompt caches (debug mode) | `POST /cache/reset` |
 | `/` | Service info | `GET /` |
+
+**Note**: The new model listing endpoints (starting with `/v1/models`, `/v1beta/models`, etc.) aggregate models from all healthy backends of a specific API type, whereas `/models*` routes requests to a single backend.
 
 ## Example Usage
 
@@ -152,6 +158,22 @@ curl http://localhost:3001/api/generate \
 
 ```bash
 curl http://localhost:3001/health
+```
+
+### List Models (Aggregated)
+
+```bash
+# OpenAI-compatible models (from OpenAI and Groq backends)
+curl http://localhost:3001/v1/models
+
+# Ollama models (from Ollama backends)
+curl http://localhost:3001/api/tags
+
+# Google Vertex AI models (from Google backends)
+curl http://localhost:3001/v1beta/models
+
+# Groq-compatible models
+curl http://localhost:3001/openai/v1/models
 ```
 
 ### Get Backend Statistics

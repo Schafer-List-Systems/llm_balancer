@@ -14,8 +14,14 @@ const OpenAIHealthCheck = require('./interfaces/implementations/OpenAIHealthChec
 const AnthropicHealthCheck = require('./interfaces/implementations/AnthropicHealthCheck');
 const GoogleHealthCheck = require('./interfaces/implementations/GoogleHealthCheck');
 
+// ModelsAggregator for aggregating model listings across backends
+const ModelsAggregator = require('./models-aggregator');
+
 const app = express();
 const config = configModule.loadConfig();
+
+// Initialize ModelsAggregator after config is loaded
+const modelsAggregator = new ModelsAggregator(config.healthCheckTimeout);
 
 // Enable CORS for frontend dashboard
 app.use((req, res, next) => {
@@ -290,6 +296,42 @@ app.all('/models*', async (req, res) => {
 });
 
 /**
+ * Route: OpenAI-compatible models listing - aggregates models from all OpenAI and Groq backends
+ * Returns unified model list filtered by health status
+ */
+app.get('/v1/models', (req, res) => {
+  const models = modelsAggregator.aggregateForOpenAI(backendPool);
+  res.json(models);
+});
+
+/**
+ * Route: Ollama models listing - aggregates models from all Ollama backends
+ * Returns Ollama-formatted model list filtered by health status
+ */
+app.get('/api/tags', (req, res) => {
+  const models = modelsAggregator.aggregateForOllama(backendPool);
+  res.json(models);
+});
+
+/**
+ * Route: Google Vertex AI models listing - aggregates models from all Google backends
+ * Returns Google-formatted model list filtered by health status
+ */
+app.get('/v1beta/models', (req, res) => {
+  const models = modelsAggregator.aggregateForGoogle(backendPool);
+  res.json(models);
+});
+
+/**
+ * Route: Groq-compatible models listing - aggregates models from all Groq backends
+ * Returns OpenAI-compatible format (Groq uses same format as OpenAI)
+ */
+app.get('/openai/v1/models', (req, res) => {
+  const models = modelsAggregator.aggregateForGroq(backendPool);
+  res.json(models);
+});
+
+/**
  * Route: Root - show info
  */
 app.get('/', (req, res) => {
@@ -319,6 +361,12 @@ app.get('/', (req, res) => {
       anthropic_api: '/v1/messages*',
       ollama_api: '/api/*',
       models: '/models*',
+      model_listings: {
+        openai: '/v1/models',
+        ollama: '/api/tags',
+        google: '/v1beta/models',
+        groq: '/openai/v1/models'
+      },
       health: '/health',
       stats: '/stats'
     },
@@ -876,6 +924,11 @@ async function startServer() {
       console.log(`  Anthropic API:  /v1/messages*`);
       console.log(`  Ollama API:     /api/*`);
       console.log(`  Models:         /models*`);
+      console.log(`  Model Listings:`);
+      console.log(`    OpenAI:       /v1/models`);
+      console.log(`    Ollama:       /api/tags`);
+      console.log(`    Google:       /v1beta/models`);
+      console.log(`    Groq:         /openai/v1/models`);
       console.log(`  Health:         /health`);
       console.log(`  Stats:          /stats`);
       console.log(`\n${'='.repeat(60)}\n`);

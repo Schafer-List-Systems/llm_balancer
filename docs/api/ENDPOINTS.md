@@ -82,11 +82,62 @@ curl -X POST http://localhost:3001/api/chat \
   }'
 ```
 
-#### `/api/tags` - List Models
+---
 
-```bash
-curl http://localhost:3001/api/tags
+### `GET /api/tags` - Ollama Models (Aggregated)
+
+**Description**: Returns aggregated model listings from all healthy Ollama backends.
+
+**Response**:
+```json
+{
+  "models": [
+    {
+      "name": "llama3:latest",
+      "model": "llama3:latest",
+      "size": 4700000000,
+      "digest": "abc123def456",
+      "details": {
+        "format": "ollama",
+        "family": "llama",
+        "families": ["llama"],
+        "parameter_size": "7B",
+        "quantization_level": "q4_0"
+      }
+    },
+    {
+      "name": "mistral:7b",
+      "size": 4100000000,
+      "digest": "def456abc789",
+      "details": {
+        "format": "ollama",
+        "family": "llama",
+        "families": ["llama"],
+        "parameter_size": "7B",
+        "quantization_level": "q4_0"
+      }
+    }
+  ]
+}
 ```
+
+**Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Model name |
+| `model` | string | Model name (duplicate for compatibility) |
+| `size` | number | Estimated model size in bytes |
+| `digest` | string | SHA256 digest of the model |
+| `details` | object | Model metadata |
+| `details.format` | string | API format (e.g., "ollama") |
+| `details.family` | string | Model family (e.g., "llama", "gpt", "gemini") |
+| `details.parameter_size` | string | Estimated parameter count (e.g., "7B", "70B") |
+
+**Note**: This endpoint aggregates models from all healthy Ollama backends. Duplicate model names across backends are handled by including the model only once (from the first backend).
+
+---
+
+#### `/api/generate` - Generate Response
 
 **Request Body** (for generate):
 ```json
@@ -113,6 +164,195 @@ curl http://localhost:3001/api/tags
 ```bash
 curl http://localhost:3001/models
 ```
+
+---
+
+## Model Listing Endpoints (Aggregated)
+
+These endpoints provide aggregated model listings from all healthy backends of a specific API type. Unlike the routed endpoints, these aggregate models across backends and filter by health status.
+
+### `GET /v1/models` - OpenAI-Compatible Models
+
+**Description**: Returns aggregated model listings from all healthy OpenAI and Groq-compatible backends.
+
+**Response**:
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "llama-3.1-70b",
+      "object": "model",
+      "owned_by": "bgroqp1a2b3c"
+    },
+    {
+      "id": "gpt-4",
+      "object": "model",
+      "owned_by": "bopena1b2c3d"
+    },
+    {
+      "id": "gpt-3.5-turbo",
+      "object": "model",
+      "owned_by": "bopena1b2c3d"
+    }
+  ]
+}
+```
+
+**Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `object` | string | Always "list" |
+| `data` | array | Array of model objects |
+| `data[].id` | string | Model identifier |
+| `data[].object` | string | Always "model" |
+| `data[].owned_by` | string | Backend identifier (hash of backend URL) |
+
+**Example**:
+```bash
+curl http://localhost:3001/v1/models
+```
+
+---
+
+### `GET /openai/v1/models` - Groq-Compatible Models
+
+**Description**: Returns aggregated model listings from all healthy Groq backends. Uses the same format as `/v1/models`.
+
+**Response**: Same as `/v1/models`
+
+**Example**:
+```bash
+curl http://localhost:3001/openai/v1/models
+```
+
+---
+
+### `GET /v1beta/models` - Google Vertex AI Models
+
+**Description**: Returns aggregated model listings from all healthy Google Vertex AI backends.
+
+**Response**:
+```json
+{
+  "models": [
+    {
+      "name": "gemini-pro",
+      "displayName": "Gemini Pro",
+      "description": "Model served via bgoogle1a2b3c",
+      "createTime": "2026-03-15T12:00:00.000Z",
+      "updateTime": "2026-03-15T12:00:00.000Z"
+    },
+    {
+      "name": "textembedding-gecko",
+      "displayName": "Textembedding Gecko",
+      "description": "Model served via bgoogle1a2b3c",
+      "createTime": "2026-03-15T12:00:00.000Z",
+      "updateTime": "2026-03-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `models` | array | Array of model objects |
+| `models[].name` | string | Model identifier |
+| `models[].displayName` | string | Human-readable display name |
+| `models[].description` | string | Description including backend identifier |
+| `models[].createTime` | string | ISO timestamp |
+| `models[].updateTime` | string | ISO timestamp |
+
+**Example**:
+```bash
+curl http://localhost:3001/v1beta/models
+```
+
+---
+
+### `GET /api/tags` - Ollama Models (Aggregated)
+
+**Description**: Returns aggregated model listings from all healthy Ollama backends.
+
+**Response**:
+```json
+{
+  "models": [
+    {
+      "name": "llama3:latest",
+      "model": "llama3:latest",
+      "size": 4700000000,
+      "digest": "abc123def456",
+      "details": {
+        "format": "ollama",
+        "family": "llama",
+        "families": ["llama"],
+        "parameter_size": "7B",
+        "quantization_level": "q4_0"
+      }
+    },
+    {
+      "name": "mistral:7b",
+      "size": 4100000000,
+      "digest": "def456abc789",
+      "details": {
+        "format": "ollama",
+        "family": "llama",
+        "families": ["llama"],
+        "parameter_size": "7B",
+        "quantization_level": "q4_0"
+      }
+    }
+  ]
+}
+```
+
+**Fields**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `models` | array | Array of model objects |
+| `models[].name` | string | Model name |
+| `models[].model` | string | Model name (duplicate for compatibility) |
+| `models[].size` | number | Estimated model size in bytes |
+| `models[].digest` | string | SHA256 digest of the model |
+| `models[].details` | object | Model metadata |
+| `models[].details.format` | string | API format (e.g., "ollama") |
+| `models[].details.family` | string | Model family (e.g., "llama", "gpt", "gemini") |
+| `models[].details.parameter_size` | string | Estimated parameter count (e.g., "7B", "70B") |
+
+**Example**:
+```bash
+curl http://localhost:3001/api/tags
+```
+
+---
+
+## Aggregation Features
+
+### Health Filtering
+
+All model listing endpoints filter by backend health status:
+- Only **healthy** backends are included
+- Unhealthy backends are automatically excluded
+- Health status is checked at request time
+
+### Duplicate Handling
+
+If multiple backends serve the same model name:
+- The model appears **once** (from the first backend in the pool)
+- Additional backends with the same model are logged but skipped
+- Backend identifier (`owned_by`) distinguishes which backend served each model
+
+### Model Family Detection
+
+Ollama format includes automatic model family detection:
+- `llama`: Models based on Llama architecture (Llama, Mistral, Gemma)
+- `gpt`: GPT-series models
+- `gemini`: Gemini models
+- `phi`: Phi models
+- `qwen`: Qwen models
+- `unknown`: Unrecognized model families
 
 ---
 
