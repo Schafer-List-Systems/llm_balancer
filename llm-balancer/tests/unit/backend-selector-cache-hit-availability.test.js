@@ -40,7 +40,15 @@ describe('BackendSelector - Available Cache-Hit When Higher Priority Is Busy', (
   let selector;
 
   beforeEach(() => {
-    selector = new BackendSelector();
+    // Disable cache-hit threshold for tests (set to 0 to always enforce cache hits)
+    const config = {
+      prompt: {
+        cache: {
+          minHitThreshold: 0
+        }
+      }
+    };
+    selector = new BackendSelector(config);
   });
 
   describe('selectBackendWithCache() - Should select available cache-hit over busy cache-hit', () => {

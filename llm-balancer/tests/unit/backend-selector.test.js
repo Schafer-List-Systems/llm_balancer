@@ -246,7 +246,15 @@ describe('BackendSelector', () => {
   let backends;
 
   beforeEach(() => {
-    selector = new BackendSelector();
+    // Disable cache-hit threshold for tests (set to 0 to always enforce cache hits)
+    const config = {
+      prompt: {
+        cache: {
+          minHitThreshold: 0
+        }
+      }
+    };
+    selector = new BackendSelector(config);
     backends = getFreshBackends();
   });
 
@@ -527,7 +535,15 @@ describe('BackendSelector', () => {
     };
 
     beforeEach(() => {
-      selector = new BackendSelector();
+      // Disable cache-hit threshold for tests (set to 0 to always enforce cache hits)
+      const config = {
+        prompt: {
+          cache: {
+            minHitThreshold: 0
+          }
+        }
+      };
+      selector = new BackendSelector(config);
     });
 
     it('should prioritize backend with cache hit over higher-priority backend without cache', () => {
