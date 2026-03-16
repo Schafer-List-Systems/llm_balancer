@@ -231,7 +231,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Cache Control Buttons -->
             <div id="cacheControls" class="debug-controls" style="display: none;">
               <h3 class="debug-section-header">Cache Management</h3>
-              <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
+              <div class="cache-management-buttons">
+                <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
+                <button id="clearAllStats" class="button button-danger">Clear All Stats</button>
+              </div>
             </div>
 
             <!-- Queue Viewer -->
@@ -935,6 +938,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Clear all stats
+  async function clearAllStats() {
+    const result = await apiClient.resetStats(null);
+    if (result.success) {
+      showToast('All stats cleared successfully', 'success');
+      loadDebugData(); // Refresh stats
+    } else {
+      showToast(`Failed to clear stats: ${result.error}`, 'error');
+    }
+  }
+
   // Clear specific backend cache
   async function clearBackendCache(backendUrl) {
     const result = await apiClient.resetCache(backendUrl);
@@ -944,6 +958,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (debugAvailable) loadQueueContents();
     } else {
       showToast(`Failed to clear cache: ${result.error}`, 'error');
+    }
+  }
+
+  // Clear specific backend stats
+  async function clearBackendStats(backendUrl) {
+    const result = await apiClient.resetStats(backendUrl);
+    if (result.success) {
+      showToast(`Stats cleared for ${formatUrl(backendUrl)}`, 'success');
+      loadDebugData();
+    } else {
+      showToast(`Failed to clear stats: ${result.error}`, 'error');
     }
   }
 
@@ -1107,7 +1132,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="backend-stats-header">
             <h3 class="backend-name">${formatUrl(backend.url)}</h3>
             <span class="backend-request-count">Requests: ${backend.requestCount || 0}</span>
-            <button class="cache-clear-btn-inline button button-secondary button-small" data-backend-url="${backend.url}">Clear Cache</button>
+            <div class="backend-actions">
+              <button class="cache-clear-btn-inline button button-secondary button-small" data-backend-url="${backend.url}" data-type="cache">Clear Cache</button>
+              <button class="cache-clear-btn-inline button button-secondary button-small" data-backend-url="${backend.url}" data-type="stats">Clear Stats</button>
+            </div>
           </div>
 
           <div class="stats-grid">
@@ -1206,12 +1234,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render the HTML
     container.innerHTML = html;
 
-    // Add event listeners for cache clear buttons
+    // Add event listeners for cache/stats clear buttons
     container.querySelectorAll('.cache-clear-btn-inline').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const backendUrl = btn.dataset.backendUrl;
-        clearBackendCache(backendUrl);
+        const clearType = btn.dataset.type;
+        if (clearType === 'stats') {
+          clearBackendStats(backendUrl);
+        } else {
+          clearBackendCache(backendUrl);
+        }
       });
     });
   }
@@ -1296,6 +1329,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearAllCacheBtn = document.getElementById('clearAllCache');
     if (clearAllCacheBtn) {
       clearAllCacheBtn.addEventListener('click', clearAllCaches);
+    }
+
+    // Add event listener for stats clear all button
+    const clearAllStatsBtn = document.getElementById('clearAllStats');
+    if (clearAllStatsBtn) {
+      clearAllStatsBtn.addEventListener('click', clearAllStats);
     }
 
     // Add event listener for refresh debug button

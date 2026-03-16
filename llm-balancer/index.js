@@ -614,6 +614,48 @@ if (config.debug.enabled) {
       });
     }
   });
+
+  /**
+   * Route: Reset all backend performance statistics
+   */
+  app.post('/stats/reset', (req, res) => {
+    console.info(`[${getTimestamp()}] Reset all backend performance stats`);
+
+    backends.forEach(backend => {
+      backend.resetPerformanceStats();
+    });
+
+    res.json({
+      success: true,
+      message: 'All backend stats reset successfully',
+      backends: backends.length
+    });
+  });
+
+  /**
+   * Route: Reset performance statistics for specific backend
+   */
+  app.post('/stats/reset/:backendUrl', (req, res) => {
+    const backendUrl = decodeURIComponent(req.params.backendUrl);
+    const targetBackend = backends.find(b => b.url === backendUrl);
+
+    if (!targetBackend) {
+      return res.status(404).json({
+        success: false,
+        error: 'Backend not found',
+        backendUrl
+      });
+    }
+
+    console.info(`[${getTimestamp()}] Reset stats for ${backendUrl}`);
+    targetBackend.resetPerformanceStats();
+
+    res.json({
+      success: true,
+      message: `Stats reset for ${backendUrl}`,
+      backendUrl
+    });
+  });
 }
 
 /**

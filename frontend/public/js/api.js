@@ -224,6 +224,21 @@ class ApiClient {
   }
 
   /**
+   * Reset performance stats for all backends or specific backend
+   * @param {string|null} backendUrl - Optional backend URL. If null, resets all stats
+   */
+  async resetStats(backendUrl = null) {
+    try {
+      const query = backendUrl ? `?backend=${encodeURIComponent(backendUrl)}` : '';
+      await this.request(`/stats/reset${query}`, { method: 'POST' });
+      this.lastUpdateTime = new Date();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Get queue contents (not just stats)
    */
   async getQueueContents() {

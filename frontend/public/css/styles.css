@@ -799,8 +799,15 @@ body.dark-mode .backend-card.healthy.busy {
 
 .debug-controls {
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 1rem;
+  align-items: center;
+}
+
+.cache-management-buttons {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -1426,6 +1433,16 @@ body.dark-mode .backend-stats-card {
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border-color);
+}
+
+.backend-actions {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.backend-actions .cache-clear-btn-inline {
+  margin-left: 0.25rem;
 }
 
 body.dark-mode .backend-stats-header {

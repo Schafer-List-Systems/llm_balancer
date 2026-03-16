@@ -37,9 +37,10 @@ class Backend {
       generationTimeMs: [],         // Token generation time: fullResponse - firstChunk
 
       // Token counts (when available from backend)
-      promptTokens: [],             // Prompt tokens (may be null for some backends)
-      completionTokens: [],         // Completion tokens (may be null for some backends)
+      promptTokens: [],             // Prompt tokens from backend usage (may be null for some backends)
+      completionTokens: [],         // Completion tokens from backend usage (may be null)
       totalTokens: [],              // Total tokens (may be null)
+      requestTokens: [],            // Request-side token counts (from prompt body) - NEW
 
       // Computed rates (derived from time and token metrics)
       totalRate: [],                // totalTokens / totalTime (tokens/second)
@@ -217,8 +218,9 @@ class Backend {
    * @param {number} completionTokens - Number of completion tokens generated (can be null)
    * @param {number} totalTimeMs - Total round-trip time in milliseconds (request sent to full response)
    * @param {number} promptProcessingTimeMs - Time to first header/chunk in milliseconds (optional)
+   * @param {number} requestTokens - Token count from request body (optional)
    */
-  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null) {
+  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null, requestTokens = null) {
     this._performanceStats.requestCount++;
 
     // Track time metrics (always available)
@@ -237,6 +239,11 @@ class Backend {
     if (completionTokens !== undefined && completionTokens !== null) {
       this._performanceStats.completionTokens.push(completionTokens);
       this._limitSamples(this._performanceStats.completionTokens);
+    }
+    // Track request-side token counts (from prompt body)
+    if (requestTokens !== null && requestTokens !== undefined) {
+      this._performanceStats.requestTokens.push(requestTokens);
+      this._limitSamples(this._performanceStats.requestTokens);
     }
     // Track total tokens when both components are available
     const totalTokens = (promptTokens || 0) + (completionTokens || 0);
@@ -270,8 +277,9 @@ class Backend {
    * @param {number} completionTokens - Number of completion tokens (can be null if not in response)
    * @param {number} firstChunkTimeMs - Time from request sent to first chunk in milliseconds
    * @param {number} totalCompletionTimeMs - Time from request sent to full response in milliseconds
+   * @param {number} requestTokens - Token count from request body (optional)
    */
-  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs) {
+  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs, requestTokens = null) {
     this._performanceStats.requestCount++;
 
     // Track time metrics (always available for streaming)
@@ -292,6 +300,11 @@ class Backend {
     if (completionTokens !== null && completionTokens !== undefined) {
       this._performanceStats.completionTokens.push(completionTokens);
       this._limitSamples(this._performanceStats.completionTokens);
+    }
+    // Track request-side token counts (from prompt body)
+    if (requestTokens !== null && requestTokens !== undefined) {
+      this._performanceStats.requestTokens.push(requestTokens);
+      this._limitSamples(this._performanceStats.requestTokens);
     }
     // Track total tokens when both components are available
     const totalTokens = (promptTokens || 0) + (completionTokens || 0);
@@ -326,15 +339,17 @@ class Backend {
    * @param {number} chunkCount - Number of SSE data chunks (each represents 1 completion token)
    * @param {number} firstChunkTimeMs - Time from request sent to first chunk in milliseconds
    * @param {number} totalCompletionTimeMs - Time from request sent to full response in milliseconds
+   * @param {number} requestTokens - Token count from request body (optional)
    */
-  updateStreamingStatsFromChunks(estimatedPromptTokens, chunkCount, firstChunkTimeMs, totalCompletionTimeMs) {
+  updateStreamingStatsFromChunks(estimatedPromptTokens, chunkCount, firstChunkTimeMs, totalCompletionTimeMs, requestTokens = null) {
     // Each SSE chunk represents 1 completion token (empirically verified)
     const completionTokens = chunkCount;
     this.updateStreamingStats(
       estimatedPromptTokens,
       completionTokens,
       firstChunkTimeMs,
-      totalCompletionTimeMs
+      totalCompletionTimeMs,
+      requestTokens
     );
   }
 
@@ -382,7 +397,8 @@ class Backend {
       tokenStats: {
         avgPromptTokens: this._computeAverage(this._performanceStats.promptTokens) || null,
         avgCompletionTokens: this._computeAverage(this._performanceStats.completionTokens) || null,
-        avgTotalTokens: this._computeAverage(this._performanceStats.totalTokens) || null
+        avgTotalTokens: this._computeAverage(this._performanceStats.totalTokens) || null,
+        avgRequestTokens: this._computeAverage(this._performanceStats.requestTokens) || null
       },
 
       // Rate statistics (may be null if insufficient data for computation)
@@ -461,6 +477,30 @@ class Backend {
     this.promptCache.clear();
     console.info(`[Backend] ${this.url}: Prompt cache reset completed`);
     return { success: true, message: 'Cache reset successfully' };
+  }
+
+  /**
+   * Reset performance statistics for this backend
+   * Clears request counts and all tracking arrays
+   */
+  resetPerformanceStats() {
+    this.requestCount = 0;
+    this.errorCount = 0;
+
+    // Reset all performance stats arrays
+    this._performanceStats.requestCount = 0;
+    this._performanceStats.totalTimeMs = [];
+    this._performanceStats.promptProcessingTimeMs = [];
+    this._performanceStats.generationTimeMs = [];
+    this._performanceStats.promptTokens = [];
+    this._performanceStats.completionTokens = [];
+    this._performanceStats.totalTokens = [];
+    this._performanceStats.requestTokens = [];
+    this._performanceStats.totalRate = [];
+    this._performanceStats.promptRate = [];
+    this._performanceStats.generationRate = [];
+
+    console.info(`[Backend] ${this.url}: Performance stats reset completed`);
   }
 }
 
