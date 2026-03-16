@@ -81,6 +81,7 @@ class Balancer {
       criterion: req.criterion,
       timedOut: req.timedOut || false,
       hasRequestData: !!req.requestData,
+      clientIp: req.clientIp || 'unknown',
       requestData: req.requestData ? {
         model: req.requestData.req?.body?.model || req.requestData.matchedModel || null,
         apiType: req.criterion?.apiType || null
@@ -186,7 +187,8 @@ class Balancer {
                 reject(new Error('Request timeout'));
             }, this.queueTimeout),
             requestData: requestData,
-            criterion: criterion
+            criterion: criterion,
+            clientIp: requestData.req?.connection?.remoteAddress || requestData.req?.socket?.remoteAddress || requestData.req?.ip || 'unknown'
         };
 
         queue.push(request);

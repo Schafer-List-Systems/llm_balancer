@@ -519,6 +519,7 @@ if (config.debug) {
       criterion: req.criterion,
       hasRequestData: !!req.requestData,
       hasTimeout: !!req.timeout,
+      clientIp: req.clientIp || 'unknown',
       timedOut: req.timedOut || false,
       requestData: req.requestData ? {
         model: req.requestData.req?.body?.model,
