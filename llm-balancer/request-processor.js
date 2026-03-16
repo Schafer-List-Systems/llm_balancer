@@ -289,11 +289,33 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
 }
 
 /**
+ * Count tokens in request body
+ * @param {string} requestBody - Request body string
+ * @returns {number} Token count or 0 if invalid
+ */
+function countRequestTokens(requestBody) {
+  if (!requestBody || typeof requestBody !== 'string') {
+    return 0;
+  }
+
+  try {
+    return countTokens(requestBody);
+  } catch (e) {
+    console.warn(`[RequestProcessor] Failed to count request tokens:`, e.message);
+    return 0;
+  }
+}
+
+/**
  * Handle streaming response request
  * @private
  */
 function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
   const requestId = req.internalRequestId || 'N/A';
+
+  // Count tokens in request body for stats
+  const requestTokens = countRequestTokens(requestBody);
+
   const targetUrl = new URL(req.url, backend.url);
   const options = {
     hostname: targetUrl.hostname,
@@ -443,19 +465,21 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
               promptTokens !== null ? promptTokens : 0,
               completionTokens !== null ? completionTokens : 0,
               firstChunkTimeMs,
-              totalCompletionTimeMs
+              totalCompletionTimeMs,
+              requestTokens  // Pass request-side token count
             );
-            console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming stats updated: ${promptTokens ?? 'N/A'} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens ?? 'N/A'} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+            console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming stats updated: ${promptTokens ?? 'N/A'} prompt tokens in ${firstChunkTimeMs}ms, ${completionTokens ?? 'N/A'} completion tokens in ${totalCompletionTimeMs - firstChunkTimeMs}ms, requestTokens=${requestTokens}`);
           } else if (chunkCount > 0) {
             // Use chunk counting for completion tokens (vLLM-style backends without usage)
             // Each SSE chunk ≈ 1 completion token (empirically verified)
             backend.updateStreamingStatsFromChunks(
-              null,  // Estimated prompt tokens (could extract from request body if needed)
+              requestTokens,  // Use request-side token count for prompt tokens
               chunkCount,
               firstChunkTimeMs,
-              totalCompletionTimeMs
+              totalCompletionTimeMs,
+              requestTokens   // Pass request-side token count
             );
-            console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming stats updated (chunk count): ~${chunkCount} completion tokens in ${firstChunkTimeMs}ms to ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
+            console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming stats updated (chunk count): ~${chunkCount} completion tokens, requestTokens=${requestTokens} in ${firstChunkTimeMs}ms to ${totalCompletionTimeMs - firstChunkTimeMs}ms`);
           } else {
             // No usable data - log for debugging
             console.warn(`[${getTimestamp()}] [Gateway][${requestId}] No streaming stats to track: chunkCount=${chunkCount}, usageFound=${usageFound}`);
@@ -535,6 +559,10 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
  */
 function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
   const requestId = req.internalRequestId || 'N/A';
+
+  // Count tokens in request body for stats
+  const requestTokens = countRequestTokens(requestBody);
+
   console.debug(`[${getTimestamp()}] [Gateway][${requestId}] handleNonStreamingRequest to ${backend.url}`);
   const targetUrl = new URL(req.url, backend.url);
   const options = {
@@ -615,9 +643,10 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
           tokenCounts.promptTokens,
           tokenCounts.completionTokens,
           totalTime,
-          timeToFirstHeader  // Prompt processing time (time to first header)
+          timeToFirstHeader,  // Prompt processing time (time to first header)
+          requestTokens       // Request-side token count
         );
-        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
+        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, requestTokens=${requestTokens}, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
       }
 
       if (!res.headersSent) {

@@ -36,7 +36,8 @@ const DEFAULTS = {
   prompt: {
     cache: {
       maxSize: 5,
-      similarityThreshold: 0.85
+      similarityThreshold: 0.85,
+      minHitThreshold: 15000 // Minimum token count to enforce cache-hit preference
     }
   },
   healthCheck: {
@@ -171,7 +172,8 @@ function buildConfigFromEnv(env) {
     prompt: {
       cache: {
         maxSize: env.MAX_PROMPT_CACHE_SIZE ? parseInt(env.MAX_PROMPT_CACHE_SIZE) : DEFAULTS.prompt.cache.maxSize,
-        similarityThreshold: env.PROMPT_CACHE_SIMILARITY_THRESHOLD ? parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD) : DEFAULTS.prompt.cache.similarityThreshold
+        similarityThreshold: env.PROMPT_CACHE_SIMILARITY_THRESHOLD ? parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD) : DEFAULTS.prompt.cache.similarityThreshold,
+        minHitThreshold: env.MIN_PROMPT_CACHE_HIT_TOKENS ? parseInt(env.MIN_PROMPT_CACHE_HIT_TOKENS) : DEFAULTS.prompt.cache.minHitThreshold
       }
     },
     backends

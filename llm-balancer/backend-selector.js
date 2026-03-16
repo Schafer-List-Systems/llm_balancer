@@ -8,6 +8,18 @@
  */
 
 /**
+ * Default configuration values for backend selector
+ * These are applied to ensure all config values exist when config is not provided
+ */
+const DEFAULTS = {
+  prompt: {
+    cache: {
+      minHitThreshold: 15000 // Minimum token count to enforce cache-hit preference
+    }
+  }
+};
+
+/**
  * ModelMatcher class - handles model matching logic
  * Designed to be extensible for future features like regex or lists
  */
@@ -129,9 +141,12 @@ class ModelMatcher {
  * BackendSelector class - handles backend selection with multiple criteria
  */
 class BackendSelector {
-  constructor() {
+  constructor(config) {
     // Selection strategies - can be configured per request type if needed
     this.strategy = 'priority'; // 'priority', 'round-robin', etc. (future extension)
+
+    // Store config for access to cache hit threshold
+    this.config = config || {};
   }
 
   /**
@@ -291,11 +306,27 @@ class BackendSelector {
       }
     }
 
-    // 2.3 If cache matches found, prefer cache-hit backends
+    // 2.3 If cache matches found, check if prompt exceeds threshold before preferring cache hits
     if (allCacheMatches.length > 0) {
-      console.debug(`[BackendSelector] ${allCacheMatches.length} backends with prompt cache hits`);
+      // Count tokens in the prompt to determine if we should enforce cache-hit preference
+      const { countTokens } = require('./utils/token-utils');
+      const promptTokens = countTokens(promptBody);
+      const minCacheHitThreshold = this.config?.prompt?.cache?.minHitThreshold || DEFAULTS.prompt.cache.minHitThreshold;
+      const shouldEnforceCacheHit = promptTokens >= minCacheHitThreshold;
 
-      // Check if any cache-hit backend is available
+      if (!shouldEnforceCacheHit) {
+        console.debug(
+          `[BackendSelector] Prompt (${promptTokens} tokens) below cache-hit threshold ` +
+          `(${minCacheHitThreshold} tokens) - ignoring cache hits, using available backends`
+        );
+        // Fall through to standard availability-based selection (2.4)
+      } else {
+        console.debug(
+          `[BackendSelector] ${allCacheMatches.length} backends with prompt cache hits ` +
+          `(prompt: ${promptTokens} tokens >= threshold: ${minCacheHitThreshold} tokens)`
+        );
+
+        // Check if any cache-hit backend is available
       const availableCacheHits = allCacheMatches.filter(
         m => (m.backend.activeRequestCount || 0) < (m.backend.maxConcurrency || 1)
       );
@@ -332,9 +363,11 @@ class BackendSelector {
       const selected = allCacheMatches[0];
       console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)}) - backend is busy, will queue`);
       return { status: 'busy', backend: selected.backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend' };
+      // End of cache-hit preference block (only executed when prompt exceeds threshold)
+      }
     }
 
-    // 2.4 No cache matches - fallback to availability-based selection
+    // 2.4 No cache matches (or below threshold) - fallback to availability-based selection
     const availableBackends = this._filterByHealthAndAvailability(backends);
 
     if (availableBackends.length === 0) {
