@@ -234,8 +234,30 @@ Response format:
 ]
 ```
 
+## Queue Processing Triggers
+
+Queue processing is triggered by:
+
+1. **Request arrival** - When a new request is queued
+2. **Backend availability** - When a backend becomes idle (`notifyBackendAvailable()`)
+3. **External trigger** - After cache operations (`triggerQueueProcessing()`)
+
+### External Queue Processing Trigger
+
+The `triggerQueueProcessing()` method allows external callers to force a queue processing cycle:
+
+```javascript
+// Used after cache operations to re-evaluate queued requests
+const wasProcessed = balancer.triggerQueueProcessing();
+```
+
+**Use case**: After clearing caches via `/cache/reset`, queued requests may now have available backends with fresh caches. This trigger gives them an immediate chance to be processed.
+
+See: [`balancer.js#L560`](../../llm-balancer/balancer.js#L560)
+
 ## Related Documentation
 
 - [Configuration](CONFIGURATION.md#configuration) - Queue configuration options
 - [API Reference](API.md#api-reference) - Error responses
 - [Architecture](../../developer/ARCHITECTURE.md#system-architecture) - System architecture overview
+- [Prompt Cache](PROMPT_CACHE.md#prompt-cache-documentation) - Cache operations and queue interaction

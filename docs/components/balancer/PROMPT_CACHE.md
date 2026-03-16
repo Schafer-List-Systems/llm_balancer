@@ -30,6 +30,7 @@ This feature is implemented in:
 - **BackendSelector**: [`selectBackendWithCache()`](../../llm-balancer/backend-selector.js#L234) - Cache-aware backend selection
 - **PromptCache**: [`PromptCache`](../../llm-balancer/backends/PromptCache.js) - Per-backend cache storage
 - **Balancer**: [`processQueueWhenBackendAvailable()`](../../llm-balancer/balancer.js#L340) - Queue processing with cache awareness
+- **Balancer**: [`triggerQueueProcessing()`](../../llm-balancer/balancer.js#L560) - External queue processing trigger after cache operations
 
 See also: [PROMPT_CACHE.md#how-cache-matching-works](#how-cache-matching-works)
 

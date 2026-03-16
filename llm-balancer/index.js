@@ -590,19 +590,27 @@ if (config.debug.enabled) {
       }
 
       const result = targetBackend.resetPromptCache();
+      // Trigger queue processing after clearing specific backend cache
+      const queueProcessed = balancer.triggerQueueProcessing();
+      console.info(`[${getTimestamp()}] Cache reset for ${backend} completed, queue processed: ${queueProcessed}`);
       res.json({
         success: result.success,
         message: result.message,
         backend: backend,
-        cacheStats: targetBackend.getPromptCacheStats()
+        cacheStats: targetBackend.getPromptCacheStats(),
+        queueProcessed
       });
     } else {
       // Reset all backend caches via BackendPool
       const results = backendPool.resetCaches();
+      // Trigger queue processing after clearing all caches
+      const queueProcessed = balancer.triggerQueueProcessing();
+      console.info(`[${getTimestamp()}] Cache reset completed, queue processed: ${queueProcessed}`);
       res.json({
         success: results.every(r => r.success),
         message: `Reset ${results.filter(r => r.success).length}/${results.length} backend caches`,
-        results
+        results,
+        queueProcessed
       });
     }
   });

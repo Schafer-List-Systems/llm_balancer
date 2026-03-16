@@ -553,6 +553,30 @@ class Balancer {
   }
 
   /**
+   * Trigger queue processing from external caller
+   * Used after cache operations to re-evaluate queued requests
+   * @returns {boolean} True if a request was actually processed (selected for backend), false otherwise
+   */
+  triggerQueueProcessing() {
+    const initialQueueLength = this.queue?.length || 0;
+    let requestProcessed = false;
+
+    // Track when a request is actually processed (not just removed from queue)
+    const originalTriggerProcessing = this.triggerRequestProcessing;
+    this.triggerRequestProcessing = (request, ...args) => {
+      requestProcessed = true;
+      return originalTriggerProcessing.call(this, request, ...args);
+    };
+
+    this.processQueueWhenBackendAvailable();
+
+    // Restore original method
+    this.triggerRequestProcessing = originalTriggerProcessing;
+
+    return requestProcessed;
+  }
+
+  /**
    * Extract first N paragraphs from text content
    * @param {string} text - Text to extract from
    * @param {number} numParagraphs - Number of paragraphs to extract (default: 2)
