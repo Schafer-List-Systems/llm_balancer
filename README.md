@@ -44,19 +44,65 @@ npm install
 
 ### Configuration
 
-Create a `.env` file in the `llm-balancer` directory:
+The LLM Balancer supports two configuration methods:
+
+#### Method 1: JSON Configuration (Recommended)
+
+Create a `config.json` file in the `llm-balancer` directory:
 
 ```bash
 cd llm-balancer
+cp config.example.json config.json
+```
+
+Edit `config.json` with your settings:
+
+```json
+{
+  "port": 3001,
+  "backends": [
+    {
+      "url": "http://host1:11434",
+      "name": "Backend 1",
+      "priority": 10,
+      "maxConcurrency": 1
+    },
+    {
+      "url": "http://host2:11434",
+      "name": "Backend 2",
+      "priority": 5,
+      "maxConcurrency": 1
+    }
+  ],
+  "healthCheck": {
+    "interval": 120000,
+    "timeout": 5000
+  },
+  "queue": {
+    "timeout": 900000
+  },
+  "maxRetries": 3,
+  "maxPayloadSize": 104857600,
+  "debug": true
+}
+```
+
+#### Method 2: Environment Variables (Legacy)
+
+Create a `.env` file in the `llm-balancer` directory:
+
+```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your backend URLs:
+Edit `.env` with your settings:
 
 ```bash
 BACKENDS="http://host1:11434,http://host2:11434"
 LB_PORT=3001
 ```
+
+**Note:** JSON configuration takes precedence over environment variables.
 
 ### Start the Server
 
@@ -230,27 +276,82 @@ Look for `promptCacheStats` in the response:
 
 ### Cache Configuration
 
-Configure cache behavior via environment variables:
+Configure cache behavior:
+
+```json
+{
+  "prompt": {
+    "cache": {
+      "maxSize": 5,
+      "similarityThreshold": 0.85
+    }
+  }
+}
+```
+
+## Configuration Options
+
+### JSON Configuration File (`config.json`)
+
+All configuration options are available in the JSON config file:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `version` | string | "0.0.0" | Application version |
+| `port` | number | 3001 | Server port |
+| `backends` | array | See below | Array of backend configurations |
+| `healthCheck.interval` | number | 120000 | Health check interval (ms) |
+| `healthCheck.timeout` | number | 5000 | Health check timeout (ms) |
+| `queue.timeout` | number | 30000 | Queue request timeout (ms) |
+| `request.timeout` | number | 300000 | Request timeout (ms) |
+| `maxRetries` | number | 3 | Maximum retry attempts |
+| `maxPayloadSize` | number | 52428800 | Max payload size (bytes) |
+| `maxPayloadSizeMB` | number | 50 | Max payload size (MB, calculated) |
+| `maxQueueSize` | number | 100 | Maximum queue size |
+| `maxStatsSamples` | number | 20 | Maximum stats samples |
+| `shutdownTimeout` | number | 60000 | Shutdown timeout (ms) |
+| `debug.enabled` | boolean | false | Enable debug mode |
+| `debug.requestHistorySize` | number | 100 | Request history size |
+| `prompt.cache.maxSize` | number | 5 | Prompt cache max size |
+| `prompt.cache.similarityThreshold` | number | 0.85 | Cache similarity threshold |
+
+### Backend Configuration
+
+Each backend in the `backends` array can have:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `url` | string | Required | Backend URL (e.g., "http://localhost:11434") |
+| `name` | string | "Backend N" | Human-readable name |
+| `priority` | number | 1 | Priority level (higher = preferred) |
+| `maxConcurrency` | number | 10 | Max parallel requests |
+
+### Environment Variables (Legacy)
+
+For backward compatibility, environment variables are supported. They have lower priority than `config.json`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MAX_FINGERPRINT_TOKENS` | 200 | Maximum tokens for fingerprint computation |
-| `PROMPT_CACHE_SIMILARITY_THRESHOLD` | 0.85 | Minimum similarity for cache match (0-1) |
-| `maxPromptCacheSize` | 100 | Maximum cached prompts per backend |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKENDS` | None | Comma-separated list of backend URLs (required) |
+| `BACKENDS` | None | Comma-separated backend URLs (required) |
 | `LB_PORT` | 3001 | Server port |
-| `HEALTH_CHECK_INTERVAL` | 30000ms | Health check interval (30 seconds) |
-| `HEALTH_CHECK_TIMEOUT` | 5000ms | Health check timeout (5 seconds) |
-| `MAX_RETRIES` | 3 | Maximum retry attempts per request |
-| `MAX_PAYLOAD_SIZE` | 52428800 (50MB) | Maximum request payload size |
+| `VERSION` | "0.0.0" | Application version |
+| `MAX_RETRIES` | 3 | Maximum retry attempts |
+| `MAX_PAYLOAD_SIZE` | 52428800 | Max payload size in bytes |
+| `MAX_STATS_SAMPLES` | 20 | Maximum stats samples |
+| `MAX_QUEUE_SIZE` | 100 | Maximum queue size |
+| `SHUTDOWN_TIMEOUT` | 60000 | Shutdown timeout (ms) |
+| `DEBUG` | false | Enable debug mode (`true`/`false`) |
+| `DEBUG_REQUEST_HISTORY_SIZE` | 100 | Request history size |
+| `HEALTH_CHECK_INTERVAL` | 120000 | Health check interval (ms) |
+| `HEALTH_CHECK_TIMEOUT` | 5000 | Health check timeout (ms) |
+| `QUEUE_TIMEOUT` | 30000 | Queue timeout (ms) |
+| `REQUEST_TIMEOUT` | 300000 | Request timeout (ms) |
+| `MAX_PROMPT_CACHE_SIZE` | 5 | Prompt cache max size |
+| `PROMPT_CACHE_SIMILARITY_THRESHOLD` | 0.85 | Cache similarity threshold |
 | `BACKEND_PRIORITY_N` | 1 | Priority for backend at index N |
-| `BACKEND_CONCURRENCY_N` | 1 | Maximum concurrent requests for backend at index N |
-| `SHUTDOWN_TIMEOUT` | 60000ms | Graceful shutdown timeout |
+| `BACKEND_CONCURRENCY_N` | 1 | Max concurrency for backend at index N |
+
+**Note:** Index N is 0-based (BACKEND_PRIORITY_0 for the first backend).
 
 ## API Reference
 

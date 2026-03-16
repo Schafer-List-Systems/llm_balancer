@@ -48,6 +48,50 @@ curl http://localhost:3001/stats
 
 Configure your Ollama backend URLs:
 
+#### JSON Configuration (Recommended)
+
+```json
+{
+  "backends": [
+    {
+      "url": "http://localhost:11434",
+      "name": "Backend 1",
+      "priority": 1,
+      "maxConcurrency": 10
+    }
+  ]
+}
+```
+
+#### Multiple Backends
+
+```json
+{
+  "backends": [
+    {
+      "url": "http://host1:11434",
+      "name": "Host 1",
+      "priority": 10,
+      "maxConcurrency": 5
+    },
+    {
+      "url": "http://host2:11434",
+      "name": "Host 2",
+      "priority": 5,
+      "maxConcurrency": 3
+    },
+    {
+      "url": "http://host3:11434",
+      "name": "Host 3",
+      "priority": 0,
+      "maxConcurrency": 2
+    }
+  ]
+}
+```
+
+#### Environment Variables (Legacy)
+
 ```bash
 # Single backend
 BACKENDS="http://localhost:11434"
@@ -60,7 +104,34 @@ BACKENDS="http://host1:11434,http://host2:11434,http://host3:11434"
 
 Configure priority levels for each backend to prioritize specific servers:
 
-#### Index-Based Priority
+#### JSON Configuration
+
+```json
+{
+  "backends": [
+    {
+      "url": "http://fast-server:11434",
+      "name": "Fast Server",
+      "priority": 100,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://medium-server:11434",
+      "name": "Medium Server",
+      "priority": 50,
+      "maxConcurrency": 5
+    },
+    {
+      "url": "http://slow-server:11434",
+      "name": "Slow Server",
+      "priority": 0,
+      "maxConcurrency": 2
+    }
+  ]
+}
+```
+
+#### Environment Variables (Legacy)
 
 ```bash
 # Backend 0 - Priority 100 (highest)
@@ -82,6 +153,203 @@ BACKEND_PRIORITY_2=0
 2. Priority tiers are sorted from highest to lowest
 3. Requests are first routed to the highest priority tier
 4. If no backend is available in a tier, immediately fall back to the next lower tier
+
+---
+
+### Concurrency-Based Load Limiting
+
+Configure maximum parallel requests per backend:
+
+#### JSON Configuration
+
+```json
+{
+  "backends": [
+    {
+      "url": "http://fast-server:11434",
+      "name": "Fast Server",
+      "priority": 100,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://slow-server:11434",
+      "name": "Slow Server",
+      "priority": 10,
+      "maxConcurrency": 3
+    }
+  ]
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+# Fast server - allow 5 concurrent requests
+BACKEND_CONCURRENCY_0=5
+
+# Slower server - allow only 2 concurrent requests
+BACKEND_CONCURRENCY_1=2
+```
+
+**How Concurrency Works:**
+
+- The balancer tracks `activeRequestCount` per backend
+- New requests are only assigned when `activeRequestCount < maxConcurrency`
+- When a backend reaches its limit, requests are queued or fall back to other backends
+- Utilization percentage is calculated as: `activeRequestCount / maxConcurrency * 100`
+
+---
+
+### Health Check Configuration
+
+#### JSON Configuration
+
+```json
+{
+  "healthCheck": {
+    "interval": 120000,
+    "timeout": 5000
+  }
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+# Health check interval (default: 30 seconds)
+HEALTH_CHECK_INTERVAL=30000
+
+# Health check timeout (default: 5 seconds)
+HEALTH_CHECK_TIMEOUT=5000
+```
+
+---
+
+### Queue Configuration
+
+#### JSON Configuration
+
+```json
+{
+  "queue": {
+    "timeout": 60000
+  },
+  "maxQueueSize": 200
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+# Maximum queue size (default: 100)
+MAX_QUEUE_SIZE=100
+
+# Queue timeout (default: 30 seconds)
+QUEUE_TIMEOUT=30000
+```
+
+---
+
+### Request Timeout
+
+#### JSON Configuration
+
+```json
+{
+  "request": {
+    "timeout": 600000
+  }
+}
+```
+
+Sets the maximum time to wait for a backend response (10 minutes in this example).
+
+---
+
+### Payload Size
+
+#### JSON Configuration
+
+```json
+{
+  "maxPayloadSize": 104857600
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+# Maximum request payload size in bytes
+# 50MB = 52428800
+# 100MB = 104857600
+# 200MB = 209715200
+MAX_PAYLOAD_SIZE=104857600
+```
+
+---
+
+### Shutdown Timeout
+
+#### JSON Configuration
+
+```json
+{
+  "shutdownTimeout": 120000
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+# Time to wait for in-flight requests before force exit (default: 60 seconds)
+SHUTDOWN_TIMEOUT=120000
+```
+
+---
+
+### Debug Mode
+
+#### JSON Configuration
+
+```json
+{
+  "debug": {
+    "enabled": true,
+    "requestHistorySize": 200
+  }
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+DEBUG=true
+DEBUG_REQUEST_HISTORY_SIZE=200
+```
+
+---
+
+### Prompt Cache Configuration
+
+#### JSON Configuration
+
+```json
+{
+  "prompt": {
+    "cache": {
+      "maxSize": 10,
+      "similarityThreshold": 0.9
+    }
+  }
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+MAX_PROMPT_CACHE_SIZE=10
+PROMPT_CACHE_SIMILARITY_THRESHOLD=0.9
+```
 
 ---
 
@@ -209,64 +477,6 @@ If an invalid regex pattern is provided, the balancer:
 
 ---
 
-### Concurrency-Based Load Limiting
-
-Configure maximum parallel requests per backend:
-
-```bash
-# Fast server - allow 5 concurrent requests
-BACKEND_CONCURRENCY_0=5
-
-# Slower server - allow only 2 concurrent requests
-BACKEND_CONCURRENCY_1=2
-```
-
-**How Concurrency Works:**
-
-- The balancer tracks `activeRequestCount` per backend
-- New requests are only assigned when `activeRequestCount < maxConcurrency`
-- When a backend reaches its limit, requests are queued or fall back to other backends
-- Utilization percentage is calculated as: `activeRequestCount / maxConcurrency * 100`
-
-### Health Check Configuration
-
-```bash
-# Health check interval (default: 30 seconds)
-HEALTH_CHECK_INTERVAL=30000
-
-# Health check timeout (default: 5 seconds)
-HEALTH_CHECK_TIMEOUT=5000
-```
-
-### Queue Configuration
-
-```bash
-# Maximum queue size (default: 100)
-MAX_QUEUE_SIZE=100
-
-# Queue timeout (default: 30 seconds)
-QUEUE_TIMEOUT=30000
-```
-
-### Payload Size
-
-```bash
-# Maximum request payload size in bytes
-# 50MB = 52428800
-# 100MB = 104857600
-# 200MB = 209715200
-MAX_PAYLOAD_SIZE=104857600
-```
-
-### Shutdown Timeout
-
-```bash
-# Time to wait for in-flight requests before force exit (default: 60 seconds)
-SHUTDOWN_TIMEOUT=120000
-```
-
----
-
 ## API Usage
 
 ### Anthropic API (Messages)
@@ -328,38 +538,130 @@ curl http://localhost:3001/api/tags
 
 ### Scenario 1: Primary and Backup Backends
 
-```bash
-# Primary high-performance server
-BACKENDS="http://gpu-server:11434,http://cpu-server:11434"
-BACKEND_PRIORITY_0=100
-BACKEND_PRIORITY_1=10
+```json
+{
+  "backends": [
+    {
+      "url": "http://gpu-server:11434",
+      "name": "GPU Server",
+      "priority": 100,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://cpu-server:11434",
+      "name": "CPU Server",
+      "priority": 10,
+      "maxConcurrency": 5
+    }
+  ]
+}
 ```
 
 Requests will always prefer the GPU server. When it's busy or unavailable, requests fall back to the CPU server.
 
 ### Scenario 2: Load Distribution
 
-```bash
-# Three servers with different capacities
-BACKENDS="http://fast-1:11434,http://fast-2:11434,http://slow-1:11434"
-BACKEND_CONCURRENCY_0=10
-BACKEND_CONCURRENCY_1=10
-BACKEND_CONCURRENCY_2=5
+```json
+{
+  "backends": [
+    {
+      "url": "http://fast-1:11434",
+      "name": "Fast Server 1",
+      "priority": 50,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://fast-2:11434",
+      "name": "Fast Server 2",
+      "priority": 50,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://slow-1:11434",
+      "name": "Slow Server",
+      "priority": 10,
+      "maxConcurrency": 5
+    }
+  ]
+}
 ```
 
 Fast servers handle more concurrent requests. The slow server is used as a backup when fast servers are at capacity.
 
 ### Scenario 3: Cost Optimization
 
-```bash
-# Mix of expensive and cheap backends
-BACKENDS="http://premium-1:11434,http://standard-1:11434,http://economy-1:11434"
-BACKEND_PRIORITY_0=100
-BACKEND_PRIORITY_1=50
-BACKEND_PRIORITY_2=0
+```json
+{
+  "backends": [
+    {
+      "url": "http://premium-1:11434",
+      "name": "Premium Server",
+      "priority": 100,
+      "maxConcurrency": 5
+    },
+    {
+      "url": "http://standard-1:11434",
+      "name": "Standard Server",
+      "priority": 50,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://economy-1:11434",
+      "name": "Economy Server",
+      "priority": 0,
+      "maxConcurrency": 15
+    }
+  ]
+}
 ```
 
 Premium backends are used first. Economy backends are only used when premium and standard are unavailable.
+
+### Scenario 4: Complete Configuration
+
+```json
+{
+  "version": "0.0.1",
+  "port": 3001,
+  "backends": [
+    {
+      "url": "http://gpu-server:11434",
+      "name": "Primary GPU",
+      "priority": 100,
+      "maxConcurrency": 10
+    },
+    {
+      "url": "http://cpu-server:11434",
+      "name": "Backup CPU",
+      "priority": 10,
+      "maxConcurrency": 5
+    }
+  ],
+  "healthCheck": {
+    "interval": 60000,
+    "timeout": 5000
+  },
+  "queue": {
+    "timeout": 120000
+  },
+  "request": {
+    "timeout": 600000
+  },
+  "maxRetries": 3,
+  "maxPayloadSize": 104857600,
+  "maxQueueSize": 200,
+  "debug": {
+    "enabled": false,
+    "requestHistorySize": 100
+  },
+  "prompt": {
+    "cache": {
+      "maxSize": 5,
+      "similarityThreshold": 0.85
+    }
+  }
+}
+```
 
 ---
 
