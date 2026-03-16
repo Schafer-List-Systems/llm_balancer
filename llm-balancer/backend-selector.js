@@ -253,7 +253,7 @@ class BackendSelector {
     // === GROUP 2: ACCEPT/QUEUE FILTERS ===
 
     // 2.1 Handle case where no cache data is available
-    if (!promptBody || promptBody.length < 60000) {
+    if (!promptBody || !modelString) {
       // No cache data, fallback to standard selection based on availability
       const availableBackends = this._filterByHealthAndAvailability(backends);
 
