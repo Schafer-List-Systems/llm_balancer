@@ -131,8 +131,9 @@ function mergeConfig(configJson, env) {
   }
 
   // Override other settings from env if not in config.json
-  if (!config.debugRequestHistorySize && env.DEBUG_REQUEST_HISTORY_SIZE) {
-    config.debugRequestHistorySize = parseInt(env.DEBUG_REQUEST_HISTORY_SIZE);
+  if (!config.debug?.requestHistorySize && env.DEBUG_REQUEST_HISTORY_SIZE) {
+    config.debug = config.debug || {};
+    config.debug.requestHistorySize = parseInt(env.DEBUG_REQUEST_HISTORY_SIZE);
   }
   if (!config.maxStatsSamples && env.MAX_STATS_SAMPLES) {
     config.maxStatsSamples = parseInt(env.MAX_STATS_SAMPLES);
@@ -140,11 +141,15 @@ function mergeConfig(configJson, env) {
   if (!config.maxQueueSize && env.MAX_QUEUE_SIZE) {
     config.maxQueueSize = parseInt(env.MAX_QUEUE_SIZE);
   }
-  if (!config.maxPromptCacheSize && env.MAX_PROMPT_CACHE_SIZE) {
-    config.maxPromptCacheSize = parseInt(env.MAX_PROMPT_CACHE_SIZE);
+  if (!config.prompt?.cache?.maxSize && env.MAX_PROMPT_CACHE_SIZE) {
+    config.prompt = config.prompt || {};
+    config.prompt.cache = config.prompt.cache || {};
+    config.prompt.cache.maxSize = parseInt(env.MAX_PROMPT_CACHE_SIZE);
   }
-  if (!config.promptCacheSimilarityThreshold && env.PROMPT_CACHE_SIMILARITY_THRESHOLD) {
-    config.promptCacheSimilarityThreshold = parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD);
+  if (!config.prompt?.cache?.similarityThreshold && env.PROMPT_CACHE_SIMILARITY_THRESHOLD) {
+    config.prompt = config.prompt || {};
+    config.prompt.cache = config.prompt.cache || {};
+    config.prompt.cache.similarityThreshold = parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD);
   }
   if (!config.shutdownTimeout && env.SHUTDOWN_TIMEOUT) {
     config.shutdownTimeout = parseInt(env.SHUTDOWN_TIMEOUT);

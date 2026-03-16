@@ -54,8 +54,8 @@ class Backend {
     // PromptCache initialization using nested config structure
     const config = require('../config.js').loadConfig();
     this.promptCache = new PromptCache(
-      config.maxPromptCacheSize ?? 5,
-      config.promptCacheSimilarityThreshold ?? 0.85
+      config.prompt?.cache?.maxSize ?? 5,
+      config.prompt?.cache?.similarityThreshold ?? 0.85
     );
   }
 

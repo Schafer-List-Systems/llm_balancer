@@ -643,7 +643,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const payloadValue = statsSection.querySelector('[data-stat="max-payload"] .stat-value');
 
     if (healthIntervalValue) {
-      healthIntervalValue.textContent = `${(config.healthCheckInterval / 1000).toFixed(1)}s`;
+      const intervalMs = config.healthCheck?.interval || 30000;
+      healthIntervalValue.textContent = `${(intervalMs / 1000).toFixed(1)}s`;
     }
     if (lastCheckValue) {
       lastCheckValue.textContent = healthCheck.lastCheck ? new Date(healthCheck.lastCheck).toLocaleString() : 'Never';

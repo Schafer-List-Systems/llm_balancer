@@ -56,7 +56,7 @@ const BackendPool = require('./backend-pool');
 const backendPool = new BackendPool(backends);
 
 // Initialize load balancer and health checker with Backend instances
-const balancer = new Balancer(backends, config.maxQueueSize, config.queue?.timeout || 30000, config.debug, config.debugRequestHistorySize ?? 100);
+const balancer = new Balancer(backends, config.maxQueueSize, config.queue?.timeout || 30000, config.debug, config.debug?.requestHistorySize ?? 100);
 const healthChecker = new HealthChecker(backends, config);
 
 // Middleware to parse JSON bodies
@@ -424,8 +424,7 @@ app.get('/stats', (req, res) => {
       maxPayloadSizeMB: config.maxPayloadSizeMB,
       maxQueueSize: config.maxQueueSize,
       queue: config.queue,
-      maxPromptCacheSize: config.maxPromptCacheSize,
-      promptCacheSimilarityThreshold: config.promptCacheSimilarityThreshold
+      prompt: config.prompt
     },
     // Add: Backend concurrency counts
     overloadedBackends: backends.filter(
@@ -882,11 +881,11 @@ async function startServer() {
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OpenAIHealthCheck`);
             break;
           case 'anthropic':
-            backend.healthChecker = new AnthropicHealthCheck(config.healthCheckTimeout);
+            backend.healthChecker = new AnthropicHealthCheck(config.healthCheck?.timeout || 5000);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned AnthropicHealthCheck`);
             break;
           case 'google':
-            backend.healthChecker = new GoogleHealthCheck(config.healthCheckTimeout);
+            backend.healthChecker = new GoogleHealthCheck(config.healthCheck?.timeout || 5000);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned GoogleHealthCheck`);
             break;
           default:
@@ -897,7 +896,7 @@ async function startServer() {
       } else if (backendInfo.error) {
         console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${backendInfo.error}`);
         // Still assign a health checker for potential recovery
-        backend.healthChecker = new OpenAIHealthCheck(config.healthCheckTimeout);
+        backend.healthChecker = new OpenAIHealthCheck(config.healthCheck?.timeout || 5000);
       }
     }
 
