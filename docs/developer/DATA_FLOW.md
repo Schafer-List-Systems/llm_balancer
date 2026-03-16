@@ -298,75 +298,254 @@ function findBackendForCriterion(criterion) {
 
 ### Prompt Cache-Aware Backend Selection
 
-When processing queued requests, the system now checks for **prompt cache matches** before falling back to standard model matching. This enables KV cache reuse for similar prompts.
+When processing queued requests, the system uses `selectBackendWithCache()` for intelligent backend selection that considers **prompt cache matches** to enable KV cache reuse. This method returns a structured result with a status (`'found'`, `'busy'`, or `'none'`) to guide queue handling.
 
 ```javascript
-// Cache-aware selection flow
+/**
+ * Select backend with prompt cache consideration
+ * Returns: { status: 'found'|'busy'|'none', backend, actualModel, message }
+ * - 'found': backend available with cache hit or standard selection
+ * - 'busy': backend has cache hit but is busy - caller should queue
+ * - 'none': no backend supports this model - reject request
+ */
 function selectBackendWithCache(backends, criterion, promptBody) {
   const modelString = criterion?.modelString
 
-  // Step 1: Check prompt cache on all healthy backends
-  const cacheMatches = []
+  // === GROUP 1: REJECTION FILTERS (regardless of availability) ===
 
-  for (const backend of backends) {
-    if (!backend.healthy || backend.atMaxCapacity) continue
+  // 1.1 Check if any healthy backend supports this model
+  const healthyBackends = filterByHealth(backends)
+  if (!healthyBackends.length) {
+    return { status: 'none', backend: null, message: 'No healthy backends available' }
+  }
 
-    const cacheMatch = backend.findCacheMatch(promptBody, modelString)
+  const modelMatch = ModelMatcher.findBestMatchAcrossBackends(modelString, healthyBackends)
+  if (!modelMatch.matched && modelString) {
+    return { status: 'none', backend: null, message: 'No backend supports this model' }
+  }
+
+  // === GROUP 2: ACCEPT/QUEUE FILTERS ===
+
+  // 2.1 No cache data - fallback to availability-based selection
+  if (!promptBody || !modelString) {
+    const availableBackends = filterByHealthAndAvailability(backends)
+    if (availableBackends.length === 0) {
+      return { status: 'busy', backend: null, message: 'All backends are currently busy' }
+    }
+    const sorted = sortCandidates(availableBackends)
+    return { status: 'found', backend: sorted[0], message: null }
+  }
+
+  // 2.2 Check cache on ALL healthy backends (even if busy)
+  // Critical: must check all healthy backends to enable proper queuing
+  const allCacheMatches = []
+  for (const backend of healthyBackends) {
+    if (!backend.getApiTypes || !backend.getModels || !backend.findCacheMatch) {
+      continue
+    }
+
+    const cacheMatch = backend.findCacheMatch(promptBody, modelString, null)
     if (cacheMatch && cacheMatch.similarity >= 0.8) {
-      cacheMatches.push({ backend, similarity: cacheMatch.similarity })
+      allCacheMatches.push({ backend, similarity: cacheMatch.similarity })
     }
   }
 
-  // Step 2: If cache matches found, select by priority
-  if (cacheMatches.length > 0) {
-    cacheMatches.sort((a, b) => b.priority - a.priority)
-    return cacheMatches[0].backend  // Highest priority cache hit
+  // 2.3 If cache matches found, prefer cache-hit backends
+  if (allCacheMatches.length > 0) {
+    // Check if any cache-hit backend is available
+    const availableCacheHits = allCacheMatches.filter(
+      m => (m.backend.activeRequestCount || 0) < (m.backend.maxConcurrency || 1)
+    )
+
+    if (availableCacheHits.length > 0) {
+      // Sort by priority, select best available cache-hit backend
+      availableCacheHits.sort((a, b) => {
+        const priorityB = b.backend.priority || 0
+        const priorityA = a.backend.priority || 0
+        if (priorityB !== priorityA) return priorityB - priorityA
+        return backends.indexOf(a.backend) - backends.indexOf(b.backend)
+      })
+
+      const selected = availableCacheHits[0]
+      return {
+        status: 'found',
+        backend: selected.backend,
+        message: null
+      }
+    }
+
+    // All cache-hit backends are busy - return highest priority with 'busy' status
+    // Caller (Balancer) should queue for this specific backend
+    allCacheMatches.sort((a, b) => {
+      const priorityB = b.backend.priority || 0
+      const priorityA = a.backend.priority || 0
+      if (priorityB !== priorityA) return priorityB - priorityA
+      return backends.indexOf(a.backend) - backends.indexOf(b.backend)
+    })
+
+    const selected = allCacheMatches[0]
+    return {
+      status: 'busy',
+      backend: selected.backend,
+      message: 'Backend with cache hit is busy - queuing for same backend'
+    }
   }
 
-  // Step 3: No cache match - fallback to standard selection
-  return selectBackend(backends, { models: [modelString] })
+  // 2.4 No cache matches - fallback to availability-based selection
+  const availableBackends = filterByHealthAndAvailability(backends)
+
+  if (availableBackends.length === 0) {
+    return {
+      status: 'busy',
+      backend: null,
+      message: 'All backends supporting this model are currently busy'
+    }
+  }
+
+  const backend = selectBackendByPriorityFirst(availableBackends, modelString)
+
+  if (backend) {
+    return { status: 'found', backend, message: null }
+  }
+
+  return {
+    status: 'busy',
+    backend: null,
+    message: 'All backends supporting this model are currently busy'
+  }
 }
 ```
 
-**Selection Priority:**
-1. **Cache Hit (Priority)**: If a backend has a cached prompt with ≥80% similarity, it is selected first
-2. **Model Matching**: If no cache hit, fall back to model-based selection
-3. **Priority Sorting**: Among cache hits, highest priority backend wins
+**★ Insight ───────────────────────────────────────────**
 
-**Example Scenario:**
+1. **Rejection vs Accept Filters**: The function separates concerns into two groups - rejection filters (model support) that immediately return `'none'` regardless of availability, and accept/queue filters that distinguish between `'found'` and `'busy'` statuses
+2. **Cache Check on All Healthy Backends**: Critical fix - cache is checked on all healthy backends even if busy, enabling proper queuing to the same backend for KV cache reuse
+3. **Three-Status Return Pattern**: `'found'` means request can proceed, `'busy'` means queue for this backend, `'none'` means reject - this enables the Balancer to make intelligent queuing decisions
+
+**─────────────────────────────────────────────────────**
+
+**Selection Flow Priority:**
+
+1. **Model Support Validation** → If no healthy backend supports the model → `'none'` (reject)
+2. **No Cache Data Fallback** → If no `promptBody` → priority selection among available → `'found'` or `'busy'`
+3. **Cache Match Check** → Check all healthy backends (even if busy)
+   - Available cache hit found → `'found'` with selected backend
+   - Only busy cache hits → `'busy'` with backend for queuing
+4. **No Cache Match Fallback** → Standard model-based selection with availability check → `'found'` or `'busy'`
+
+**Example Scenarios:**
+
+**Scenario A: Available Cache Hit**
 ```
 Queue: [Request with prompt "Write a story about..."]
 Backend1: Priority=10, has cached prompt (similarity=95%), available
 Backend2: Priority=20, no cache match, available
 
-Result: Backend1 is selected despite lower priority, because it has a cache hit!
+Result: Backend1 selected (status='found')
+Cache hit prioritized over higher priority backend for KV reuse benefit
+```
+
+**Scenario B: Only Busy Cache Hit**
+```
+Queue: [Request with prompt "Write a story about..."]
+Backend1: Priority=10, has cached prompt (similarity=95%), busy (activeRequestCount=maxConcurrency)
+Backend2: Priority=20, no cache match, available
+
+Result: Backend1 selected (status='busy', backend=Backend1)
+Balancer queues request specifically for Backend1 when it becomes available
+Same backend = KV cache reuse for similar prompts
+```
+
+**Scenario C: No Cache Matches**
+```
+Queue: [Request with prompt "New topic..."]
+Backend1: Priority=10, no cache match, available
+Backend2: Priority=20, no cache match, available
+
+Result: Backend2 selected (status='found')
+Falls back to priority-based selection among available backends
+```
+
+**Scenario D: No Backend Supports Model**
+```
+Queue: [Request for model "nonexistent-model"]
+Backend1: Priority=10, models: ['llama3', 'qwen']
+Backend2: Priority=20, models: ['llama3', 'qwen']
+
+Result: (status='none', backend=null)
+Request rejected immediately - no need to queue
 ```
 
 **Why This Matters:**
-- KV cache reuse can significantly reduce generation time
-- Backends with cached prompts can serve similar requests faster
-- Cache hit prioritization maximizes the benefit of cached prompts
+
+| Status | Meaning | Balancer Action |
+|--------|---------|-----------------|
+| `'found'` | Backend available | Forward request immediately |
+| `'busy'` | Backend exists but busy | Queue request (may be for specific backend) |
+| `'none'` | No backend supports model | Reject request immediately |
+
+- **Why check all healthy backends (even busy)?** Without checking busy backends, we'd miss cache hits and queue for a random available backend instead of the one with cached prompts
+- **Three-status pattern enables smarter queuing**: Distinguishes between "queue for a backend" vs "reject because model not supported"
+- **KV cache reuse**: When the same backend can be queued for, subsequent similar prompts reuse cached KV cache, significantly reducing generation time
+
+**★ Insight ───────────────────────────────────────────**
+
+The key architectural insight is the **two-group filter separation**: rejection filters (Group 1) provide immediate determinism for unsupported models, while accept/queue filters (Group 2) handle the complexity of availability and caching with nuanced `'found'` vs `'busy'` responses that enable the Balancer to make intelligent queuing decisions.
+
+**─────────────────────────────────────────────────────**
 
 ```mermaid
 flowchart TD
-    subgraph CacheAwareSelection ["Cache-Aware Selection Flow"]
-        Start[Request queued] --> ExtractPrompt[Extract prompt body]
-        ExtractPrompt --> CheckCache{Check cache on<br/>all backends}
+    subgraph CacheAwareSelection["Cache-Aware Selection Flow"]
+        Start[Request queued<br/>with prompt] --> ExtractModel[Extract modelString<br/>from criterion]
 
-        CheckCache -->|Cache hit found| FindCacheMatch[Find backend with<br/>similarity ≥80%]
-        FindCacheMatch --> HasCapacity{Backend<br/>has capacity?}
-        HasCapacity -->|Yes| SelectCache[Select cache-matching<br/>backend by priority]
-        HasCapacity -->|No| TryNext[Try next request]
+        ExtractModel --> CheckModelSupport{Any healthy<br/>backend supports<br/>this model?}
 
-        CheckCache -->|No cache hit| Fallback[Standard model<br/>matching]
-        Fallback --> SelectModel[Select by model match]
-        SelectModel --> HasCapacity2{Backend<br/>has capacity?}
-        HasCapacity2 -->|Yes| SelectModel2[Select model-matching<br/>backend by priority]
-        HasCapacity2 -->|No| TryNext2[Try next request]
+        CheckModelSupport -->|No| ReturnNone[Return status='none'<br/>message='No backend<br/>supports model']
+
+        CheckModelSupport -->|Yes| CheckCacheData{Has promptBody<br/>and modelString?}
+
+        CheckCacheData -->|No - No cache data| FallbackNoCache[Fallback: priority<br/>selection among<br/>available backends]
+        FallbackNoCache --> HasAvailable{Available<br/>backends?}
+        HasAvailable -->|Yes| ReturnFound1[Return status='found'<br/>best priority backend]
+        HasAvailable -->|No| ReturnBusy1[Return status='busy'<br/>message='All busy']
+
+        CheckCacheData -->|Yes - Has cache data| CheckCache{Check cache on<br/>ALL healthy backends<br/>even if busy}
+
+        CheckCache --> CacheMatchesFound{Cache matches<br/>with similarity >= 80%?}
+
+        CacheMatchesFound -->|Yes - Matches found| CheckAvailableHits{Any cache-hit<br/>backend available?}
+
+        CheckAvailableHits -->|Yes - Available| SelectAvailableCache[Select best available<br/>cache-hit by priority]
+        SelectAvailableCache --> ReturnFound2[Return status='found'<br/>cache-hit backend]
+
+        CheckAvailableHits -->|No - All busy| SelectBusyCache[Select best busy<br/>cache-hit by priority]
+        SelectBusyCache --> ReturnBusy2[Return status='busy'<br/>message='Queue for<br/>cache-hit backend']
+
+        CacheMatchesFound -->|No - No matches| CheckAvailableStandard{Available<br/>backends for<br/>this model?}
+
+        CheckAvailableStandard -->|Yes| SelectStandard[Select by priority<br/>among available]
+        SelectStandard --> ReturnFound3[Return status='found'<br/>standard backend]
+
+        CheckAvailableStandard -->|No| ReturnBusy3[Return status='busy'<br/>message='All busy']
     end
 
-    SelectCache --> Process[Process request with<br/>KV cache benefit]
-    SelectModel2 --> Process
+    ReturnFound1 --> ActionFound[Action: Forward<br/>request immediately]
+    ReturnFound2 --> ActionFound
+    ReturnFound3 --> ActionFound
+
+    ReturnBusy1 --> ActionBusy[Action: Queue request<br/>for backend when<br/>available]
+    ReturnBusy2 --> ActionBusy
+    ReturnBusy3 --> ActionBusy
+
+    ReturnNone --> ActionReject[Action: Reject request<br/>immediately]
+
+    style ReturnNone fill:#ffcccc
+    style ActionReject fill:#ffcccc
+    style ReturnFound2 fill:#ccffcc
+    style SelectAvailableCache fill:#ccffcc
+    style ReturnBusy2 fill:#ffe6cc
+    style SelectBusyCache fill:#ffe6cc
 ```
 
 ---
