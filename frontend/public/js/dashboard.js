@@ -1293,6 +1293,15 @@ document.addEventListener('DOMContentLoaded', () => {
       clearAllCacheBtn.addEventListener('click', clearAllCaches);
     }
 
+    // Add event listener for refresh debug button
+    const refreshDebugBtn = document.getElementById('refreshDebug');
+    if (refreshDebugBtn) {
+      refreshDebugBtn.addEventListener('click', () => {
+        loadDebugData();
+        if (window.debugAvailable) loadQueueContents();
+      });
+    }
+
     // Add event listener for collapsible sections
     const debugSection = document.getElementById('debugSection');
     if (debugSection) {
