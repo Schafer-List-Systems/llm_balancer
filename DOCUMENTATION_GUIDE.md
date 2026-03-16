@@ -175,21 +175,6 @@ llm_balancer/
 
 ---
 
-## Legacy Documentation
-
-The `legacy/` directory contains old documentation files that have been migrated to the new structure. These files are **deprecated** and should not be used for new development.
-
-| Old File | New Location |
-|----------|--------------|
-| `legacy/IMPLEMENTATION.md` | [docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) + [docs/developer/CLASSES.md](docs/developer/CLASSES.md) |
-| `legacy/PRIORITY.md` | [docs/user/USAGE.md](docs/user/USAGE.md) + [docs/developer/CLASSES.md](docs/developer/CLASSES.md) |
-| `legacy/DOCKER.md` | [docs/user/INSTALLATION.md](docs/user/INSTALLATION.md) + [docs/components/docker/DEPLOYMENT.md](docs/components/docker/DEPLOYMENT.md) |
-| `legacy/REQUIREMENTS.md` | [docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) + [docs/api/REQUEST_RESPONSE.md](docs/api/REQUEST_RESPONSE.md) |
-| `legacy/REQUIREMENTS_TO_TESTS.md` | [docs/developer/TESTING.md](docs/developer/TESTING.md) |
-| `legacy/QUICKSTART.md` | [docs/user/USAGE.md](docs/user/USAGE.md) |
-
----
-
 ## Need Help?
 
 If you can't find the documentation you need:

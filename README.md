@@ -294,7 +294,6 @@ llm_balancer/
 │   ├── api/
 │   ├── developer/
 │   └── components/
-├── legacy/                       # Deprecated documentation
 ├── README.md                     # This file
 ├── DOCUMENTATION_GUIDE.md        # Documentation navigation
 └── CLAUDE.md                     # Project instructions
