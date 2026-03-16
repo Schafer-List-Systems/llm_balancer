@@ -308,6 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!backendsGrid.querySelector('.backend-card')) {
       backendsGrid.innerHTML = backendsData.backends.map((backend, index) => `
         <div class="backend-card" data-backend-url="${encodeURIComponent(backend.url)}">
+          <div class="backend-name">${backend.name || 'Backend ' + (index + 1)}</div>
           <div class="backend-url">${backend.url}</div>
           <div class="api-badges"></div>
           <div class="backend-info">
@@ -372,6 +373,9 @@ document.addEventListener('DOMContentLoaded', () => {
       card.classList.toggle('busy', isBusy);
 
       // Update text values using textContent (preserves event listeners)
+      const nameEl = card.querySelector('.backend-name');
+      if (nameEl) nameEl.textContent = backend.name || `Backend ${index + 1}`;
+
       const urlEl = card.querySelector('.backend-url');
       if (urlEl) urlEl.textContent = backend.url;
 
@@ -1512,7 +1516,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="benchmark-card" data-backend-url="${encodeURIComponent(backend.url)}">
         <div class="benchmark-card-header">
           <div class="benchmark-card-title">
-            <span class="benchmark-backend-name">${formatUrl(backend.url)}</span>
+            <span class="benchmark-backend-name">${backend.name || formatUrl(backend.url)}</span>
             <span class="benchmark-backend-status ${backend.healthy ? 'healthy' : 'unhealthy'}">
               ${backend.healthy ? 'Healthy' : 'Unhealthy'}
             </span>

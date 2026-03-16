@@ -1,6 +1,9 @@
 # Environment variables with private data
 .env
 
+# Configuration file (per-instance, should not be shared)
+config.json
+
 # Dependencies
 node_modules/
 package-lock.json

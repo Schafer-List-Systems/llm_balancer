@@ -45,13 +45,14 @@ class HealthChecker {
     // Run immediate health check
     this.checkAll();
 
-    // Set up periodic health checks
+    // Set up periodic health checks using nested config structure
+    const interval = this.config.healthCheck?.interval || 30000;
     this.healthCheckIntervalId = setInterval(() => {
       this.checkAll();
-    }, this.config.healthCheckInterval);
+    }, interval);
 
     if (process.env.NODE_ENV !== 'test') {
-      console.log(`[${getTimestamp()}] [HealthChecker] Health checks started, interval: ${this.config.healthCheckInterval}ms`);
+      console.log(`[${getTimestamp()}] [HealthChecker] Health checks started, interval: ${interval}ms`);
     }
   }
 
@@ -146,8 +147,8 @@ class HealthChecker {
       healthyBackends: healthyBackends.length,
       unhealthyBackends: unhealthyBackends.length,
       lastCheck: this.lastCheckTime,
-      interval: this.config.healthCheckInterval,
-      timeout: this.config.healthCheckTimeout,
+      interval: this.config.healthCheck?.interval || 30000,
+      timeout: this.config.healthCheck?.timeout || 5000,
       backends: backendsWithStats
     };
   }

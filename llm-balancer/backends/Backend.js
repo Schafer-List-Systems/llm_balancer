@@ -51,11 +51,11 @@ class Backend {
     // This enables API-specific health checking via delegation
     this.healthChecker = null;
 
-    // PromptCache initialization
+    // PromptCache initialization using nested config structure
     const config = require('../config.js').loadConfig();
     this.promptCache = new PromptCache(
-      config.maxPromptCacheSize,
-      config.promptCacheSimilarityThreshold
+      config.maxPromptCacheSize ?? 5,
+      config.promptCacheSimilarityThreshold ?? 0.85
     );
   }
 

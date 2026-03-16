@@ -8,18 +8,18 @@ const Backend = require('../../backends/Backend');
 const OpenAIHealthCheck = require('../../interfaces/implementations/OpenAIHealthCheck');
 
 describe('HealthChecker Configuration', () => {
-  test('should load health check interval from environment', () => {
+  test('should load health check interval from config', () => {
     const cfg = config.loadConfig();
-    expect(cfg.healthCheckInterval).toBe(30000);
-    expect(typeof cfg.healthCheckInterval).toBe('number');
-    expect(cfg.healthCheckInterval).toBeGreaterThan(0);
+    expect(cfg.healthCheck.interval).toBe(120000);
+    expect(typeof cfg.healthCheck.interval).toBe('number');
+    expect(cfg.healthCheck.interval).toBeGreaterThan(0);
   });
 
-  test('should load health check timeout from environment', () => {
+  test('should load health check timeout from config', () => {
     const cfg = config.loadConfig();
-    expect(cfg.healthCheckTimeout).toBe(5000);
-    expect(typeof cfg.healthCheckTimeout).toBe('number');
-    expect(cfg.healthCheckTimeout).toBeGreaterThan(0);
+    expect(cfg.healthCheck.timeout).toBe(5000);
+    expect(typeof cfg.healthCheck.timeout).toBe('number');
+    expect(cfg.healthCheck.timeout).toBeGreaterThan(0);
   });
 
   test('HealthChecker should receive correct config values', () => {
@@ -27,21 +27,21 @@ describe('HealthChecker Configuration', () => {
     // Convert config backends to Backend instances
     const backends = cfg.backends.slice(0, 2).map(b => {
       const backend = new Backend(b.url, b.maxConcurrency);
-      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheckTimeout);
+      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheck?.timeout || 5000);
       return backend;
     });
     const healthChecker = new HealthChecker(backends, cfg);
 
-    expect(healthChecker.config.healthCheckInterval).toBe(cfg.healthCheckInterval);
-    expect(healthChecker.config.healthCheckTimeout).toBe(cfg.healthCheckTimeout);
+    expect(healthChecker.config.healthCheck?.interval).toBe(cfg.healthCheck?.interval);
+    expect(healthChecker.config.healthCheck?.timeout).toBe(cfg.healthCheck?.timeout);
   });
 
-  test('should use healthCheckInterval for setInterval', () => {
+  test('should use healthCheck interval for setInterval', () => {
     const cfg = config.loadConfig();
     // Convert config backends to Backend instances
     const backends = cfg.backends.slice(0, 2).map(b => {
       const backend = new Backend(b.url, b.maxConcurrency);
-      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheckTimeout);
+      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheck?.timeout || 5000);
       return backend;
     });
 
@@ -49,34 +49,34 @@ describe('HealthChecker Configuration', () => {
     const healthChecker = new HealthChecker(backends, cfg);
     healthChecker.start();
 
-    // The setInterval should have been set with healthCheckInterval
+    // The setInterval should have been set with healthCheck interval
     expect(healthChecker.healthCheckIntervalId).not.toBeNull();
 
     // Clean up
     healthChecker.stop();
   });
 
-  test('should use healthCheckTimeout in HTTP request options', () => {
+  test('should use healthCheck timeout in HTTP request options', () => {
     const cfg = config.loadConfig();
     // Convert config backends to Backend instances
     const backends = cfg.backends.slice(0, 2).map(b => {
       const backend = new Backend(b.url, b.maxConcurrency);
-      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheckTimeout);
+      backend.healthChecker = new OpenAIHealthCheck(cfg.healthCheck?.timeout || 5000);
       return backend;
     });
 
     const healthChecker = new HealthChecker(backends, cfg);
 
     // Check that the checkBackend method uses the timeout config
-    expect(healthChecker.config.healthCheckTimeout).toBe(5000);
+    expect(healthChecker.config.healthCheck?.timeout).toBe(5000);
   });
 
   test('should have default values if environment variables are not set', () => {
     // This test assumes the config module has default values
     const cfg = config.loadConfig();
-    // Default healthCheckInterval should be 30000
-    expect(cfg.healthCheckInterval).toBeDefined();
-    // Default healthCheckTimeout should be 5000
-    expect(cfg.healthCheckTimeout).toBeDefined();
+    // Default healthCheck interval should be 120000 (from config.json)
+    expect(cfg.healthCheck?.interval).toBeDefined();
+    // Default healthCheck timeout should be 5000 (from config.json)
+    expect(cfg.healthCheck?.timeout).toBeDefined();
   });
 });

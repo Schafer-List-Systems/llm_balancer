@@ -1,0 +1,39 @@
+{
+  "version": "0.0.1",
+  "port": 3001,
+  "backends": [
+    {
+      "url": "http://10.0.0.1:11434",
+      "name": "Backend 1",
+      "priority": 10,
+      "maxConcurrency": 1
+    },
+    {
+      "url": "http://10.0.0.2:11434",
+      "name": "Backend 2",
+      "priority": 5,
+      "maxConcurrency": 1
+    },
+    {
+      "url": "http://10.0.0.3:11434",
+      "name": "Backend 3",
+      "priority": 1,
+      "maxConcurrency": 1
+    }
+  ],
+  "healthCheck": {
+    "interval": 120000,
+    "timeout": 5000
+  },
+  "queue": {
+    "timeout": 900000
+  },
+  "request": {
+    "timeout": 300000
+  },
+  "maxRetries": 3,
+  "maxPayloadSize": 104857600,
+  "debug": true,
+  "debugRequestHistorySize": 100,
+  "maxStatsSamples": 20
+}

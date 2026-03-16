@@ -20,8 +20,8 @@ const ModelsAggregator = require('./models-aggregator');
 const app = express();
 const config = configModule.loadConfig();
 
-// Initialize ModelsAggregator after config is loaded
-const modelsAggregator = new ModelsAggregator(config.healthCheckTimeout);
+// Initialize ModelsAggregator after config is loaded using nested config structure
+const modelsAggregator = new ModelsAggregator(config.healthCheck?.timeout || 5000);
 
 // Enable CORS for frontend dashboard
 app.use((req, res, next) => {
@@ -34,9 +34,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize backend info collector to discover API types before health checks
+// Initialize backend info collector to discover API types before health checks using nested config
 const BackendInfo = require('./backend-info');
-const backendInfo = new BackendInfo(config.healthCheckTimeout);
+const backendInfo = new BackendInfo(config.healthCheck?.timeout || 5000);
 
 // ★ Insight ─────────────────────────────────────────────────────
 // Convert config backends to Backend instances
@@ -45,7 +45,10 @@ const backendInfo = new BackendInfo(config.healthCheckTimeout);
 // directly to Backend rather than copied to capabilities.
 // ──────────────────────────────────────────────────────────────────
 const backends = config.backends.map(backendConfig => {
-  return new Backend(backendConfig.url, backendConfig.maxConcurrency);
+  const backend = new Backend(backendConfig.url, backendConfig.maxConcurrency);
+  // Store the config name for display in the frontend
+  backend.configName = backendConfig.name || 'Backend';
+  return backend;
 });
 
 // Initialize BackendPool for unified backend management
@@ -53,7 +56,7 @@ const BackendPool = require('./backend-pool');
 const backendPool = new BackendPool(backends);
 
 // Initialize load balancer and health checker with Backend instances
-const balancer = new Balancer(backends, config.maxQueueSize, config.queueTimeout, config.debug, config.debugRequestHistorySize);
+const balancer = new Balancer(backends, config.maxQueueSize, config.queue?.timeout || 30000, config.debug, config.debugRequestHistorySize ?? 100);
 const healthChecker = new HealthChecker(backends, config);
 
 // Middleware to parse JSON bodies
@@ -349,7 +352,7 @@ app.get('/', (req, res) => {
     busyBackends: backends.filter(b => b.activeRequestCount > 0).length,
     idleBackends: backends.filter(b => b.activeRequestCount === 0).length,
     backendUrls: backends.map(b => b.url),
-    healthCheckInterval: config.healthCheckInterval,
+    healthCheckInterval: config.healthCheck?.interval || 30000,
     overloadedBackends: backends.filter(
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
@@ -415,13 +418,12 @@ app.get('/stats', (req, res) => {
     balancer: stats,
     healthCheck: healthChecker.getStats(),
     config: {
-      healthCheckInterval: config.healthCheckInterval,
-      healthCheckTimeout: config.healthCheckTimeout,
+      healthCheck: config.healthCheck,
       maxRetries: config.maxRetries,
       maxPayloadSize: config.maxPayloadSize,
       maxPayloadSizeMB: config.maxPayloadSizeMB,
       maxQueueSize: config.maxQueueSize,
-      queueTimeout: config.queueTimeout,
+      queue: config.queue,
       maxPromptCacheSize: config.maxPromptCacheSize,
       promptCacheSimilarityThreshold: config.promptCacheSimilarityThreshold
     },
@@ -470,6 +472,7 @@ app.get('/backends', (req, res) => {
 
       return {
         url: b.url,
+        name: b.configName || 'Backend',  // Add backend name from config
         priority: b.priority || 0,
         healthy: b.healthy,
         activeRequestCount: b.activeRequestCount,
@@ -502,7 +505,7 @@ if (config.debug) {
   app.get('/queue/stats', (req, res) => {
     res.json({
       maxQueueSize: config.maxQueueSize,
-      queueTimeout: config.queueTimeout,
+      queue: config.queue,
       queues: balancer.getAllQueueStats()
     });
   });
@@ -530,7 +533,7 @@ if (config.debug) {
     res.json({
       totalQueued: queue.length,
       maxQueueSize: config.maxQueueSize,
-      queueTimeout: config.queueTimeout,
+      queue: config.queue,
       contents
     });
   });
@@ -870,12 +873,12 @@ async function startServer() {
         // Assign health checker based on primary API type
         switch (primaryApiType) {
           case 'ollama':
-            backend.healthChecker = new OllamaHealthCheck(config.healthCheckTimeout);
+            backend.healthChecker = new OllamaHealthCheck(config.healthCheck?.timeout || 5000);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OllamaHealthCheck`);
             break;
           case 'openai':
           case 'groq':
-            backend.healthChecker = new OpenAIHealthCheck(config.healthCheckTimeout);
+            backend.healthChecker = new OpenAIHealthCheck(config.healthCheck?.timeout || 5000);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OpenAIHealthCheck`);
             break;
           case 'anthropic':
@@ -888,7 +891,7 @@ async function startServer() {
             break;
           default:
             // Fallback to OpenAI health check if unknown API type
-            backend.healthChecker = new OpenAIHealthCheck(config.healthCheckTimeout);
+            backend.healthChecker = new OpenAIHealthCheck(config.healthCheck?.timeout || 5000);
             console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Unknown primary API ${primaryApiType}, using OpenAIHealthCheck`);
         }
       } else if (backendInfo.error) {

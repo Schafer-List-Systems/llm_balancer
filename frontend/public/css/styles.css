@@ -400,6 +400,16 @@ body.dark-mode .backend-card.healthy.busy {
   word-break: break-all;
 }
 
+.backend-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .backend-info {
   display: flex;
   flex-direction: column;

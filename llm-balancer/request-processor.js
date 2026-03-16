@@ -140,7 +140,7 @@ function executeProxyRequest(backend, options, config, onData, onEnd, onError) {
     path: options.path,
     method: options.method,
     headers: options.headers,
-    timeout: config.requestTimeout
+    timeout: config.request?.timeout || 300000
   };
 
   const requestId = req.internalRequestId || 'N/A';
@@ -301,7 +301,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     path: targetUrl.pathname + targetUrl.search,
     method: req.method,
     headers: headers,
-    timeout: config.requestTimeout
+    timeout: config.request?.timeout || 300000
   };
 
   console.debug(`[${getTimestamp()}] [Gateway][${requestId}] handleStreamingRequest to ${backend.url}: ${options.method} ${options.path}`);
@@ -326,8 +326,9 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     }
   });
 
-  proxyReq.setTimeout(config.requestTimeout, () => {
-    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
+  const requestTimeout = config.request?.timeout || 300000;
+  proxyReq.setTimeout(requestTimeout, () => {
+    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
     releaseBackend(balancer, backend);
@@ -549,8 +550,9 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
   const proxyReq = http.request(options);
 
   // Set request timeout
-  proxyReq.setTimeout(config.requestTimeout, () => {
-    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${config.requestTimeout}ms`);
+  const requestTimeout = config.request?.timeout || 300000;
+  proxyReq.setTimeout(requestTimeout, () => {
+    console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
     releaseBackend(balancer, backend);
