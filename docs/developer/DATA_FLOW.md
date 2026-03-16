@@ -490,6 +490,60 @@ Request rejected immediately - no need to queue
 
 **★ Insight ───────────────────────────────────────────**
 
+**Why Re-Selection at Queue Dequeue Time is Intentional**
+
+The `selectBackendWithCache` function may return a specific backend with `status='busy'`, but **this backend is NOT fixed** for the request. When the request is later dequeued, the entire selection flow is run again. This is critical because:
+
+1. **Cache exists on multiple backends**: The same prompt fingerprint may be cached on several backends simultaneously
+2. **Best cache-hit may change**: A backend that was busy at enqueue time may be available at dequeue time
+3. **Dynamic optimization**: Re-running selection ensures we always pick the best available cache-hit at the moment of execution
+
+**Example Scenario:**
+```
+Time T1 (Enqueue):
+- Request for prompt "Write a story about..." arrives
+- Backend1: has cache (similarity=95%), busy
+- Backend2: has cache (similarity=90%), busy
+- Backend3: no cache, available
+
+Result: Backend1 selected (status='busy') - highest priority cache hit
+
+Time T2 (Dequeue):
+- Backend1: still busy
+- Backend2: now available (prior request completed)
+- Backend3: still available
+
+Re-run selection:
+- Cache check on ALL healthy backends
+- Backend2 found with cache hit, now available
+- Backend2 selected (status='found') - best available cache hit
+```
+
+**Critical Note: Selection Always Checks All Cache-Hits**
+
+The current implementation **ALREADY** handles this correctly! When multiple backends have cache hits:
+
+```javascript
+// Line 299-318: Check if ANY cache-hit backend is available
+const availableCacheHits = allCacheMatches.filter(
+  m => (m.backend.activeRequestCount || 0) < (m.backend.maxConcurrency || 1)
+);
+
+if (availableCacheHits.length > 0) {
+  // Sort available cache-hits by priority and select best
+  availableCacheHits.sort((a, b) => priorityB - priorityA);
+  return { status: 'found', backend: availableCacheHits[0].backend };
+}
+```
+
+This means: if Backend1 (priority 10) has a cache hit but is busy, and Backend2 (priority 20) also has a cache hit and is available, **Backend2 is selected immediately** with `status='found'`.
+
+The `status='busy'` path (lines 320-335) is ONLY reached when **ALL** cache-hit backends are busy, meaning there is literally no available backend with a cache hit at that moment.
+
+**──────────────────────────────────────────────���──────**
+
+**★ Insight ───────────────────────────────────────────**
+
 The key architectural insight is the **two-group filter separation**: rejection filters (Group 1) provide immediate determinism for unsupported models, while accept/queue filters (Group 2) handle the complexity of availability and caching with nuanced `'found'` vs `'busy'` responses that enable the Balancer to make intelligent queuing decisions.
 
 **─────────────────────────────────────────────────────**
