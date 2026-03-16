@@ -20,6 +20,30 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
+/* Pulsing glow animation for busy healthy backends */
+@keyframes pulsing-glow {
+  0%, 100% {
+    border-color: #10b981;
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.3), 0 0 8px rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    border-color: #34d399;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6), 0 0 16px rgba(16, 185, 129, 0.4);
+  }
+}
+
+/* Dark mode glow effect */
+@keyframes pulsing-glow-dark {
+  0%, 100% {
+    border-color: #10b981;
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.4), 0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    border-color: #34d399;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.7), 0 0 24px rgba(16, 185, 129, 0.5);
+  }
+}
+
 /* Dark mode variables */
 body.dark-mode {
   --bg-color: #0f172a;
@@ -356,6 +380,16 @@ body.dark-mode body {
 
 .backend-card.unhealthy {
   border-color: #ef4444;
+}
+
+/* Pulsing glow for healthy backends with active requests */
+.backend-card.healthy.busy {
+  animation: pulsing-glow 2.5s ease-in-out infinite;
+}
+
+/* Dark mode: pulsing glow for busy healthy backends */
+body.dark-mode .backend-card.healthy.busy {
+  animation: pulsing-glow-dark 2.5s ease-in-out infinite;
 }
 
 .backend-url {

@@ -358,7 +358,8 @@ document.addEventListener('DOMContentLoaded', () => {
     backendsData.backends.forEach(backend => {
       const healthClass = backend.healthy ? 'healthy' : 'unhealthy';
       const healthText = backend.healthy ? 'Healthy' : 'Unhealthy';
-      const busyText = backend.activeRequestCount > 0 ? 'Busy' : 'Idle';
+      const isBusy = backend.activeRequestCount > 0;
+      const busyText = isBusy ? 'Busy' : 'Idle';
 
       const card = backendsGrid.querySelector(`[data-backend-url="${encodeURIComponent(backend.url)}"]`);
       if (!card) return;
@@ -366,6 +367,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update health class on card
       card.classList.remove('healthy', 'unhealthy');
       card.classList.add(healthClass);
+
+      // Add/remove busy class for pulsing glow effect
+      card.classList.toggle('busy', isBusy);
 
       // Update text values using textContent (preserves event listeners)
       const urlEl = card.querySelector('.backend-url');
