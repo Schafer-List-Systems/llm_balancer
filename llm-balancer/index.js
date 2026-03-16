@@ -504,7 +504,7 @@ if (config.debug.enabled) {
   app.get('/queue/stats', (req, res) => {
     res.json({
       maxQueueSize: config.maxQueueSize,
-      queue: config.queue,
+      queueTimeout: config.queue.timeout,
       queues: balancer.getAllQueueStats()
     });
   });
