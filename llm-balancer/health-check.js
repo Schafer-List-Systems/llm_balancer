@@ -46,7 +46,7 @@ class HealthChecker {
     this.checkAll();
 
     // Set up periodic health checks using nested config structure
-    const interval = this.config.healthCheck?.interval || 30000;
+    const interval = this.config.healthCheck.interval;
     this.healthCheckIntervalId = setInterval(() => {
       this.checkAll();
     }, interval);
@@ -147,8 +147,8 @@ class HealthChecker {
       healthyBackends: healthyBackends.length,
       unhealthyBackends: unhealthyBackends.length,
       lastCheck: this.lastCheckTime,
-      interval: this.config.healthCheck?.interval || 30000,
-      timeout: this.config.healthCheck?.timeout || 5000,
+      interval: this.config.healthCheck.interval,
+      timeout: this.config.healthCheck.timeout,
       backends: backendsWithStats
     };
   }

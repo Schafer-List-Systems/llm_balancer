@@ -15,7 +15,7 @@ describe('Queue Request - Hanging Request Bug', () => {
     const requestData = {
       req: { is: () => false, body: { model: 'gpt-4', messages: [] } },
       res: {},
-      config: { primaryApiType: 'openai', requestTimeout: 30000 },
+      config: { primaryApiType: 'openai', request: { timeout: 30000 } },
       criterion: { modelString: 'gpt-4', apiType: 'openai' },
       resolve: () => {},
       reject: (err) => { throw err; }  // Propagate rejection as error
@@ -73,7 +73,7 @@ describe('Queue Request - Hanging Request Bug', () => {
         json: () => {},
         end: () => { requestProcessed = true; }
       },
-      config: { primaryApiType: 'openai', requestTimeout: 5000 },
+      config: { primaryApiType: 'openai', request: { timeout: 5000 } },
       criterion: { modelString: 'llama-3', apiType: 'openai' },
       resolve: () => { requestProcessed = true; },
       reject: () => {}

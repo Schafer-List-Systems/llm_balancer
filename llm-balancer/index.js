@@ -20,8 +20,8 @@ const ModelsAggregator = require('./models-aggregator');
 const app = express();
 const config = configModule.loadConfig();
 
-// Initialize ModelsAggregator after config is loaded using nested config structure
-const modelsAggregator = new ModelsAggregator(config.healthCheck?.timeout || 5000);
+// Initialize ModelsAggregator after config is loaded
+const modelsAggregator = new ModelsAggregator(config.healthCheck.timeout);
 
 // Enable CORS for frontend dashboard
 app.use((req, res, next) => {
@@ -34,9 +34,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize backend info collector to discover API types before health checks using nested config
+// Initialize backend info collector to discover API types before health checks
 const BackendInfo = require('./backend-info');
-const backendInfo = new BackendInfo(config.healthCheck?.timeout || 5000);
+const backendInfo = new BackendInfo(config.healthCheck.timeout);
 
 // ★ Insight ─────────────────────────────────────────────────────
 // Convert config backends to Backend instances
@@ -56,7 +56,7 @@ const BackendPool = require('./backend-pool');
 const backendPool = new BackendPool(backends);
 
 // Initialize load balancer and health checker with Backend instances
-const balancer = new Balancer(backends, config.maxQueueSize, config.queue?.timeout || 30000, config.debug, config.debug?.requestHistorySize ?? 100);
+const balancer = new Balancer(backends, config.maxQueueSize, config.queue.timeout, config.debug.enabled, config.debug.requestHistorySize);
 const healthChecker = new HealthChecker(backends, config);
 
 // Middleware to parse JSON bodies
@@ -352,7 +352,7 @@ app.get('/', (req, res) => {
     busyBackends: backends.filter(b => b.activeRequestCount > 0).length,
     idleBackends: backends.filter(b => b.activeRequestCount === 0).length,
     backendUrls: backends.map(b => b.url),
-    healthCheckInterval: config.healthCheck?.interval || 30000,
+    healthCheckInterval: config.healthCheck.interval,
     overloadedBackends: backends.filter(
       b => b.activeRequestCount >= b.maxConcurrency
     ).length,
@@ -495,9 +495,9 @@ app.get('/backends', (req, res) => {
 });
 
 /**
- * Debug endpoints - only available when debug mode is enabled (config.debug === true)
+ * Debug endpoints - only available when debug mode is enabled (config.debug.enabled === true)
  */
-if (config.debug) {
+if (config.debug.enabled) {
   /**
    * Route: Queue statistics
    */
@@ -872,31 +872,31 @@ async function startServer() {
         // Assign health checker based on primary API type
         switch (primaryApiType) {
           case 'ollama':
-            backend.healthChecker = new OllamaHealthCheck(config.healthCheck?.timeout || 5000);
+            backend.healthChecker = new OllamaHealthCheck(config.healthCheck.timeout);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OllamaHealthCheck`);
             break;
           case 'openai':
           case 'groq':
-            backend.healthChecker = new OpenAIHealthCheck(config.healthCheck?.timeout || 5000);
+            backend.healthChecker = new OpenAIHealthCheck(config.healthCheck.timeout);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned OpenAIHealthCheck`);
             break;
           case 'anthropic':
-            backend.healthChecker = new AnthropicHealthCheck(config.healthCheck?.timeout || 5000);
+            backend.healthChecker = new AnthropicHealthCheck(config.healthCheck.timeout);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned AnthropicHealthCheck`);
             break;
           case 'google':
-            backend.healthChecker = new GoogleHealthCheck(config.healthCheck?.timeout || 5000);
+            backend.healthChecker = new GoogleHealthCheck(config.healthCheck.timeout);
             console.debug(`[${getTimestamp()}] [Startup] Backend ${url}: Assigned GoogleHealthCheck`);
             break;
           default:
             // Fallback to OpenAI health check if unknown API type
-            backend.healthChecker = new OpenAIHealthCheck(config.healthCheck?.timeout || 5000);
+            backend.healthChecker = new OpenAIHealthCheck(config.healthCheck.timeout);
             console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Unknown primary API ${primaryApiType}, using OpenAIHealthCheck`);
         }
       } else if (backendInfo.error) {
         console.warn(`[${getTimestamp()}] [Startup] Backend ${url}: Could not detect API - ${backendInfo.error}`);
         // Still assign a health checker for potential recovery
-        backend.healthChecker = new OpenAIHealthCheck(config.healthCheck?.timeout || 5000);
+        backend.healthChecker = new OpenAIHealthCheck(config.healthCheck.timeout);
       }
     }
 
@@ -909,7 +909,7 @@ async function startServer() {
       console.log(`\n${'='.repeat(60)}`);
       console.log(`LLM Balancer ${config.version} running at http://localhost:${config.port}`);
       console.log(`${'='.repeat(60)}`);
-      if (config.debug) {
+      if (config.debug.enabled) {
         console.log(`[Balancer] In DEBUG mode`);
       }
       console.log(`Backends (${backends.length}):`);

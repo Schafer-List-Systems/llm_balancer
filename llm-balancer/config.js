@@ -9,10 +9,55 @@
  *
  * This allows easy configuration via JSON while maintaining
  * backward compatibility with existing .env setups.
+ *
+ * IMPORTANT: The config loader provides ALL default values.
+ * Other code must NOT add fallbacks - config values are guaranteed to exist.
  */
 
 const fs = require('fs');
 const path = require('path');
+
+/**
+ * Default configuration values
+ * These are applied to ensure all config values exist
+ */
+const DEFAULTS = {
+  port: 3001,
+  version: '0.0.0',
+  maxRetries: 3,
+  maxPayloadSize: 50 * 1024 * 1024, // 50MB
+  maxStatsSamples: 20,
+  maxQueueSize: 100,
+  shutdownTimeout: 60000,
+  debug: {
+    enabled: false,
+    requestHistorySize: 100
+  },
+  prompt: {
+    cache: {
+      maxSize: 5,
+      similarityThreshold: 0.85
+    }
+  },
+  healthCheck: {
+    interval: 120000, // 2 minutes
+    timeout: 5000
+  },
+  queue: {
+    timeout: 30000
+  },
+  request: {
+    timeout: 300000 // 5 minutes
+  },
+  backends: [
+    {
+      url: 'http://localhost:11434',
+      name: 'Backend 1',
+      priority: 1,
+      maxConcurrency: 10
+    }
+  ]
+};
 
 /**
  * Load configuration from config.json if it exists
@@ -36,11 +81,42 @@ function loadConfigJson() {
 }
 
 /**
+ * Deep merge source into target, where target takes precedence
+ * @param {Object} target - Target object (higher precedence)
+ * @param {Object} source - Source object
+ * @param {Object} defaults - Default values for fallback
+ * @returns {Object} Merged object
+ */
+function deepMergeWithDefaults(target, source, defaults) {
+  const result = { ...defaults };
+
+  // Start with defaults, then apply source, then target (target wins)
+  for (const key in result) {
+    if (target && target.hasOwnProperty(key)) {
+      if (typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key])) {
+        result[key] = deepMergeWithDefaults(target[key], source && source[key] ? source[key] : {}, defaults[key] || {});
+      } else {
+        result[key] = target[key];
+      }
+    } else if (source && source.hasOwnProperty(key)) {
+      if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
+        result[key] = deepMergeWithDefaults({}, source[key], defaults[key] || {});
+      } else {
+        result[key] = source[key];
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Merge config.json values with environment variables
  * config.json values take precedence, missing values fall back to env vars
+ * Finally, any remaining undefined values are filled with defaults
  * @param {Object} configJson - Parsed config.json
  * @param {Object} env - Process environment variables
- * @returns {Object} Merged configuration
+ * @returns {Object} Merged configuration with all defaults applied
  */
 function mergeConfig(configJson, env) {
   // If no config.json, build entirely from environment variables
@@ -48,112 +124,10 @@ function mergeConfig(configJson, env) {
     return buildConfigFromEnv(env);
   }
 
-  // Start with config.json as the base
-  const config = { ...configJson };
-
-  // Override with environment variables for any missing values
-  // This provides backward compatibility and easy overrides
-  if (!config.port && env.LB_PORT) {
-    config.port = parseInt(env.LB_PORT);
-  }
-  if (!config.version && env.VERSION) {
-    config.version = env.VERSION;
-  }
-  if (!config.maxRetries && env.MAX_RETRIES) {
-    config.maxRetries = parseInt(env.MAX_RETRIES);
-  }
-  if (!config.maxPayloadSize && env.MAX_PAYLOAD_SIZE) {
-    config.maxPayloadSize = parseInt(env.MAX_PAYLOAD_SIZE);
-  }
-  if (!config.debug && env.DEBUG !== undefined) {
-    config.debug = env.DEBUG === 'true';
-  }
-
-  // Build backends array - prefer config.json structure
-  // Fall back to BACKENDS env var if not configured
-  if (!config.backends && env.BACKENDS) {
-    config.backends = buildBackendsFromEnv(env);
-  } else if (!config.backends) {
-    // Default backend
-    config.backends = [{
-      url: env.BACKENDS || 'http://localhost:11434',
-      name: 'Backend 1'
-    }];
-  }
-
-  // Process backends to add default names and merge env settings
-  config.backends = config.backends.map((backend, index) => {
-    // Use configured name or generate default
-    const name = backend.name || `Backend ${index + 1}`;
-    const url = backend.url;
-
-    // Merge environment variable settings for this backend
-    const priorityEnv = env[`BACKEND_PRIORITY_${index}`];
-    const priority = backend.priority ?? (priorityEnv ? parseInt(priorityEnv) : 1);
-
-    const concurrencyEnv = env[`BACKEND_CONCURRENCY_${index}`];
-    const maxConcurrency = backend.maxConcurrency ?? (concurrencyEnv ? Math.max(1, parseInt(concurrencyEnv)) : 1);
-
-    return {
-      ...backend,
-      name,
-      url,
-      priority,
-      maxConcurrency
-    };
-  });
-
-  // Override health check settings from env if not in config.json
-  if (!config.healthCheck) {
-    config.healthCheck = {};
-  }
-  if (!config.healthCheck.interval && env.HEALTH_CHECK_INTERVAL) {
-    config.healthCheck.interval = parseInt(env.HEALTH_CHECK_INTERVAL);
-  }
-  if (!config.healthCheck.timeout && env.HEALTH_CHECK_TIMEOUT) {
-    config.healthCheck.timeout = parseInt(env.HEALTH_CHECK_TIMEOUT);
-  }
-
-  // Override queue settings from env if not in config.json
-  if (!config.queue) {
-    config.queue = {};
-  }
-  if (!config.queue.timeout && env.QUEUE_TIMEOUT) {
-    config.queue.timeout = parseInt(env.QUEUE_TIMEOUT);
-  }
-
-  // Override request settings from env if not in config.json
-  if (!config.request) {
-    config.request = {};
-  }
-  if (!config.request.timeout && env.REQUEST_TIMEOUT) {
-    config.request.timeout = parseInt(env.REQUEST_TIMEOUT);
-  }
-
-  // Override other settings from env if not in config.json
-  if (!config.debug?.requestHistorySize && env.DEBUG_REQUEST_HISTORY_SIZE) {
-    config.debug = config.debug || {};
-    config.debug.requestHistorySize = parseInt(env.DEBUG_REQUEST_HISTORY_SIZE);
-  }
-  if (!config.maxStatsSamples && env.MAX_STATS_SAMPLES) {
-    config.maxStatsSamples = parseInt(env.MAX_STATS_SAMPLES);
-  }
-  if (!config.maxQueueSize && env.MAX_QUEUE_SIZE) {
-    config.maxQueueSize = parseInt(env.MAX_QUEUE_SIZE);
-  }
-  if (!config.prompt?.cache?.maxSize && env.MAX_PROMPT_CACHE_SIZE) {
-    config.prompt = config.prompt || {};
-    config.prompt.cache = config.prompt.cache || {};
-    config.prompt.cache.maxSize = parseInt(env.MAX_PROMPT_CACHE_SIZE);
-  }
-  if (!config.prompt?.cache?.similarityThreshold && env.PROMPT_CACHE_SIMILARITY_THRESHOLD) {
-    config.prompt = config.prompt || {};
-    config.prompt.cache = config.prompt.cache || {};
-    config.prompt.cache.similarityThreshold = parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD);
-  }
-  if (!config.shutdownTimeout && env.SHUTDOWN_TIMEOUT) {
-    config.shutdownTimeout = parseInt(env.SHUTDOWN_TIMEOUT);
-  }
+  // Deep merge: defaults < env vars < config.json
+  // config.json has highest priority, env vars provide backward compatibility,
+  // and defaults fill any remaining gaps
+  const config = deepMergeWithDefaults(configJson, env, DEFAULTS);
 
   // Calculate derived values
   config.maxPayloadSizeMB = Math.round(config.maxPayloadSize / (1024 * 1024));
@@ -163,37 +137,47 @@ function mergeConfig(configJson, env) {
 
 /**
  * Build configuration entirely from environment variables
+ * Uses DEFAULTS as base, then overrides with env vars
  * @param {Object} env - Process environment variables
- * @returns {Object} Configuration object
+ * @returns {Object} Configuration object with all defaults applied
  */
 function buildConfigFromEnv(env) {
-  const backendUrls = env.BACKENDS || 'http://localhost:11434';
-  const backendArray = backendUrls.split(',').map(url => url.trim()).filter(url => url);
+  // Build backends from env first
+  const backends = buildBackendsFromEnv(env);
 
-  return {
-    port: parseInt(env.LB_PORT) || 3001,
-    version: env.VERSION || '0.0.0',
-    maxRetries: parseInt(env.MAX_RETRIES) || 3,
-    maxPayloadSize: parseInt(env.MAX_PAYLOAD_SIZE) || 50 * 1024 * 1024,
-    debug: env.DEBUG === 'true',
-    debugRequestHistorySize: parseInt(env.DEBUG_REQUEST_HISTORY_SIZE) || 100,
-    maxStatsSamples: parseInt(env.MAX_STATS_SAMPLES) || 20,
-    maxQueueSize: parseInt(env.MAX_QUEUE_SIZE) || 100,
-    maxPromptCacheSize: parseInt(env.MAX_PROMPT_CACHE_SIZE) || 5,
-    promptCacheSimilarityThreshold: parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD) || 0.85,
-    shutdownTimeout: parseInt(env.SHUTDOWN_TIMEOUT) || 60000,
+  // Start with defaults and override with env vars
+  const config = {
+    port: env.LB_PORT ? parseInt(env.LB_PORT) : DEFAULTS.port,
+    version: env.VERSION || DEFAULTS.version,
+    maxRetries: env.MAX_RETRIES ? parseInt(env.MAX_RETRIES) : DEFAULTS.maxRetries,
+    maxPayloadSize: env.MAX_PAYLOAD_SIZE ? parseInt(env.MAX_PAYLOAD_SIZE) : DEFAULTS.maxPayloadSize,
+    maxStatsSamples: env.MAX_STATS_SAMPLES ? parseInt(env.MAX_STATS_SAMPLES) : DEFAULTS.maxStatsSamples,
+    maxQueueSize: env.MAX_QUEUE_SIZE ? parseInt(env.MAX_QUEUE_SIZE) : DEFAULTS.maxQueueSize,
+    shutdownTimeout: env.SHUTDOWN_TIMEOUT ? parseInt(env.SHUTDOWN_TIMEOUT) : DEFAULTS.shutdownTimeout,
+    debug: {
+      enabled: env.DEBUG === 'true',
+      requestHistorySize: env.DEBUG_REQUEST_HISTORY_SIZE ? parseInt(env.DEBUG_REQUEST_HISTORY_SIZE) : DEFAULTS.debug.requestHistorySize
+    },
     healthCheck: {
-      interval: parseInt(env.HEALTH_CHECK_INTERVAL) || 30000,
-      timeout: parseInt(env.HEALTH_CHECK_TIMEOUT) || 5000
+      interval: env.HEALTH_CHECK_INTERVAL ? parseInt(env.HEALTH_CHECK_INTERVAL) : DEFAULTS.healthCheck.interval,
+      timeout: env.HEALTH_CHECK_TIMEOUT ? parseInt(env.HEALTH_CHECK_TIMEOUT) : DEFAULTS.healthCheck.timeout
     },
     queue: {
-      timeout: parseInt(env.QUEUE_TIMEOUT) || 30000
+      timeout: env.QUEUE_TIMEOUT ? parseInt(env.QUEUE_TIMEOUT) : DEFAULTS.queue.timeout
     },
     request: {
-      timeout: parseInt(env.REQUEST_TIMEOUT) || 300000
+      timeout: env.REQUEST_TIMEOUT ? parseInt(env.REQUEST_TIMEOUT) : DEFAULTS.request.timeout
     },
-    backends: buildBackendsFromEnv(env)
+    prompt: {
+      cache: {
+        maxSize: env.MAX_PROMPT_CACHE_SIZE ? parseInt(env.MAX_PROMPT_CACHE_SIZE) : DEFAULTS.prompt.cache.maxSize,
+        similarityThreshold: env.PROMPT_CACHE_SIMILARITY_THRESHOLD ? parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD) : DEFAULTS.prompt.cache.similarityThreshold
+      }
+    },
+    backends
   };
+
+  return config;
 }
 
 /**

@@ -146,9 +146,9 @@ describe('handleStreamingRequest - Connection Handling', () => {
     // Internal request ID for logging
     mockReq.internalRequestId = 'test-request-001';
 
-    // Config with short timeout for test
+    // Config with short timeout for test (new nested structure)
     const config = {
-      requestTimeout: 5000
+      request: { timeout: 5000 }
     };
 
     // Track when request completes
@@ -265,7 +265,7 @@ describe('handleStreamingRequest - Connection Handling', () => {
 
     mockReq.internalRequestId = 'test-request-002';
 
-    const config = { requestTimeout: 5000 };
+    const config = { request: { timeout: 5000 } };
     let requestComplete = false;
 
     RequestProcessor.handleStreamingRequest(

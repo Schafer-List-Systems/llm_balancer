@@ -140,7 +140,7 @@ function executeProxyRequest(backend, options, config, onData, onEnd, onError) {
     path: options.path,
     method: options.method,
     headers: options.headers,
-    timeout: config.request?.timeout || 300000
+    timeout: config.request.timeout
   };
 
   const requestId = req.internalRequestId || 'N/A';
@@ -301,7 +301,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     path: targetUrl.pathname + targetUrl.search,
     method: req.method,
     headers: headers,
-    timeout: config.request?.timeout || 300000
+    timeout: config.request.timeout
   };
 
   console.debug(`[${getTimestamp()}] [Gateway][${requestId}] handleStreamingRequest to ${backend.url}: ${options.method} ${options.path}`);
@@ -326,7 +326,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     }
   });
 
-  const requestTimeout = config.request?.timeout || 300000;
+  const requestTimeout = config.request.timeout;
   proxyReq.setTimeout(requestTimeout, () => {
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
@@ -550,7 +550,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
   const proxyReq = http.request(options);
 
   // Set request timeout
-  const requestTimeout = config.request?.timeout || 300000;
+  const requestTimeout = config.request.timeout;
   proxyReq.setTimeout(requestTimeout, () => {
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();

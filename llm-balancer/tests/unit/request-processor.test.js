@@ -226,7 +226,7 @@ describe('Request Processor', () => {
 
       // Create mock config
       mockConfig = {
-        requestTimeout: 5000
+        request: { timeout: 5000 }
       };
 
       // Create mock request
@@ -371,7 +371,7 @@ describe('Request Processor', () => {
 
       onComplete = jest.fn();
       mockConfig = {
-        requestTimeout: 5000
+        request: { timeout: 5000 }
       };
     });
 

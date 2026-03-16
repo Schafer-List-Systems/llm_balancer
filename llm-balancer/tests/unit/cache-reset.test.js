@@ -231,11 +231,11 @@ describe('Debug endpoints registration', () => {
     const app = express();
     app.use(express.json());
 
-    const config = { debug: true };
+    const config = { debug: { enabled: true } };
     const backends = [new Backend('http://backend1:11434')];
     const backendPool = new BackendPool(backends);
 
-    if (config.debug) {
+    if (config.debug.enabled) {
       app.post('/cache/reset', (req, res) => {
         const { backend } = req.query;
 
@@ -275,11 +275,11 @@ describe('Debug endpoints registration', () => {
     const app = express();
     app.use(express.json());
 
-    const config = { debug: false };
+    const config = { debug: { enabled: false } };
     const backends = [new Backend('http://backend1:11434')];
     const backendPool = new BackendPool(backends);
 
-    if (config.debug) {
+    if (config.debug.enabled) {
       app.post('/cache/reset', (req, res) => {
         res.json({ success: true });
       });
@@ -294,12 +294,12 @@ describe('Debug endpoints registration', () => {
     const app = express();
     app.use(express.json());
 
-    const config = { debug: true };
+    const config = { debug: { enabled: true } };
     const backends = [new Backend('http://backend1:11434')];
     const backendPool = new BackendPool(backends);
     const balancer = { queue: [] };
 
-    if (config.debug) {
+    if (config.debug.enabled) {
       app.get('/queue/contents', (req, res) => {
         res.json({ totalQueued: 0 });
       });
@@ -319,12 +319,12 @@ describe('Debug endpoints registration', () => {
     const app = express();
     app.use(express.json());
 
-    const config = { debug: false };
+    const config = { debug: { enabled: false } };
     const backends = [new Backend('http://backend1:11434')];
     const backendPool = new BackendPool(backends);
     const balancer = { queue: [] };
 
-    if (config.debug) {
+    if (config.debug.enabled) {
       app.get('/queue/contents', (req, res) => {
         res.json({ totalQueued: 0 });
       });
