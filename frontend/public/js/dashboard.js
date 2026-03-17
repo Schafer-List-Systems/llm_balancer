@@ -572,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ` : ''}
           ${tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ? `
             <div class="perf-metric-row">
-              <span class="perf-metric-label">Completion</span>
+              <span class="perf-metric-label">Generation</span>
               <span class="perf-metric-value">${tokenStats.avgCompletionTokens.toFixed(1)}</span>
             </div>
           ` : ''}
@@ -1197,7 +1197,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>` : ''}
               ${(perf.tokenStats?.avgCompletionTokens != null) ? `
               <div class="stat-row">
-                <span class="stat-label">Avg Completion</span>
+                <span class="stat-label">Avg Generation</span>
                 <span class="stat-value">${Math.round(perf.tokenStats.avgCompletionTokens)}</span>
               </div>` : ''}
               ${(perf.tokenStats?.avgTotalTokens != null) ? `
