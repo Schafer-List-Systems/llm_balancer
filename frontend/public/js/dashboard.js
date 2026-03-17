@@ -516,20 +516,16 @@ document.addEventListener('DOMContentLoaded', () => {
       hasData = true;
       // Build tooltip with sample counts for time metrics
       const timeSampleCounts = [
-        `Total Time: ${timeStats.avgTotalTimeMs !== undefined && timeStats.avgTotalTimeMs > 0 ? 'samples tracked' : 'none'}`,
         `Network Latency: ${timeStats.avgNetworkLatencyMs !== undefined && timeStats.avgNetworkLatencyMs > 0 ? 'samples tracked' : 'none'}`,
         `Prompt Processing: ${timeStats.avgPromptProcessingTimeMs !== undefined && timeStats.avgPromptProcessingTimeMs > 0 ? 'samples tracked' : 'none'}`,
-        `Generation: ${timeStats.avgGenerationTimeMs !== undefined && timeStats.avgGenerationTimeMs > 0 ? 'samples tracked (corrected for n tokens)' : 'none'}`
+        `Generation: ${timeStats.avgGenerationTimeMs !== undefined && timeStats.avgGenerationTimeMs > 0 ? 'samples tracked (corrected for n tokens)' : 'none'}`,
+        `Total Time: ${timeStats.avgTotalTimeMs !== undefined && timeStats.avgTotalTimeMs > 0 ? 'samples tracked' : 'none'}`
       ].filter(s => s.includes('samples') || s.includes('none'));
       const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each metric to see the sample count used.\n\n${timeSampleCounts.join('\n')}`;
 
       html += `
         <div class="perf-section">
           <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⏱️ Avg Time Metrics</div>
-          <div class="perf-metric-row">
-            <span class="perf-metric-label">Total Time</span>
-            <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
-          </div>
           <div class="perf-metric-row">
             <span class="perf-metric-label">Network Latency</span>
             <span class="perf-metric-value">${formatMs(timeStats.avgNetworkLatencyMs)}</span>
@@ -542,36 +538,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="perf-metric-label">Generation</span>
             <span class="perf-metric-value">${formatMs(timeStats.avgGenerationTimeMs)}</span>
           </div>
-        </div>
-      `;
-    }
-
-    // Token Rates Section
-    const hasAnyRate = rateStats.totalRate?.count > 0 || rateStats.promptRate?.count > 0 || rateStats.generationRate?.count > 0;
-    if (hasAnyRate) {
-      hasData = true;
-      const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nTotal Rate: ${rateStats.totalRate?.count || 0} samples\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples`;
-      html += `
-        <div class="perf-section">
-          <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⚡ Avg Token Rates (tokens/sec)</div>
-          ${rateStats.totalRate?.count > 0 ? `
-            <div class="perf-metric-row">
-              <span class="perf-metric-label">Total Rate</span>
-              <span class="perf-metric-value">${formatRate(rateStats.totalRate)}</span>
-            </div>
-          ` : ''}
-          ${rateStats.promptRate?.count > 0 ? `
-            <div class="perf-metric-row">
-              <span class="perf-metric-label">Prompt Rate</span>
-              <span class="perf-metric-value">${formatRate(rateStats.promptRate)}</span>
-            </div>
-          ` : ''}
-          ${rateStats.generationRate?.count > 0 ? `
-            <div class="perf-metric-row">
-              <span class="perf-metric-label">Generation Rate</span>
-              <span class="perf-metric-value">${formatRate(rateStats.generationRate)}</span>
-            </div>
-          ` : ''}
+          <div class="perf-metric-row">
+            <span class="perf-metric-label">Total Time</span>
+            <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
+          </div>
         </div>
       `;
     }
@@ -599,6 +569,36 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="perf-metric-row">
               <span class="perf-metric-label">Total</span>
               <span class="perf-metric-value">${tokenStats.avgTotalTokens.toFixed(1)}</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // Token Rates Section
+    const hasAnyRate = rateStats.totalRate?.count > 0 || rateStats.promptRate?.count > 0 || rateStats.generationRate?.count > 0;
+    if (hasAnyRate) {
+      hasData = true;
+      const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples\nTotal Rate: ${rateStats.totalRate?.count || 0} samples`;
+      html += `
+        <div class="perf-section">
+          <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⚡ Avg Token Rates (tokens/sec)</div>
+          ${rateStats.promptRate?.count > 0 ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Prompt Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.promptRate)}</span>
+            </div>
+          ` : ''}
+          ${rateStats.generationRate?.count > 0 ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Generation Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.generationRate)}</span>
+            </div>
+          ` : ''}
+          ${rateStats.totalRate?.count > 0 ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">Total Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.totalRate)}</span>
             </div>
           ` : ''}
         </div>
@@ -1156,8 +1156,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="stat-section">
               <h4 class="section-header">Performance</h4>
               <div class="stat-row">
-                <span class="stat-label">Avg Total Time</span>
-                <span class="stat-value">${formatMs(perf.timeStats?.avgTotalTimeMs || 0)}</span>
+                <span class="stat-label">Avg Network Latency</span>
+                <span class="stat-value">${formatMs(perf.timeStats?.avgNetworkLatencyMs || 0)}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Avg Prompt Time</span>
@@ -1166,6 +1166,10 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="stat-row">
                 <span class="stat-label">Avg Generation Time</span>
                 <span class="stat-value">${formatMs(perf.timeStats?.avgGenerationTimeMs || 0)}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Avg Total Time</span>
+                <span class="stat-value">${formatMs(perf.timeStats?.avgTotalTimeMs || 0)}</span>
               </div>
             </div>
 
@@ -1190,12 +1194,16 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="stat-section">
               <h4 class="section-header">Throughput</h4>
               <div class="stat-row">
-                <span class="stat-label">Total Rate</span>
-                <span class="stat-value">${perf.rateStats?.totalRate?.avgTokensPerSecond ? perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+                <span class="stat-label">Prompt Rate</span>
+                <span class="stat-value">${perf.rateStats?.promptRate?.avgTokensPerSecond ? perf.rateStats.promptRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Generation Rate</span>
                 <span class="stat-value">${perf.rateStats?.generationRate?.avgTokensPerSecond ? perf.rateStats.generationRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Total Rate</span>
+                <span class="stat-value">${perf.rateStats?.totalRate?.avgTokensPerSecond ? perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
               </div>
             </div>
 
