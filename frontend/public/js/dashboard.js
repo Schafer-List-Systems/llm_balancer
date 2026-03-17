@@ -1157,19 +1157,19 @@ document.addEventListener('DOMContentLoaded', () => {
               <h4 class="section-header">Performance</h4>
               <div class="stat-row">
                 <span class="stat-label">Avg Network Latency</span>
-                <span class="stat-value">${formatMs(perf.timeStats?.avgNetworkLatencyMs || 0)}</span>
+                <span class="stat-value">${perf.timeStats?.avgNetworkLatencyMs != null ? formatMs(perf.timeStats.avgNetworkLatencyMs) : 'N/A'}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Avg Prompt Time</span>
-                <span class="stat-value">${formatMs(perf.timeStats?.avgPromptProcessingTimeMs || 0)}</span>
+                <span class="stat-value">${perf.timeStats?.avgPromptProcessingTimeMs != null ? formatMs(perf.timeStats.avgPromptProcessingTimeMs) : 'N/A'}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Avg Generation Time</span>
-                <span class="stat-value">${formatMs(perf.timeStats?.avgGenerationTimeMs || 0)}</span>
+                <span class="stat-value">${perf.timeStats?.avgGenerationTimeMs != null ? formatMs(perf.timeStats.avgGenerationTimeMs) : 'N/A'}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Avg Total Time</span>
-                <span class="stat-value">${formatMs(perf.timeStats?.avgTotalTimeMs || 0)}</span>
+                <span class="stat-value">${formatMs(perf.timeStats?.avgTotalTimeMs ?? 0)}</span>
               </div>
             </div>
 
@@ -1195,15 +1195,15 @@ document.addEventListener('DOMContentLoaded', () => {
               <h4 class="section-header">Throughput</h4>
               <div class="stat-row">
                 <span class="stat-label">Prompt Rate</span>
-                <span class="stat-value">${perf.rateStats?.promptRate?.avgTokensPerSecond ? perf.rateStats.promptRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+                <span class="stat-value">${perf.rateStats?.promptRate?.avgTokensPerSecond != null ? perf.rateStats.promptRate.avgTokensPerSecond.toFixed(1) : 'N/A'}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Generation Rate</span>
-                <span class="stat-value">${perf.rateStats?.generationRate?.avgTokensPerSecond ? perf.rateStats.generationRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+                <span class="stat-value">${perf.rateStats?.generationRate?.avgTokensPerSecond != null ? perf.rateStats.generationRate.avgTokensPerSecond.toFixed(1) : 'N/A'}</span>
               </div>
               <div class="stat-row">
                 <span class="stat-label">Total Rate</span>
-                <span class="stat-value">${perf.rateStats?.totalRate?.avgTokensPerSecond ? perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1) : '-'}</span>
+                <span class="stat-value">${perf.rateStats?.totalRate?.avgTokensPerSecond != null ? perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1) : 'N/A'}</span>
               </div>
             </div>
 

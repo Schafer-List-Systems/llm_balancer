@@ -700,13 +700,25 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
       const tokenCounts = extractTokenCounts(responseBody);
 
       if (tokenCounts) {
+        // For non-streaming mode: the backend is a black box
+        // We CAN measure: totalTime (full round-trip)
+        // We CANNOT accurately measure:
+        //   - networkLatencyMs: In Node.js non-streaming mode, the entire response
+        //     is buffered before the 'response' event fires, so headersReceivedTime
+        //     ≈ fullResponseTime, making timeToFirstHeader meaningless
+        //   - promptProcessingTimeMs: Cannot distinguish when backend finishes prompt
+        //   - generationTimeMs: Cannot distinguish when backend starts generation
+        //
+        // Only totalTime and token counts are reliably measurable for non-streaming.
+
         backend.updateNonStreamingStats(
           tokenCounts.promptTokens,
           tokenCounts.completionTokens,
           totalTime,
-          timeToFirstHeader  // For now, using time to first header as prompt processing
+          null,                 // promptProcessingTimeMs = null (cannot measure)
+          null                  // networkLatencyMs = null (unreliable in non-streaming)
         );
-        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms, promptProcessing=${timeToFirstHeader}ms`);
+        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, totalTime=${totalTime}ms`);
       }
 
       if (!res.headersSent) {

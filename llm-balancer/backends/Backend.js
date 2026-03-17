@@ -212,22 +212,33 @@ class Backend {
 
   /**
    * Update non-streaming performance statistics
-   * Tracks time metrics (always available) and token counts (unified from backend or request counting)
-   * Also computes derived rates only when sufficient data is available
+   * For non-streaming requests, the backend is a black box - we cannot measure internal timing.
+   * We CAN measure: totalTimeMs, networkLatencyMs, token counts from response
+   * We CANNOT know: promptProcessingTime, generationTime (internal to backend)
    * @param {number} promptTokens - Number of prompt tokens (from backend or request counting)
    * @param {number} completionTokens - Number of completion tokens (from backend or chunk count)
    * @param {number} totalTimeMs - Total round-trip time in milliseconds
-   * @param {number} promptProcessingTimeMs - Corrected prompt processing time (optional)
+   * @param {number|null} promptProcessingTimeMs - Prompt processing time (NULL for non-streaming - cannot measure)
+   * @param {number|null} networkLatencyMs - Network round-trip latency (timeToFirstHeader / 2)
    */
-  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null) {
+  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null, networkLatencyMs = null) {
     this._performanceStats.requestCount++;
 
-    // Track time metrics (always available)
+    // Track totalTimeMs (always available for non-streaming)
     this._performanceStats.totalTimeMs.push(totalTimeMs);
     this._limitSamples(this._performanceStats.totalTimeMs);
-    if (promptProcessingTimeMs !== null) {
+
+    // Only track promptProcessingTimeMs if provided
+    // For non-streaming, this is typically NULL because the backend is a black box
+    if (promptProcessingTimeMs !== null && promptProcessingTimeMs !== undefined) {
       this._performanceStats.promptProcessingTimeMs.push(promptProcessingTimeMs);
       this._limitSamples(this._performanceStats.promptProcessingTimeMs);
+    }
+
+    // Only track networkLatencyMs if provided
+    if (networkLatencyMs !== null && networkLatencyMs !== undefined) {
+      this._performanceStats.networkLatencyMs.push(networkLatencyMs);
+      this._limitSamples(this._performanceStats.networkLatencyMs);
     }
 
     // Track token counts (unified: backend or request counting - only one source per request)
@@ -245,22 +256,17 @@ class Backend {
       this._performanceStats.totalTokens.push(totalTokens);
       this._limitSamples(this._performanceStats.totalTokens);
     }
+
+    // Compute totalRate (ONLY this is computable for non-streaming with known data)
     if (totalTokens > 0 && totalTimeMs > 0) {
       const totalRate = totalTokens / (totalTimeMs / 1000);
       this._performanceStats.totalRate.push(totalRate);
       this._limitSamples(this._performanceStats.totalRate);
     }
-    if (promptTokens > 0 && promptProcessingTimeMs !== null && promptProcessingTimeMs > 0) {
-      const promptRate = promptTokens / (promptProcessingTimeMs / 1000);
-      this._performanceStats.promptRate.push(promptRate);
-      this._limitSamples(this._performanceStats.promptRate);
-    }
-    const generationTimeMs = totalTimeMs - (promptProcessingTimeMs || 0);
-    if (completionTokens > 0 && generationTimeMs > 0) {
-      const generationRate = completionTokens / (generationTimeMs / 1000);
-      this._performanceStats.generationRate.push(generationRate);
-      this._limitSamples(this._performanceStats.generationRate);
-    }
+
+    // DO NOT compute generationTimeMs for non-streaming (cannot measure backend internals)
+    // DO NOT compute promptRate (requires promptProcessingTime which is unknown)
+    // DO NOT compute generationRate (requires generationTime which is unknown)
   }
 
   /**
@@ -383,18 +389,43 @@ class Backend {
   /**
    * Get current performance statistics with computed averages
    * Returns comprehensive stats across all request types and capabilities
-   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number, avgGenerationTimeMs: number, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}} Statistics object
+   * For non-streaming requests, timeStats.avgPromptProcessingTimeMs and timeStats.avgGenerationTimeMs will be null
+   * because these metrics cannot be measured (backend is a black box).
+   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number|null, avgGenerationTimeMs: number|null, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}} Statistics object
    */
   getPerformanceStats() {
+    // Compute averages for time metrics that were tracked
+    const avgTotalTimeMs = this._computeAverage(this._performanceStats.totalTimeMs);
+
+    // Return null for networkLatencyMs if no samples were tracked
+    // (non-streaming requests don't track this because it's unreliable)
+    const hasNetworkLatencyData = this._performanceStats.networkLatencyMs.length > 0;
+    const avgNetworkLatencyMs = hasNetworkLatencyData
+      ? this._computeAverage(this._performanceStats.networkLatencyMs)
+      : null;
+
+    // Return null for promptProcessingTimeMs if no samples were tracked
+    // (non-streaming requests don't track this because backend is a black box)
+    const hasPromptProcessingData = this._performanceStats.promptProcessingTimeMs.length > 0;
+    const avgPromptProcessingTimeMs = hasPromptProcessingData
+      ? this._computeAverage(this._performanceStats.promptProcessingTimeMs)
+      : null;
+
+    // Return null for generationTimeMs if no samples were tracked
+    const hasGenerationTimeData = this._performanceStats.generationTimeMs.length > 0;
+    const avgGenerationTimeMs = hasGenerationTimeData
+      ? this._computeAverage(this._performanceStats.generationTimeMs)
+      : null;
+
     return {
       requestCount: this._performanceStats.requestCount,
 
-      // Time statistics (always available for all request types)
+      // Time statistics
       timeStats: {
-        avgTotalTimeMs: this._computeAverage(this._performanceStats.totalTimeMs),
-        avgPromptProcessingTimeMs: this._computeAverage(this._performanceStats.promptProcessingTimeMs),
-        avgGenerationTimeMs: this._computeAverage(this._performanceStats.generationTimeMs),
-        avgNetworkLatencyMs: this._computeAverage(this._performanceStats.networkLatencyMs)
+        avgTotalTimeMs: avgTotalTimeMs,
+        avgNetworkLatencyMs: avgNetworkLatencyMs,           // null for non-streaming
+        avgPromptProcessingTimeMs: avgPromptProcessingTimeMs, // null for non-streaming
+        avgGenerationTimeMs: avgGenerationTimeMs             // null for non-streaming
       },
 
       // Token statistics (may be null if never received from backend)
