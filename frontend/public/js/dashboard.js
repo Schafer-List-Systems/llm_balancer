@@ -511,15 +511,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let html = '';
 
     // Time Metrics Section
-    const hasTimeStats = timeStats.avgTotalTimeMs !== undefined || timeStats.avgPromptProcessingTimeMs !== undefined || timeStats.avgGenerationTimeMs !== undefined;
+    const hasTimeStats = timeStats.avgTotalTimeMs !== undefined || timeStats.avgPromptProcessingTimeMs !== undefined || timeStats.avgGenerationTimeMs !== undefined || timeStats.avgNetworkLatencyMs !== undefined;
     if (hasTimeStats) {
       hasData = true;
+      // Build tooltip with sample counts for time metrics
+      const timeSampleCounts = [
+        `Total Time: ${timeStats.avgTotalTimeMs !== undefined && timeStats.avgTotalTimeMs > 0 ? 'samples tracked' : 'none'}`,
+        `Network Latency: ${timeStats.avgNetworkLatencyMs !== undefined && timeStats.avgNetworkLatencyMs > 0 ? 'samples tracked' : 'none'}`,
+        `Prompt Processing: ${timeStats.avgPromptProcessingTimeMs !== undefined && timeStats.avgPromptProcessingTimeMs > 0 ? 'samples tracked' : 'none'}`,
+        `Generation: ${timeStats.avgGenerationTimeMs !== undefined && timeStats.avgGenerationTimeMs > 0 ? 'samples tracked (corrected for n tokens)' : 'none'}`
+      ].filter(s => s.includes('samples') || s.includes('none'));
+      const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each metric to see the sample count used.\n\n${timeSampleCounts.join('\n')}`;
+
       html += `
         <div class="perf-section">
-          <div class="perf-section-title">⏱️ Avg Time Metrics</div>
+          <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⏱️ Avg Time Metrics</div>
           <div class="perf-metric-row">
             <span class="perf-metric-label">Total Time</span>
             <span class="perf-metric-value">${formatMs(timeStats.avgTotalTimeMs)}</span>
+          </div>
+          <div class="perf-metric-row">
+            <span class="perf-metric-label">Network Latency</span>
+            <span class="perf-metric-value">${formatMs(timeStats.avgNetworkLatencyMs)}</span>
           </div>
           <div class="perf-metric-row">
             <span class="perf-metric-label">Prompt Processing</span>

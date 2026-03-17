@@ -32,20 +32,20 @@ class Backend {
       requestCount: 0,
 
       // Time tracking (always available for all request types)
-      totalTimeMs: [],              // Full round-trip time: requestSent to fullResponse
-      promptProcessingTimeMs: [],   // Time to first chunk/header: firstChunkTime - requestSent
-      generationTimeMs: [],         // Token generation time: fullResponse - firstChunk
+      totalTimeMs: [],                          // Full round-trip time: requestSent to fullResponse
+      promptProcessingTimeMs: [],               // Corrected prompt processing time
+      generationTimeMs: [],                     // Corrected generation time for ALL n tokens
+      networkLatencyMs: [],                     // Network round-trip latency: timeToFirstHeader / 2
 
-      // Token counts (when available from backend)
-      promptTokens: [],             // Prompt tokens from backend usage (may be null for some backends)
-      completionTokens: [],         // Completion tokens from backend usage (may be null)
-      totalTokens: [],              // Total tokens (may be null)
-      requestTokens: [],            // Request-side token counts (from prompt body) - NEW
+      // Token counts (unified: from backend usage OR request-side counting)
+      promptTokens: [],                         // Prompt tokens (from backend or request counting)
+      completionTokens: [],                     // Completion tokens (from backend or chunk count)
+      totalTokens: [],                          // Total tokens
 
       // Computed rates (derived from time and token metrics)
-      totalRate: [],                // totalTokens / totalTime (tokens/second)
-      promptRate: [],               // promptTokens / promptProcessingTime (tokens/second)
-      generationRate: []            // completionTokens / generationTime (tokens/second)
+      totalRate: [],                            // totalTokens / totalTime (tokens/second)
+      promptRate: [],                           // promptTokens / promptProcessingTime (tokens/second)
+      generationRate: []                        // completionTokens / generationTime (tokens/second)
     };
 
     // Health checker will be assigned based on primary API type
@@ -212,15 +212,14 @@ class Backend {
 
   /**
    * Update non-streaming performance statistics
-   * Tracks time metrics (always available) and token counts (when provided by backend)
+   * Tracks time metrics (always available) and token counts (unified from backend or request counting)
    * Also computes derived rates only when sufficient data is available
-   * @param {number} promptTokens - Number of prompt tokens used (can be null if not available)
-   * @param {number} completionTokens - Number of completion tokens generated (can be null)
-   * @param {number} totalTimeMs - Total round-trip time in milliseconds (request sent to full response)
-   * @param {number} promptProcessingTimeMs - Time to first header/chunk in milliseconds (optional)
-   * @param {number} requestTokens - Token count from request body (optional)
+   * @param {number} promptTokens - Number of prompt tokens (from backend or request counting)
+   * @param {number} completionTokens - Number of completion tokens (from backend or chunk count)
+   * @param {number} totalTimeMs - Total round-trip time in milliseconds
+   * @param {number} promptProcessingTimeMs - Corrected prompt processing time (optional)
    */
-  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null, requestTokens = null) {
+  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null) {
     this._performanceStats.requestCount++;
 
     // Track time metrics (always available)
@@ -231,7 +230,7 @@ class Backend {
       this._limitSamples(this._performanceStats.promptProcessingTimeMs);
     }
 
-    // Track token counts (only when provided, preserving null for backends without usage)
+    // Track token counts (unified: backend or request counting - only one source per request)
     if (promptTokens !== undefined && promptTokens !== null) {
       this._performanceStats.promptTokens.push(promptTokens);
       this._limitSamples(this._performanceStats.promptTokens);
@@ -239,11 +238,6 @@ class Backend {
     if (completionTokens !== undefined && completionTokens !== null) {
       this._performanceStats.completionTokens.push(completionTokens);
       this._limitSamples(this._performanceStats.completionTokens);
-    }
-    // Track request-side token counts (from prompt body)
-    if (requestTokens !== null && requestTokens !== undefined) {
-      this._performanceStats.requestTokens.push(requestTokens);
-      this._limitSamples(this._performanceStats.requestTokens);
     }
     // Track total tokens when both components are available
     const totalTokens = (promptTokens || 0) + (completionTokens || 0);
@@ -273,13 +267,14 @@ class Backend {
    * Update streaming performance statistics
    * Tracks all available metrics including timing (always) and token counts (when available)
    * Computes derived rates only when sufficient data exists
-   * @param {number} promptTokens - Number of prompt tokens (can be null if not in response)
-   * @param {number} completionTokens - Number of completion tokens (can be null if not in response)
+   * @param {number} promptTokens - Number of prompt tokens (from backend or request counting)
+   * @param {number} completionTokens - Number of completion tokens (from backend or chunk count)
    * @param {number} firstChunkTimeMs - Time from request sent to first chunk in milliseconds
    * @param {number} totalCompletionTimeMs - Time from request sent to full response in milliseconds
-   * @param {number} requestTokens - Token count from request body (optional)
+   * @param {number} networkLatencyMs - Network round-trip latency in milliseconds (optional)
+   * @param {number} correctedGenerationTimeMs - Corrected generation time for ALL n tokens (optional)
    */
-  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs, requestTokens = null) {
+  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs, networkLatencyMs = null, correctedGenerationTimeMs = null) {
     this._performanceStats.requestCount++;
 
     // Track time metrics (always available for streaming)
@@ -288,9 +283,20 @@ class Backend {
     this._performanceStats.promptProcessingTimeMs.push(firstChunkTimeMs);
     this._limitSamples(this._performanceStats.promptProcessingTimeMs);
 
-    const generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs;
-    this._performanceStats.generationTimeMs.push(generationTimeMs);
+    // Track corrected generation time when provided, otherwise use unadjusted
+    if (correctedGenerationTimeMs !== null && correctedGenerationTimeMs !== undefined) {
+      this._performanceStats.generationTimeMs.push(correctedGenerationTimeMs);
+    } else {
+      const generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs;
+      this._performanceStats.generationTimeMs.push(generationTimeMs);
+    }
     this._limitSamples(this._performanceStats.generationTimeMs);
+
+    // Track network latency when provided
+    if (networkLatencyMs !== null && networkLatencyMs !== undefined) {
+      this._performanceStats.networkLatencyMs.push(networkLatencyMs);
+      this._limitSamples(this._performanceStats.networkLatencyMs);
+    }
 
     // Track token counts (only when provided, allowing null for APIs without usage)
     if (promptTokens !== null && promptTokens !== undefined) {
@@ -300,11 +306,6 @@ class Backend {
     if (completionTokens !== null && completionTokens !== undefined) {
       this._performanceStats.completionTokens.push(completionTokens);
       this._limitSamples(this._performanceStats.completionTokens);
-    }
-    // Track request-side token counts (from prompt body)
-    if (requestTokens !== null && requestTokens !== undefined) {
-      this._performanceStats.requestTokens.push(requestTokens);
-      this._limitSamples(this._performanceStats.requestTokens);
     }
     // Track total tokens when both components are available
     const totalTokens = (promptTokens || 0) + (completionTokens || 0);
@@ -324,8 +325,12 @@ class Backend {
       this._performanceStats.promptRate.push(promptRate);
       this._limitSamples(this._performanceStats.promptRate);
     }
-    if (completionTokens > 0 && generationTimeMs > 0) {
-      const generationRate = completionTokens / (generationTimeMs / 1000);
+    // Use corrected generation time for rate calculation when available
+    const actualGenerationTime = correctedGenerationTimeMs !== null && correctedGenerationTimeMs !== undefined
+      ? correctedGenerationTimeMs
+      : totalCompletionTimeMs - firstChunkTimeMs;
+    if (completionTokens > 0 && actualGenerationTime > 0) {
+      const generationRate = completionTokens / (actualGenerationTime / 1000);
       this._performanceStats.generationRate.push(generationRate);
       this._limitSamples(this._performanceStats.generationRate);
     }
@@ -339,17 +344,15 @@ class Backend {
    * @param {number} chunkCount - Number of SSE data chunks (each represents 1 completion token)
    * @param {number} firstChunkTimeMs - Time from request sent to first chunk in milliseconds
    * @param {number} totalCompletionTimeMs - Time from request sent to full response in milliseconds
-   * @param {number} requestTokens - Token count from request body (optional)
    */
-  updateStreamingStatsFromChunks(estimatedPromptTokens, chunkCount, firstChunkTimeMs, totalCompletionTimeMs, requestTokens = null) {
+  updateStreamingStatsFromChunks(estimatedPromptTokens, chunkCount, firstChunkTimeMs, totalCompletionTimeMs) {
     // Each SSE chunk represents 1 completion token (empirically verified)
     const completionTokens = chunkCount;
     this.updateStreamingStats(
       estimatedPromptTokens,
       completionTokens,
       firstChunkTimeMs,
-      totalCompletionTimeMs,
-      requestTokens
+      totalCompletionTimeMs
     );
   }
 
@@ -380,7 +383,7 @@ class Backend {
   /**
    * Get current performance statistics with computed averages
    * Returns comprehensive stats across all request types and capabilities
-   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number, avgGenerationTimeMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}} Statistics object
+   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number, avgGenerationTimeMs: number, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}} Statistics object
    */
   getPerformanceStats() {
     return {
@@ -390,15 +393,15 @@ class Backend {
       timeStats: {
         avgTotalTimeMs: this._computeAverage(this._performanceStats.totalTimeMs),
         avgPromptProcessingTimeMs: this._computeAverage(this._performanceStats.promptProcessingTimeMs),
-        avgGenerationTimeMs: this._computeAverage(this._performanceStats.generationTimeMs)
+        avgGenerationTimeMs: this._computeAverage(this._performanceStats.generationTimeMs),
+        avgNetworkLatencyMs: this._computeAverage(this._performanceStats.networkLatencyMs)
       },
 
       // Token statistics (may be null if never received from backend)
       tokenStats: {
         avgPromptTokens: this._computeAverage(this._performanceStats.promptTokens) || null,
         avgCompletionTokens: this._computeAverage(this._performanceStats.completionTokens) || null,
-        avgTotalTokens: this._computeAverage(this._performanceStats.totalTokens) || null,
-        avgRequestTokens: this._computeAverage(this._performanceStats.requestTokens) || null
+        avgTotalTokens: this._computeAverage(this._performanceStats.totalTokens) || null
       },
 
       // Rate statistics (may be null if insufficient data for computation)
@@ -492,10 +495,12 @@ class Backend {
     this._performanceStats.totalTimeMs = [];
     this._performanceStats.promptProcessingTimeMs = [];
     this._performanceStats.generationTimeMs = [];
+    this._performanceStats.promptProcessingTimeMs = [];
+    this._performanceStats.generationTimeMs = [];
+    this._performanceStats.networkLatencyMs = [];
     this._performanceStats.promptTokens = [];
     this._performanceStats.completionTokens = [];
     this._performanceStats.totalTokens = [];
-    this._performanceStats.requestTokens = [];
     this._performanceStats.totalRate = [];
     this._performanceStats.promptRate = [];
     this._performanceStats.generationRate = [];
