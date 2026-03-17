@@ -554,7 +554,9 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           res.end();
         } else {
           // Ensure response is properly closed even if headers already sent
-          res.destroy();
+          // Use res.end() instead of res.destroy() to allow proper TCP connection close
+          // res.destroy() would abruptly cut the connection, causing curl error 18
+          res.end();
         }
 
         releaseBackend(balancer, backend, 'streaming');
