@@ -394,7 +394,11 @@ app.get('/health', (req, res) => {
     maxPayloadSizeMB: config.maxPayloadSizeMB,
     healthyBackends: healthStats.healthyBackends,
     totalBackends: healthStats.totalBackends,
-    backends: healthStats.backends,
+    backends: healthStats.backends.map(b => ({
+      ...b,
+      activeStreamingRequests: b.activeStreamingRequests || 0,
+      activeNonStreamingRequests: b.activeNonStreamingRequests || 0
+    })),
     hasHealthyBackends: balancer.hasHealthyBackends(),
     // Add: Backend concurrency information
     overloadedBackends: backends.filter(
@@ -440,6 +444,8 @@ app.get('/stats', (req, res) => {
       priority: b.priority || 0,
       healthy: b.healthy,
       activeRequestCount: b.activeRequestCount,
+      activeStreamingRequests: b.activeStreamingRequests || 0,
+      activeNonStreamingRequests: b.activeNonStreamingRequests || 0,
       maxConcurrency: b.maxConcurrency,
       utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
       requestCount: b.requestCount,

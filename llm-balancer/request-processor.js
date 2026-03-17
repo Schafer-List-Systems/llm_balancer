@@ -199,14 +199,14 @@ function sendRequestBody(proxyReq, body) {
  * Release a backend back to the pool
  * @param {Object} balancer - Balancer instance
  * @param {Object} backend - Backend to release
+ * @param {string} mode - Request mode: 'streaming' or 'non-streaming'
  */
-function releaseBackend(balancer, backend) {
-  if (backend.activeRequestCount > 0) {
-    backend.activeRequestCount--;
-    // Notify when transitioning from max to below max (queue may have waiting requests)
-    if (backend.activeRequestCount < backend.maxConcurrency) {
-      balancer.notifyBackendAvailable();
-    }
+function releaseBackend(balancer, backend, mode = 'streaming') {
+  // Use mode-specific release method
+  if (mode === 'streaming') {
+    backend.decrementStreamingRequest(() => balancer.notifyBackendAvailable());
+  } else {
+    backend.decrementNonStreamingRequest(() => balancer.notifyBackendAvailable());
   }
 }
 
@@ -227,20 +227,36 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
   console.debug(`[${getTimestamp()}] [Gateway][${requestId}] req.headers['content-type']:`, req?.headers?.['content-type'] ?? 'N/A');
   console.debug(`[${getTimestamp()}] [Gateway][${requestId}] req.body type:`, typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body));
 
-  // Increment active request count for this backend
-  backend.activeRequestCount++;
+  // Copy request headers
+  const headers = { ...req.headers };
+
+  // Remove hop-by-hop headers
+  hopByHopHeaders.forEach(header => {
+    delete headers[header.toLowerCase()];
+  });
+
+  // Remove Content-Length - let Node.js calculate it for the forwarded request
+  delete headers['content-length'];
+
+  // Capture request body for debug tracking
+  let requestBody = null;
+  let originalBody = getRequestBody(req);
+
+  // Handle streaming response - check if client requested stream in body
+  const isStreaming = (originalBody && typeof originalBody === 'object' && originalBody.stream === true) ||
+                      (typeof originalBody === 'string' && originalBody.includes('"stream":true'));
+
+  // Increment active request count using mode-specific method
+  if (isStreaming) {
+    backend.incrementStreamingRequest(() => balancer.notifyBackendAvailable());
+  } else {
+    backend.incrementNonStreamingRequest(() => balancer.notifyBackendAvailable());
+  }
 
   // Also increment the processed request counter here
   // This ensures the counter is tracked when the request actually starts processing
   // In the new architecture, Backend tracks its own requestCount (separation of concerns)
   backend.requestCount = (backend.requestCount || 0) + 1;
-
-  const targetUrl = new URL(req.url, backend.url);
-
-  // Capture request body for debug tracking
-  let requestBody = null;
-  let originalBody = getRequestBody(req);
-  let responseBody = null;
 
   // Replace model field if matchedModel is provided
   if (matchedModel && typeof originalBody === 'string') {
@@ -262,21 +278,6 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
   } else if (originalBody && Buffer.isBuffer(originalBody)) {
     requestBody = originalBody.toString('utf8');
   }
-
-  // Copy request headers
-  const headers = { ...req.headers };
-
-  // Remove hop-by-hop headers
-  hopByHopHeaders.forEach(header => {
-    delete headers[header.toLowerCase()];
-  });
-
-  // Remove Content-Length - let Node.js calculate it for the forwarded request
-  delete headers['content-length'];
-
-  // Handle streaming response - check if client requested stream in body
-  const isStreaming = (originalBody && typeof originalBody === 'object' && originalBody.stream === true) ||
-                      (typeof requestBody === 'string' && requestBody.includes('"stream":true'));
 
   if (isStreaming) {
     console.log(`[${getTimestamp()}] [Gateway][${requestId}] Using handleStreamingRequest (stream: true detected in body)`);
@@ -337,7 +338,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request error to ${backend.url}:`, err.message);
     balancer.markFailed(backend.url);
     // Ensure backend is released on error
-    releaseBackend(balancer, backend);
+    releaseBackend(balancer, backend, 'streaming');
     onRequestComplete();
     // Only send response if not already sent
     if (!res.headersSent) {
@@ -354,16 +355,14 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
-    releaseBackend(balancer, backend);
+    releaseBackend(balancer, backend, 'non-streaming');
     onRequestComplete();
     // Send error response to client
-    if (!res.headersSent) {
-      res.status(504).json({
-        error: 'Gateway Timeout',
-        message: 'Backend request timed out',
-        backend: backend.url
-      });
-    }
+    res.status(504).json({
+      error: 'Gateway Timeout',
+      message: 'Backend request timed out',
+      backend: backend.url
+    });
   });
 
   // Record when request is sent to backend
@@ -558,7 +557,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           res.destroy();
         }
 
-        releaseBackend(balancer, backend);
+        releaseBackend(balancer, backend, 'streaming');
         onRequestComplete();
 
         // Cache the completed request for KV cache reuse
@@ -607,7 +606,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           }
         }
 
-        releaseBackend(balancer, backend);
+        releaseBackend(balancer, backend, 'streaming');
         onRequestComplete();
       });
     }
@@ -644,7 +643,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
-    releaseBackend(balancer, backend);
+    releaseBackend(balancer, backend, 'streaming');
     onRequestComplete();
     // Send error response to client
     res.status(504).json({
@@ -659,7 +658,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request error to ${backend.url}:`, err.message);
     balancer.markFailed(backend.url);
     // Ensure backend is released on error
-    releaseBackend(balancer, backend);
+    releaseBackend(balancer, backend, 'non-streaming');
     onRequestComplete();
     // Only send response if not already sent
     if (!res.headersSent) {
@@ -730,7 +729,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         }
       }
 
-      releaseBackend(balancer, backend);
+      releaseBackend(balancer, backend, 'non-streaming');
       onRequestComplete();
 
       // Cache the completed request for KV cache reuse

@@ -44,6 +44,303 @@
   }
 }
 
+/* Spinning glowing ring animation for streaming backends */
+@keyframes spinning-glow-ring {
+  0% {
+    transform: rotate(0deg);
+    box-shadow:
+      0 -20px 30px rgba(56, 189, 252, 0.3),
+      0 -20px 40px rgba(56, 189, 252, 0.2),
+      0 0 4px rgba(16, 185, 129, 0.3),
+      0 0 8px rgba(16, 185, 129, 0.2),
+      inset 0 0 4px rgba(16, 185, 129, 0.1);
+    border-color: #10b981;
+    border-image: linear-gradient(135deg, #38bdf8, #10b981) 1;
+  }
+  25% {
+    transform: rotate(90deg);
+    box-shadow:
+      20px 0 30px rgba(56, 189, 252, 0.4),
+      -20px 0 40px rgba(56, 189, 252, 0.3),
+      0 0 8px rgba(16, 185, 129, 0.4),
+      0 0 16px rgba(16, 185, 129, 0.3),
+      inset 0 0 8px rgba(16, 185, 129, 0.2);
+    border-color: #34d399;
+    border-image: linear-gradient(225deg, #38bdf8, #10b981) 1;
+  }
+  50% {
+    transform: rotate(180deg);
+    box-shadow:
+      0 20px 30px rgba(56, 189, 252, 0.5),
+      0 20px 40px rgba(56, 189, 252, 0.4),
+      0 0 12px rgba(16, 185, 129, 0.6),
+      0 0 24px rgba(16, 185, 129, 0.4),
+      inset 0 0 12px rgba(16, 185, 129, 0.3);
+    border-color: #6ee7b7;
+    border-image: linear-gradient(315deg, #38bdf8, #10b981) 1;
+  }
+  75% {
+    transform: rotate(270deg);
+    box-shadow:
+      -20px 0 30px rgba(56, 189, 252, 0.4),
+      20px 0 40px rgba(56, 189, 252, 0.3),
+      0 0 8px rgba(16, 185, 129, 0.4),
+      0 0 16px rgba(16, 185, 129, 0.3),
+      inset 0 0 8px rgba(16, 185, 129, 0.2);
+    border-color: #34d399;
+    border-image: linear-gradient(45deg, #38bdf8, #10b981) 1;
+  }
+  100% {
+    transform: rotate(360deg);
+    box-shadow:
+      0 -20px 30px rgba(56, 189, 252, 0.3),
+      0 -20px 40px rgba(56, 189, 252, 0.2),
+      0 0 4px rgba(16, 185, 129, 0.3),
+      0 0 8px rgba(16, 185, 129, 0.2),
+      inset 0 0 4px rgba(16, 185, 129, 0.1);
+    border-color: #10b981;
+    border-image: linear-gradient(135deg, #38bdf8, #10b981) 1;
+  }
+}
+
+/* Multi-ring spinning glow for enhanced visual effect */
+@keyframes multi-ring-spin-glow {
+  0% {
+    animation-timing-function: ease-out;
+    box-shadow:
+      0 0 0 0 rgba(56, 189, 252, 0.7),
+      0 0 0 10px rgba(56, 189, 252, 0.5),
+      0 0 0 20px rgba(56, 189, 252, 0.3),
+      0 0 4px rgba(16, 185, 129, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    animation-timing-function: ease-in;
+    box-shadow:
+      0 0 0 10px rgba(56, 189, 252, 0.4),
+      0 0 0 25px rgba(56, 189, 252, 0.2),
+      0 0 0 40px rgba(56, 189, 252, 0),
+      0 0 12px rgba(16, 185, 129, 0.6),
+      0 0 24px rgba(16, 185, 129, 0.5);
+  }
+  100% {
+    animation-timing-function: ease-out;
+    box-shadow:
+      0 0 0 20px rgba(56, 189, 252, 0),
+      0 0 0 35px rgba(56, 189, 252, 0),
+      0 0 0 50px rgba(56, 189, 252, 0),
+      0 0 4px rgba(16, 185, 129, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.3);
+  }
+}
+
+/* Combined spinning ring + multi-ring glow animation */
+@keyframes spinning-glow-combined {
+  0% {
+    transform: rotate(0deg);
+    box-shadow:
+      0 0 0 2px rgba(56, 189, 252, 0.6),
+      0 0 0 6px rgba(56, 189, 252, 0.4),
+      0 0 0 14px rgba(56, 189, 252, 0.2),
+      0 0 4px rgba(16, 185, 129, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.3),
+      inset 0 0 4px rgba(16, 185, 129, 0.2);
+    border-color: #10b981;
+  }
+  25% {
+    transform: rotate(90deg);
+    box-shadow:
+      20px -20px 0 2px rgba(56, 189, 252, 0.6),
+      -20px 20px 0 6px rgba(56, 189, 252, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.5),
+      0 0 16px rgba(16, 185, 129, 0.4),
+      inset 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #34d399;
+  }
+  50% {
+    transform: rotate(180deg);
+    box-shadow:
+      0 0 0 2px rgba(56, 189, 252, 0.5),
+      0 0 0 10px rgba(56, 189, 252, 0.3),
+      0 0 0 20px rgba(56, 189, 252, 0.1),
+      0 0 12px rgba(16, 185, 129, 0.7),
+      0 0 24px rgba(16, 185, 129, 0.5),
+      inset 0 0 12px rgba(16, 185, 129, 0.4);
+    border-color: #6ee7b7;
+  }
+  75% {
+    transform: rotate(270deg);
+    box-shadow:
+      -20px -20px 0 2px rgba(56, 189, 252, 0.6),
+      20px 20px 0 6px rgba(56, 189, 252, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.5),
+      0 0 16px rgba(16, 185, 129, 0.4),
+      inset 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #34d399;
+  }
+  100% {
+    transform: rotate(360deg);
+    box-shadow:
+      0 0 0 2px rgba(56, 189, 252, 0.6),
+      0 0 0 6px rgba(56, 189, 252, 0.4),
+      0 0 0 14px rgba(56, 189, 252, 0.2),
+      0 0 4px rgba(16, 185, 129, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.3),
+      inset 0 0 4px rgba(16, 185, 129, 0.2);
+    border-color: #10b981;
+  }
+}
+
+/* Dark mode spinning glow ring */
+@keyframes spinning-glow-ring-dark {
+  0% {
+    transform: rotate(0deg);
+    box-shadow:
+      0 -20px 40px rgba(56, 189, 252, 0.5),
+      0 -20px 50px rgba(56, 189, 252, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.5),
+      0 0 16px rgba(16, 185, 129, 0.4),
+      inset 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #10b981;
+    border-image: linear-gradient(135deg, #38bdf8, #10b981) 1;
+  }
+  25% {
+    transform: rotate(90deg);
+    box-shadow:
+      20px 0 40px rgba(56, 189, 252, 0.6),
+      -20px 0 50px rgba(56, 189, 252, 0.5),
+      0 0 12px rgba(16, 185, 129, 0.6),
+      0 0 24px rgba(16, 185, 129, 0.5),
+      inset 0 0 12px rgba(16, 185, 129, 0.4);
+    border-color: #34d399;
+    border-image: linear-gradient(225deg, #38bdf8, #10b981) 1;
+  }
+  50% {
+    transform: rotate(180deg);
+    box-shadow:
+      0 20px 40px rgba(56, 189, 252, 0.7),
+      0 20px 50px rgba(56, 189, 252, 0.6),
+      0 0 16px rgba(16, 185, 129, 0.8),
+      0 0 32px rgba(16, 185, 129, 0.6),
+      inset 0 0 16px rgba(16, 185, 129, 0.5);
+    border-color: #6ee7b7;
+    border-image: linear-gradient(315deg, #38bdf8, #10b981) 1;
+  }
+  75% {
+    transform: rotate(270deg);
+    box-shadow:
+      -20px 0 40px rgba(56, 189, 252, 0.6),
+      20px 0 50px rgba(56, 189, 252, 0.5),
+      0 0 12px rgba(16, 185, 129, 0.6),
+      0 0 24px rgba(16, 185, 129, 0.5),
+      inset 0 0 12px rgba(16, 185, 129, 0.4);
+    border-color: #34d399;
+    border-image: linear-gradient(45deg, #38bdf8, #10b981) 1;
+  }
+  100% {
+    transform: rotate(360deg);
+    box-shadow:
+      0 -20px 40px rgba(56, 189, 252, 0.5),
+      0 -20px 50px rgba(56, 189, 252, 0.4),
+      0 0 8px rgba(16, 185, 129, 0.5),
+      0 0 16px rgba(16, 185, 129, 0.4),
+      inset 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #10b981;
+    border-image: linear-gradient(135deg, #38bdf8, #10b981) 1;
+  }
+}
+
+/* Dark mode multi-ring spinning glow */
+@keyframes spinning-glow-combined-dark {
+  0% {
+    transform: rotate(0deg);
+    box-shadow:
+      0 0 0 3px rgba(56, 189, 252, 0.7),
+      0 0 0 10px rgba(56, 189, 252, 0.5),
+      0 0 0 22px rgba(56, 189, 252, 0.3),
+      0 0 8px rgba(16, 185, 129, 0.5),
+      0 0 16px rgba(16, 185, 129, 0.4),
+      inset 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #10b981;
+  }
+  25% {
+    transform: rotate(90deg);
+    box-shadow:
+      20px -20px 0 3px rgba(56, 189, 252, 0.7),
+      -20px 20px 0 10px rgba(56, 189, 252, 0.5),
+      0 0 12px rgba(16, 185, 129, 0.6),
+      0 0 24px rgba(16, 185, 129, 0.5),
+      inset 0 0 12px rgba(16, 185, 129, 0.4);
+    border-color: #34d399;
+  }
+  50% {
+    transform: rotate(180deg);
+    box-shadow:
+      0 0 0 3px rgba(56, 189, 252, 0.6),
+      0 0 0 14px rgba(56, 189, 252, 0.4),
+      0 0 0 28px rgba(56, 189, 252, 0.2),
+      0 0 16px rgba(16, 185, 129, 0.8),
+      0 0 32px rgba(16, 185, 129, 0.6),
+      inset 0 0 16px rgba(16, 185, 129, 0.5);
+    border-color: #6ee7b7;
+  }
+  75% {
+    transform: rotate(270deg);
+    box-shadow:
+      -20px -20px 0 3px rgba(56, 189, 252, 0.7),
+      20px 20px 0 10px rgba(56, 189, 252, 0.5),
+      0 0 12px rgba(16, 185, 129, 0.6),
+      0 0 24px rgba(16, 185, 129, 0.5),
+      inset 0 0 12px rgba(16, 185, 129, 0.4);
+    border-color: #34d399;
+  }
+  100% {
+    transform: rotate(360deg);
+    box-shadow:
+      0 0 0 3px rgba(56, 189, 252, 0.7),
+      0 0 0 10px rgba(56, 189, 252, 0.5),
+      0 0 0 22px rgba(56, 189, 252, 0.3),
+      0 0 8px rgba(16, 185, 129, 0.5),
+      0 0 16px rgba(16, 185, 129, 0.4),
+      inset 0 0 8px rgba(16, 185, 129, 0.3);
+    border-color: #10b981;
+  }
+}
+
+/* Spinner ring rotation animation for outer conic gradient */
+@keyframes spinner-ring-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Spinner glow pulse animation for outer radial gradient */
+@keyframes spinner-glow-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+
+/* Dark mode pulsating glow for non-streaming */
+@keyframes pulsating-glow-dark {
+  0%, 100% {
+    border-color: #10b981;
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.4), 0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    border-color: #34d399;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.7), 0 0 24px rgba(16, 185, 129, 0.5);
+  }
+}
+
 /* Dark mode variables */
 body.dark-mode {
   --bg-color: #0f172a;
@@ -390,6 +687,170 @@ body.dark-mode body {
 /* Dark mode: pulsing glow for busy healthy backends */
 body.dark-mode .backend-card.healthy.busy {
   animation: pulsing-glow-dark 2.5s ease-in-out infinite;
+}
+
+/* Specific mode indicators - higher priority than generic busy */
+/* Pulsating glow for non-streaming active requests */
+.backend-card.healthy.non-streaming-active {
+  animation: pulsating-glow 2s ease-in-out infinite;
+}
+
+/* Dark mode: pulsating glow for non-streaming active requests */
+body.dark-mode .backend-card.healthy.non-streaming-active {
+  animation: pulsating-glow-dark 2s ease-in-out infinite;
+}
+
+/* Spinning glowing ring for streaming active requests */
+.backend-card.healthy.streaming-active {
+  animation: spinning-glow-combined 3s linear infinite;
+  position: relative;
+}
+
+/* Add an outer spinning ring element */
+.backend-card.healthy.streaming-active::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: inherit;
+  background-size: 200% 200%;
+  background: conic-gradient(rgba(56, 189, 252, 0.3) 0deg, transparent 90deg, rgba(56, 189, 252, 0.3) 180deg, transparent 270deg, rgba(56, 189, 252, 0.3) 360deg);
+  animation: spinner-ring-spin 2s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+/* Inner glow layer */
+.backend-card.healthy.streaming-active::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(56, 189, 252, 0.15) 0%, transparent 70%);
+  animation: spinner-glow-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Dark mode: spinning glowing ring for streaming active requests */
+body.dark-mode .backend-card.healthy.streaming-active {
+  animation: spinning-glow-combined-dark 3s linear infinite;
+  position: relative;
+}
+
+body.dark-mode .backend-card.healthy.streaming-active::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: inherit;
+  background-size: 200% 200%;
+  background: conic-gradient(rgba(56, 189, 252, 0.5) 0deg, transparent 90deg, rgba(56, 189, 252, 0.5) 180deg, transparent 270deg, rgba(56, 189, 252, 0.5) 360deg);
+  animation: spinner-ring-spin 2s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+body.dark-mode .backend-card.healthy.streaming-active::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(56, 189, 252, 0.25) 0%, transparent 70%);
+  animation: spinner-glow-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure mode-specific classes override busy class */
+.backend-card.healthy.busy.streaming-active {
+  animation: spinning-glow-combined 3s linear infinite;
+  position: relative;
+}
+
+.backend-card.healthy.busy.streaming-active::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: inherit;
+  background-size: 200% 200%;
+  background: conic-gradient(rgba(56, 189, 252, 0.3) 0deg, transparent 90deg, rgba(56, 189, 252, 0.3) 180deg, transparent 270deg, rgba(56, 189, 252, 0.3) 360deg);
+  animation: spinner-ring-spin 2s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+.backend-card.healthy.busy.streaming-active::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(56, 189, 252, 0.15) 0%, transparent 70%);
+  animation: spinner-glow-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.dark-mode .backend-card.healthy.busy.streaming-active {
+  animation: spinning-glow-combined-dark 3s linear infinite;
+  position: relative;
+}
+
+body.dark-mode .backend-card.healthy.busy.streaming-active::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: inherit;
+  background-size: 200% 200%;
+  background: conic-gradient(rgba(56, 189, 252, 0.5) 0deg, transparent 90deg, rgba(56, 189, 252, 0.5) 180deg, transparent 270deg, rgba(56, 189, 252, 0.5) 360deg);
+  animation: spinner-ring-spin 2s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+body.dark-mode .backend-card.healthy.busy.streaming-active::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(56, 189, 252, 0.25) 0%, transparent 70%);
+  animation: spinner-glow-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.backend-card.healthy.busy.non-streaming-active {
+  animation: pulsating-glow 2s ease-in-out infinite;
+}
+
+body.dark-mode .backend-card.healthy.busy.non-streaming-active {
+  animation: pulsating-glow-dark 2s ease-in-out infinite;
 }
 
 .backend-url {

@@ -372,8 +372,19 @@ document.addEventListener('DOMContentLoaded', () => {
       card.classList.remove('healthy', 'unhealthy');
       card.classList.add(healthClass);
 
-      // Add/remove busy class for pulsing glow effect
-      card.classList.toggle('busy', isBusy);
+      // Remove all status classes before adding new ones
+      card.classList.remove('busy', 'streaming-active', 'non-streaming-active');
+
+      // Add mode-specific classes for visual feedback
+      if (isBusy) {
+        card.classList.add('busy');
+        // Prioritize streaming mode (rotating) over non-streaming (pulsating)
+        if ((backend.activeStreamingRequests || 0) > 0) {
+          card.classList.add('streaming-active');
+        } else if ((backend.activeNonStreamingRequests || 0) > 0) {
+          card.classList.add('non-streaming-active');
+        }
+      }
 
       // Update text values using textContent (preserves event listeners)
       const nameEl = card.querySelector('.backend-name');
@@ -1155,18 +1166,21 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Performance Stats -->
             <div class="stat-section">
               <h4 class="section-header">Performance</h4>
+              ${(perf.timeStats?.avgNetworkLatencyMs != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Network Latency</span>
-                <span class="stat-value">${perf.timeStats?.avgNetworkLatencyMs != null ? formatMs(perf.timeStats.avgNetworkLatencyMs) : 'N/A'}</span>
-              </div>
+                <span class="stat-value">${formatMs(perf.timeStats.avgNetworkLatencyMs)}</span>
+              </div>` : ''}
+              ${(perf.timeStats?.avgPromptProcessingTimeMs != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Prompt Time</span>
-                <span class="stat-value">${perf.timeStats?.avgPromptProcessingTimeMs != null ? formatMs(perf.timeStats.avgPromptProcessingTimeMs) : 'N/A'}</span>
-              </div>
+                <span class="stat-value">${formatMs(perf.timeStats.avgPromptProcessingTimeMs)}</span>
+              </div>` : ''}
+              ${(perf.timeStats?.avgGenerationTimeMs != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Generation Time</span>
-                <span class="stat-value">${perf.timeStats?.avgGenerationTimeMs != null ? formatMs(perf.timeStats.avgGenerationTimeMs) : 'N/A'}</span>
-              </div>
+                <span class="stat-value">${formatMs(perf.timeStats.avgGenerationTimeMs)}</span>
+              </div>` : ''}
               <div class="stat-row">
                 <span class="stat-label">Avg Total Time</span>
                 <span class="stat-value">${formatMs(perf.timeStats?.avgTotalTimeMs ?? 0)}</span>
@@ -1176,35 +1190,41 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Token Stats -->
             <div class="stat-section">
               <h4 class="section-header">Tokens</h4>
+              ${(perf.tokenStats?.avgPromptTokens != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Prompt</span>
-                <span class="stat-value">${perf.tokenStats?.avgPromptTokens ? Math.round(perf.tokenStats.avgPromptTokens) : '-'}</span>
-              </div>
+                <span class="stat-value">${Math.round(perf.tokenStats.avgPromptTokens)}</span>
+              </div>` : ''}
+              ${(perf.tokenStats?.avgCompletionTokens != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Completion</span>
-                <span class="stat-value">${perf.tokenStats?.avgCompletionTokens ? Math.round(perf.tokenStats.avgCompletionTokens) : '-'}</span>
-              </div>
+                <span class="stat-value">${Math.round(perf.tokenStats.avgCompletionTokens)}</span>
+              </div>` : ''}
+              ${(perf.tokenStats?.avgTotalTokens != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Total</span>
-                <span class="stat-value">${perf.tokenStats?.avgTotalTokens ? Math.round(perf.tokenStats.avgTotalTokens) : '-'}</span>
-              </div>
+                <span class="stat-value">${Math.round(perf.tokenStats.avgTotalTokens)}</span>
+              </div>` : ''}
             </div>
 
             <!-- Rate Stats -->
             <div class="stat-section">
               <h4 class="section-header">Throughput</h4>
+              ${(perf.rateStats?.promptRate?.avgTokensPerSecond != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Prompt Rate</span>
-                <span class="stat-value">${perf.rateStats?.promptRate?.avgTokensPerSecond != null ? perf.rateStats.promptRate.avgTokensPerSecond.toFixed(1) : 'N/A'}</span>
-              </div>
+                <span class="stat-value">${perf.rateStats.promptRate.avgTokensPerSecond.toFixed(1)}</span>
+              </div>` : ''}
+              ${(perf.rateStats?.generationRate?.avgTokensPerSecond != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Generation Rate</span>
-                <span class="stat-value">${perf.rateStats?.generationRate?.avgTokensPerSecond != null ? perf.rateStats.generationRate.avgTokensPerSecond.toFixed(1) : 'N/A'}</span>
-              </div>
+                <span class="stat-value">${perf.rateStats.generationRate.avgTokensPerSecond.toFixed(1)}</span>
+              </div>` : ''}
+              ${(perf.rateStats?.totalRate?.avgTokensPerSecond != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Total Rate</span>
-                <span class="stat-value">${perf.rateStats?.totalRate?.avgTokensPerSecond != null ? perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1) : 'N/A'}</span>
-              </div>
+                <span class="stat-value">${perf.rateStats.totalRate.avgTokensPerSecond.toFixed(1)}</span>
+              </div>` : ''}
             </div>
 
             <!-- Prompt Cache Stats -->

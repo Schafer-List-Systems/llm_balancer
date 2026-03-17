@@ -18,6 +18,8 @@ class Backend {
     this.healthy = false;
     this.failCount = 0;
     this.activeRequestCount = 0;
+    this.activeStreamingRequests = 0;
+    this.activeNonStreamingRequests = 0;
     this.requestCount = 0;
     this.errorCount = 0;
 
@@ -160,6 +162,76 @@ class Backend {
   }
 
   /**
+   * Increment streaming request count
+   * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
+   */
+  incrementStreamingRequest(notifyCallback) {
+    this.activeRequestCount++;
+    this.activeStreamingRequests++;
+    if (this.activeRequestCount >= (this.maxConcurrency || 1) && notifyCallback) {
+      notifyCallback();
+    }
+  }
+
+  /**
+   * Decrement streaming request count
+   * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
+   */
+  decrementStreamingRequest(notifyCallback) {
+    if (this.activeStreamingRequests > 0) {
+      this.activeStreamingRequests--;
+      this.activeRequestCount--;
+      // Notify when transitioning from max to below max
+      if (this.activeRequestCount < (this.maxConcurrency || 1)) {
+        if (notifyCallback) notifyCallback();
+      }
+    }
+  }
+
+  /**
+   * Increment non-streaming request count
+   * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
+   */
+  incrementNonStreamingRequest(notifyCallback) {
+    this.activeRequestCount++;
+    this.activeNonStreamingRequests++;
+    if (this.activeRequestCount >= (this.maxConcurrency || 1) && notifyCallback) {
+      notifyCallback();
+    }
+  }
+
+  /**
+   * Decrement non-streaming request count
+   * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
+   */
+  decrementNonStreamingRequest(notifyCallback) {
+    if (this.activeNonStreamingRequests > 0) {
+      this.activeNonStreamingRequests--;
+      this.activeRequestCount--;
+      // Notify when transitioning from max to below max
+      if (this.activeRequestCount < (this.maxConcurrency || 1)) {
+        if (notifyCallback) notifyCallback();
+      }
+    }
+  }
+
+  /**
+   * Check if backend has active streaming requests
+   * @returns {boolean} True if has active streaming requests
+   */
+  hasActiveStreamingRequests() {
+    return this.activeStreamingRequests > 0;
+  }
+
+  /**
+   * Check if backend has active non-streaming requests
+   * @returns {boolean} True if has active non-streaming requests
+   */
+  hasActiveNonStreamingRequests() {
+    return this.activeNonStreamingRequests > 0;
+  }
+
+  /**
    * Get health status summary
    * @returns {Object} Health status summary
    */
@@ -169,6 +241,10 @@ class Backend {
       healthy: this.healthy,
       failCount: this.failCount,
       activeRequestCount: this.activeRequestCount,
+      activeStreamingRequests: this.activeStreamingRequests,
+      activeNonStreamingRequests: this.activeNonStreamingRequests,
+      hasStreamingMode: this.activeStreamingRequests > 0,
+      hasNonStreamingMode: this.activeNonStreamingRequests > 0,
       requestCount: this.requestCount,
       errorCount: this.errorCount,
       apiTypes: this.getApiTypes(),
