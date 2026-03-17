@@ -481,6 +481,8 @@ app.get('/backends', (req, res) => {
         priority: b.priority || 0,
         healthy: b.healthy,
         activeRequestCount: b.activeRequestCount,
+        activeStreamingRequests: b.activeStreamingRequests || 0,
+        activeNonStreamingRequests: b.activeNonStreamingRequests || 0,
         maxConcurrency: b.maxConcurrency,
         utilizationPercent: Math.round((b.activeRequestCount / b.maxConcurrency) * 100),
         failCount: b.failCount || 0,
