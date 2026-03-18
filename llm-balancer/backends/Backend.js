@@ -40,13 +40,15 @@ class Backend {
       networkLatencyMs: [],                     // Network round-trip latency: timeToFirstHeader / 2
 
       // Token counts (unified: from backend usage OR request-side counting)
-      promptTokens: [],                         // Prompt tokens (from backend or request counting)
+      promptTokens: [],                         // Total prompt tokens (from backend or request counting)
+      nonCachedPromptTokens: [],                // Non-cached prompt tokens (total - cached)
       completionTokens: [],                     // Completion tokens (from backend or chunk count)
       totalTokens: [],                          // Total tokens
 
       // Computed rates (derived from time and token metrics)
       totalRate: [],                            // totalTokens / totalTime (tokens/second)
       promptRate: [],                           // promptTokens / promptProcessingTime (tokens/second)
+      nonCachedPromptRate: [],                  // nonCachedPromptTokens / promptProcessingTime (tokens/second)
       generationRate: []                        // completionTokens / generationTime (tokens/second)
     };
 
@@ -296,8 +298,9 @@ class Backend {
    * @param {number} totalTimeMs - Total round-trip time in milliseconds
    * @param {number|null} promptProcessingTimeMs - Prompt processing time (NULL for non-streaming - cannot measure)
    * @param {number|null} networkLatencyMs - Network round-trip latency (timeToFirstHeader / 2)
+   * @param {number} nonCachedPromptTokens - Non-cached prompt tokens (optional, defaults to promptTokens if not provided)
    */
-  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null, networkLatencyMs = null) {
+  updateNonStreamingStats(promptTokens, completionTokens, totalTimeMs, promptProcessingTimeMs = null, networkLatencyMs = null, nonCachedPromptTokens = null) {
     this._performanceStats.requestCount++;
 
     // Track totalTimeMs (always available for non-streaming)
@@ -322,6 +325,15 @@ class Backend {
       this._performanceStats.promptTokens.push(promptTokens);
       this._limitSamples(this._performanceStats.promptTokens);
     }
+    // Track non-cached prompt tokens when provided (use promptTokens as default if nonCached not provided)
+    if (nonCachedPromptTokens !== undefined && nonCachedPromptTokens !== null) {
+      this._performanceStats.nonCachedPromptTokens.push(nonCachedPromptTokens);
+      this._limitSamples(this._performanceStats.nonCachedPromptTokens);
+    } else if (promptTokens !== undefined && promptTokens !== null) {
+      // If non-cached not provided, assume all prompt tokens are non-cached
+      this._performanceStats.nonCachedPromptTokens.push(promptTokens);
+      this._limitSamples(this._performanceStats.nonCachedPromptTokens);
+    }
     if (completionTokens !== undefined && completionTokens !== null) {
       this._performanceStats.completionTokens.push(completionTokens);
       this._limitSamples(this._performanceStats.completionTokens);
@@ -342,6 +354,7 @@ class Backend {
 
     // DO NOT compute generationTimeMs for non-streaming (cannot measure backend internals)
     // DO NOT compute promptRate (requires promptProcessingTime which is unknown)
+    // DO NOT compute nonCachedPromptRate (requires promptProcessingTime which is unknown)
     // DO NOT compute generationRate (requires generationTime which is unknown)
   }
 
@@ -355,8 +368,9 @@ class Backend {
    * @param {number} totalCompletionTimeMs - Time from request sent to full response in milliseconds
    * @param {number} networkLatencyMs - Network round-trip latency in milliseconds (optional)
    * @param {number} correctedGenerationTimeMs - Corrected generation time for ALL n tokens (optional)
+   * @param {number} nonCachedPromptTokens - Non-cached prompt tokens (optional, defaults to promptTokens if not provided)
    */
-  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs, networkLatencyMs = null, correctedGenerationTimeMs = null) {
+  updateStreamingStats(promptTokens, completionTokens, firstChunkTimeMs, totalCompletionTimeMs, networkLatencyMs = null, correctedGenerationTimeMs = null, nonCachedPromptTokens = null) {
     this._performanceStats.requestCount++;
 
     // Track time metrics (always available for streaming)
@@ -385,6 +399,15 @@ class Backend {
       this._performanceStats.promptTokens.push(promptTokens);
       this._limitSamples(this._performanceStats.promptTokens);
     }
+    // Track non-cached prompt tokens when provided (use promptTokens as default if nonCached not provided)
+    if (nonCachedPromptTokens !== null && nonCachedPromptTokens !== undefined) {
+      this._performanceStats.nonCachedPromptTokens.push(nonCachedPromptTokens);
+      this._limitSamples(this._performanceStats.nonCachedPromptTokens);
+    } else if (promptTokens !== null && promptTokens !== undefined) {
+      // If non-cached not provided, assume all prompt tokens are non-cached
+      this._performanceStats.nonCachedPromptTokens.push(promptTokens);
+      this._limitSamples(this._performanceStats.nonCachedPromptTokens);
+    }
     if (completionTokens !== null && completionTokens !== undefined) {
       this._performanceStats.completionTokens.push(completionTokens);
       this._limitSamples(this._performanceStats.completionTokens);
@@ -407,6 +430,15 @@ class Backend {
       this._performanceStats.promptRate.push(promptRate);
       this._limitSamples(this._performanceStats.promptRate);
     }
+    // Compute non-cached prompt rate
+    const actualNonCachedPromptTokens = nonCachedPromptTokens !== null && nonCachedPromptTokens !== undefined
+      ? nonCachedPromptTokens
+      : (promptTokens !== null && promptTokens !== undefined ? promptTokens : 0);
+    if (actualNonCachedPromptTokens > 0 && firstChunkTimeMs > 0) {
+      const nonCachedPromptRate = actualNonCachedPromptTokens / (firstChunkTimeMs / 1000);
+      this._performanceStats.nonCachedPromptRate.push(nonCachedPromptRate);
+      this._limitSamples(this._performanceStats.nonCachedPromptRate);
+    }
     // Use corrected generation time for rate calculation when available
     const actualGenerationTime = correctedGenerationTimeMs !== null && correctedGenerationTimeMs !== undefined
       ? correctedGenerationTimeMs
@@ -422,6 +454,7 @@ class Backend {
    * Update streaming stats from SSE chunks (for APIs that don't include usage)
    * Uses chunk counting as a fallback for completion tokens (each SSE data chunk ≈ 1 token)
    * Can estimate prompt tokens from request body if available
+   * Note: Since this is a fallback for APIs without usage details, we assume all prompt tokens are non-cached
    * @param {number} estimatedPromptTokens - Estimated prompt tokens from request body (can be null)
    * @param {number} chunkCount - Number of SSE data chunks (each represents 1 completion token)
    * @param {number} firstChunkTimeMs - Time from request sent to first chunk in milliseconds
@@ -430,11 +463,16 @@ class Backend {
   updateStreamingStatsFromChunks(estimatedPromptTokens, chunkCount, firstChunkTimeMs, totalCompletionTimeMs) {
     // Each SSE chunk represents 1 completion token (empirically verified)
     const completionTokens = chunkCount;
+    // For fallback methods, assume all prompt tokens are non-cached
+    const nonCachedPromptTokens = estimatedPromptTokens;
     this.updateStreamingStats(
       estimatedPromptTokens,
       completionTokens,
       firstChunkTimeMs,
-      totalCompletionTimeMs
+      totalCompletionTimeMs,
+      null,
+      null,
+      nonCachedPromptTokens
     );
   }
 
@@ -507,6 +545,7 @@ class Backend {
       // Token statistics (may be null if never received from backend)
       tokenStats: {
         avgPromptTokens: this._computeAverage(this._performanceStats.promptTokens) || null,
+        avgNonCachedPromptTokens: this._computeAverage(this._performanceStats.nonCachedPromptTokens) || null,
         avgCompletionTokens: this._computeAverage(this._performanceStats.completionTokens) || null,
         avgTotalTokens: this._computeAverage(this._performanceStats.totalTokens) || null
       },
@@ -515,8 +554,49 @@ class Backend {
       rateStats: {
         totalRate: this._getRateStats(this._performanceStats.totalRate),
         promptRate: this._getRateStats(this._performanceStats.promptRate),
+        nonCachedPromptRate: this._getRateStats(this._performanceStats.nonCachedPromptRate),
         generationRate: this._getRateStats(this._performanceStats.generationRate)
       }
+    };
+  }
+
+  /**
+   * Get performance statistics with raw sample data for chart visualization
+   * Returns same structure as getPerformanceStats() plus rawSamples arrays
+   * Raw samples contain individual data points for creating time-series charts
+   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number|null, avgGenerationTimeMs: number|null, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}, rawSamples: {timeStats: {totalTimeMs: number[], promptProcessingTimeMs: number[], generationTimeMs: number[], networkLatencyMs: number[]}, tokenStats: {promptTokens: number[], completionTokens: number[], totalTokens: number[], nonCachedPromptTokens: number[]}, rateStats: {totalRate: number[], promptRate: number[], nonCachedPromptRate: number[], generationRate: number[]}}} Performance stats with raw samples
+   */
+  getPerformanceStatsWithSamples() {
+    const stats = this.getPerformanceStats();
+
+    // Create raw samples for chart visualization
+    const rawSamples = {
+      timeStats: {
+        totalTimeMs: [...this._performanceStats.totalTimeMs],
+        promptProcessingTimeMs: [...this._performanceStats.promptProcessingTimeMs],
+        generationTimeMs: [...this._performanceStats.generationTimeMs],
+        networkLatencyMs: [...this._performanceStats.networkLatencyMs]
+      },
+      tokenStats: {
+        promptTokens: [...this._performanceStats.promptTokens],
+        completionTokens: [...this._performanceStats.completionTokens],
+        totalTokens: [...this._performanceStats.totalTokens],
+        nonCachedPromptTokens: [...this._performanceStats.nonCachedPromptTokens]
+      },
+      rateStats: {
+        totalRate: [...this._performanceStats.totalRate],
+        promptRate: [...this._performanceStats.promptRate],
+        nonCachedPromptRate: [...this._performanceStats.nonCachedPromptRate],
+        generationRate: [...this._performanceStats.generationRate]
+      }
+    };
+
+    // Add requestCount to tokenStats for chart alignment
+    rawSamples.tokenStats.requestCount = this._performanceStats.requestCount;
+
+    return {
+      ...stats,
+      rawSamples
     };
   }
 
@@ -602,14 +682,14 @@ class Backend {
     this._performanceStats.totalTimeMs = [];
     this._performanceStats.promptProcessingTimeMs = [];
     this._performanceStats.generationTimeMs = [];
-    this._performanceStats.promptProcessingTimeMs = [];
-    this._performanceStats.generationTimeMs = [];
     this._performanceStats.networkLatencyMs = [];
     this._performanceStats.promptTokens = [];
+    this._performanceStats.nonCachedPromptTokens = [];
     this._performanceStats.completionTokens = [];
     this._performanceStats.totalTokens = [];
     this._performanceStats.totalRate = [];
     this._performanceStats.promptRate = [];
+    this._performanceStats.nonCachedPromptRate = [];
     this._performanceStats.generationRate = [];
 
     console.info(`[Backend] ${this.url}: Performance stats reset completed`);

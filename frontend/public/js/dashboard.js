@@ -52,217 +52,411 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Create dashboard structure
+  // Navigation state
+  let currentSection = 'overview';
+  let sidebarCollapsed = false;
+
+  // Section configuration
+  const sectionConfig = {
+    'overview': {
+      label: 'Overview',
+      icon: '📊',
+      title: 'Overview & Statistics',
+      subtitle: 'System health summary and metrics'
+    },
+    'backends': {
+      label: 'Backends',
+      icon: '🖥️',
+      title: 'Backends',
+      subtitle: 'Individual backend status and metrics'
+    },
+    'benchmarks': {
+      label: 'Benchmarks',
+      icon: '⚡',
+      title: 'Benchmarks',
+      subtitle: 'Performance testing for backends'
+    },
+    'debug': {
+      label: 'Debug',
+      icon: '🔧',
+      title: 'Debug',
+      subtitle: 'Prompt cache statistics and performance metrics'
+    },
+    'configuration': {
+      label: 'Configuration',
+      icon: '⚙️',
+      title: 'Configuration',
+      subtitle: 'API endpoint URL for your applications'
+    }
+  };
+
+  // Create dashboard structure with sidebar navigation
   function createDashboard() {
     root.innerHTML = `
-      <header class="header">
-        <div class="header-content">
-          <div class="logo">🧠 LLM Balancer</div>
-          <div class="header-info">
-            <div id="connectionStatus" class="status-badge disconnected">
-              <span class="status-dot"></span>
-              <span>Connecting...</span>
+      <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar ${sidebarCollapsed ? 'collapsed' : ''}" id="sidebar">
+          <div class="sidebar-header">
+            <div class="logo" id="sidebarLogo">
+              <span class="logo-icon">🧠</span>
+              <span class="logo-text" ${sidebarCollapsed ? 'style="display: none;"' : ''}>LLM Balancer</span>
             </div>
           </div>
+
+          <nav class="sidebar-nav" id="sidebarNav">
+            ${Object.entries(sectionConfig).filter(([key]) => key !== 'statistics').map(([key, config]) => `
+              <button class="nav-item ${currentSection === key ? 'active' : ''}" data-section="${key}">
+                <span class="nav-icon">${config.icon}</span>
+                <span class="nav-label" ${sidebarCollapsed ? 'style="display: none;"' : ''}>${config.label}</span>
+                ${currentSection === key ? '<span class="nav-indicator"></span>' : ''}
+              </button>
+            `).join('')}
+          </nav>
+
+          <div class="sidebar-footer">
+            <button id="collapseSidebarBtn" class="collapse-btn" aria-label="${sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}">
+              <svg class="collapse-icon expanded" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 4L6 8l4 4"/>
+              </svg>
+              <svg class="collapse-icon collapsed" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 12l4-4-4-4"/>
+              </svg>
+            </button>
+          </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="main-wrapper">
+          <header class="header">
+            <button class="mobile-menu-btn" aria-label="Open menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12h18M3 6h18M3 18h18"/>
+              </svg>
+            </button>
+            <div class="header-content">
+              <div class="header-title">
+                <h1 id="currentPageTitle">${sectionConfig.overview.title}</h1>
+                <span id="currentPageSubtitle">${sectionConfig.overview.subtitle}</span>
+              </div>
+              <div class="header-info">
+                <div id="connectionStatus" class="status-badge disconnected">
+                  <span class="status-dot"></span>
+                  <span>Connecting...</span>
+                </div>
+                <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
+                  <svg class="mode-icon sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                  </svg>
+                  <svg class="mode-icon moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main class="main-content">
+            <!-- Overview & Statistics Section -->
+            <section id="overviewSection" class="section-content active" data-section="overview">
+              <div class="overview-stats-container">
+                <!-- Overview Cards -->
+                <section class="overview-section">
+                  <h2 class="section-title">Overview <span class="section-subtitle">(System health summary)</span></h2>
+                  <div class="overview-cards">
+                    <div class="card horizontal">
+                      <div class="card-icon">🖥️</div>
+                      <div class="card-content">
+                        <span class="card-title" id="totalBackends">-</span>
+                        <span class="card-subtitle">Total Backends</span>
+                      </div>
+                    </div>
+
+                    <div class="card horizontal">
+                      <div class="card-icon" style="background-color: #dcfce7; color: #166534;">💚</div>
+                      <div class="card-content">
+                        <span class="card-title" id="healthyBackends">-</span>
+                        <span class="card-subtitle">Healthy</span>
+                      </div>
+                    </div>
+
+                    <div class="card horizontal">
+                      <div class="card-icon" style="background-color: #fee2e2; color: #991b1b;">💔</div>
+                      <div class="card-content">
+                        <span class="card-title" id="unhealthyBackends">-</span>
+                        <span class="card-subtitle">Unhealthy</span>
+                      </div>
+                    </div>
+
+                    <div class="card horizontal">
+                      <div class="card-icon" style="background-color: #fef3c7; color: #92400e;">🔄</div>
+                      <div class="card-content">
+                        <span class="card-title" id="busyBackends">-</span>
+                        <span class="card-subtitle">Busy</span>
+                      </div>
+                    </div>
+
+                    <div class="card horizontal">
+                      <div class="card-icon" style="background-color: #d1fae5; color: #065f46;">✅</div>
+                      <div class="card-content">
+                        <span class="card-title" id="availableBackends">-</span>
+                        <span class="card-subtitle">Ready for Requests</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Performance Summary Card -->
+                <section class="stats-section">
+                  <div id="performanceSummaryCard" class="performance-summary-card">
+                    <!-- Rendered dynamically -->
+                  </div>
+                </section>
+
+                <!-- Statistics -->
+                <section class="stats-section">
+                  <h2 class="section-title">Statistics <span class="section-subtitle">(System-wide statistics and metrics)</span></h2>
+                  <div id="statsSection">
+                    <!-- Stats will be rendered here -->
+                  </div>
+                </section>
+
+                <!-- Chart Visualization Section -->
+                <div id="statsVisualizationSection" class="page-section">
+                  <h2 class="section-title">📊 Visual Statistics <span class="section-subtitle">(Interactive charts and graphs)</span></h2>
+
+                  <!-- Filter Controls -->
+                  <div id="chartFilters" class="filter-container" style="display: none;">
+                    <div class="filter-item">
+                      <label for="timeRangeSelect">Time Range:</label>
+                      <select id="timeRangeSelect" class="time-range-selector">
+                        <option value="all">All Data</option>
+                        <option value="20">Last 20 Requests</option>
+                        <option value="10">Last 10 Requests</option>
+                      </select>
+                    </div>
+                    <div class="filter-item backend-filter" id="backendFilter">
+                      <!-- Backend checkboxes rendered dynamically -->
+                    </div>
+                    <div class="export-buttons">
+                      <button class="export-btn" id="exportChartsBtn">📷 Export All Charts</button>
+                      <button class="export-btn" id="exportDataBtn">📄 Export Data</button>
+                    </div>
+                  </div>
+
+                  <!-- Time Metrics Charts -->
+                  <section id="timeMetricsSection" class="stats-section" style="margin-top: 2rem;">
+                    <h3 class="section-title">⏱️ Time Metrics</h3>
+                    <div class="chart-grid" id="timeMetricsGrid">
+                      <div class="chart-container">
+                        <div class="chart-title">📈 Total Time Over Requests</div>
+                        <canvas id="totalTimeChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">⚡ Generation Time Over Requests</div>
+                        <canvas id="generationTimeChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">🌐 Network Latency Over Requests</div>
+                        <canvas id="networkLatencyChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">✍️ Prompt Processing Time Over Requests</div>
+                        <canvas id="promptProcessingChart" class="chart-canvas"></canvas>
+                      </div>
+                    </div>
+                  </section>
+
+                  <!-- Token Metrics Charts -->
+                  <section id="tokenMetricsSection" class="stats-section">
+                    <h3 class="section-title">📊 Token Metrics</h3>
+                    <div class="chart-grid">
+                      <div class="chart-container token-comparison-chart">
+                        <div class="chart-title">🔢 Token Count Comparison (by Backend)</div>
+                        <canvas id="tokenComparisonChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">🍩 Token Distribution (Per Backend)</div>
+                        <canvas id="tokenDistributionChart" class="chart-canvas"></canvas>
+                      </div>
+                    </div>
+                  </section>
+
+                  <!-- Rate Metrics Charts -->
+                  <section id="rateMetricsSection" class="stats-section">
+                    <h3 class="section-title">⚡ Rate Metrics</h3>
+                    <div class="chart-grid">
+                      <div class="chart-container rate-comparison-chart">
+                        <div class="chart-title">🔄 Generation Rate Comparison (tokens/sec)</div>
+                        <canvas id="generationRateChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">📊 Total Rate Over Time</div>
+                        <canvas id="totalRateChart" class="chart-canvas"></canvas>
+                      </div>
+                    </div>
+                  </section>
+
+                  <!-- Health & Cache Charts -->
+                  <section id="healthMetricsSection" class="stats-section">
+                    <h3 class="section-title">💚 Health & Cache Metrics</h3>
+                    <div class="chart-grid">
+                      <div class="chart-container">
+                        <div class="chart-title">📉 Backend Utilization Gauges</div>
+                        <div id="utilizationGauges" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;"></div>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">🎯 Cache Hit/Miss Ratio</div>
+                        <canvas id="cacheEfficiencyChart" class="chart-canvas"></canvas>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </section>
+
+            <!-- Backends Section -->
+            <section id="backendsSection" class="section-content" data-section="backends">
+              <section class="backends-section">
+                <div class="section-header">
+                  <h2 class="section-title">Backends <span class="section-subtitle">(Individual backend status and metrics)</span></h2>
+                </div>
+                <div id="backendsGrid" class="backends-grid">
+                  <!-- Backend cards will be rendered here -->
+                </div>
+              </section>
+            </section>
+
+            <!-- Benchmarks Section -->
+            <section id="benchmarksSection" class="section-content" data-section="benchmarks">
+              <section class="backends-section">
+                <div class="section-header">
+                  <h2 class="section-title">Benchmarks <span class="section-subtitle">(Performance testing for backends)</span></h2>
+                </div>
+                <div id="benchmarkSection" class="benchmark-section">
+                  <!-- Single Backend Benchmarks -->
+                  <div id="singleBackendBenchmarks" class="benchmark-panel">
+                    <h3 class="benchmark-panel-title">Single Backend Benchmarks</h3>
+                    <p class="benchmark-panel-description">Run performance tests on individual backends</p>
+
+                    <div id="benchmarkBackendsGrid" class="benchmark-backends-grid">
+                      <!-- Benchmark cards will be rendered here -->
+                    </div>
+                  </div>
+
+                  <!-- Multi-Backend Benchmarks -->
+                  <div id="multiBackendBenchmarks" class="benchmark-panel">
+                    <h3 class="benchmark-panel-title">Multi-Backend Benchmarks</h3>
+                    <p class="benchmark-panel-description">Run benchmarks that test the balancer's coordination across backends</p>
+
+                    <div class="benchmark-controls">
+                      <div class="benchmark-option-group">
+                        <label class="benchmark-option-label">Number of Prompts</label>
+                        <input type="number" id="benchmarkNumPrompts" class="benchmark-option-input" value="4" min="1" max="16" />
+                      </div>
+
+                      <div class="benchmark-option-group">
+                        <label class="benchmark-option-label">Tokens per Prompt</label>
+                        <input type="number" id="benchmarkTokens" class="benchmark-option-input" value="5000" min="100" max="50000" />
+                      </div>
+
+                      <div class="benchmark-option-group">
+                        <label class="benchmark-option-label">Model</label>
+                        <input type="text" id="benchmarkModel" class="benchmark-option-input" value="qwen/qwen3.5-35b-a3b" />
+                      </div>
+
+                      <button id="runPromptCachingBenchmark" class="button button-primary">
+                        Run Prompt Caching Benchmark
+                      </button>
+                    </div>
+
+                    <div id="multiBenchmarkProgress" class="benchmark-progress" style="display: none;">
+                      <div class="benchmark-progress-bar">
+                        <div class="benchmark-progress-fill" id="benchmarkProgressFill"></div>
+                      </div>
+                      <span id="benchmarkProgressText" class="benchmark-progress-text">Running benchmark...</span>
+                    </div>
+                  </div>
+
+                  <!-- Benchmark Results -->
+                  <div id="benchmarkResults" class="benchmark-panel">
+                    <div class="benchmark-panel-header">
+                      <h3 class="benchmark-panel-title">Benchmark Results</h3>
+                      <button id="refreshBenchmarkResults" class="button button-secondary button-small">
+                        Refresh Results
+                      </button>
+                      <button id="clearBenchmarkResults" class="button button-secondary button-small">
+                        Clear All
+                      </button>
+                    </div>
+
+                    <div id="benchmarkResultsList" class="benchmark-results-list">
+                      <p class="benchmark-empty">No benchmark results yet. Run a benchmark to see results here.</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <!-- Debug Section -->
+            <section id="debugSection" class="section-content" data-section="debug">
+              <section class="backends-section">
+                <div class="section-header">
+                  <h2 class="section-title">Debug <span class="section-subtitle">(Prompt cache statistics and performance metrics)</span></h2>
+                </div>
+                <div id="debugSectionInner" class="debug-section">
+                  <div class="debug-header-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                    <button id="refreshDebug" class="button button-secondary">Refresh</button>
+                  </div>
+
+                  <div class="debug-stats">
+                    <div class="debug-stat-item">
+                      <span class="debug-stat-label">Debug Enabled</span>
+                      <span class="debug-stat-value" id="debugEnabled">-</span>
+                    </div>
+                  </div>
+
+                  <!-- Cache Control Buttons -->
+                  <div id="cacheControls" class="debug-controls" style="display: none;">
+                    <h3 class="debug-section-header">Cache Management</h3>
+                    <div class="cache-management-buttons">
+                      <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
+                      <button id="clearAllStats" class="button button-danger">Clear All Stats</button>
+                    </div>
+                  </div>
+
+                  <!-- Queue Viewer -->
+                  <div id="queueViewer" class="queue-viewer" style="display: none;">
+                    <h3 class="debug-section-header">Request Queue</h3>
+                    <div id="queueStatsSummary" class="queue-stats-summary"></div>
+                    <div id="queueContents" class="queue-contents"></div>
+                  </div>
+
+                  <div id="debugBackendStatsContainer" class="debug-backend-stats-container">
+                    <p class="debug-empty">Loading debug data...</p>
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <!-- Configuration Section -->
+            <section id="configurationSection" class="section-content" data-section="configuration">
+              <section class="backends-section">
+                <div class="section-header">
+                  <h2 class="section-title">Configuration <span class="section-subtitle">(API endpoint URL for your applications)</span></h2>
+                </div>
+                <div id="configSection" class="config-section">
+                  <!-- Configuration will be rendered here -->
+                </div>
+              </section>
+            </section>
+          </main>
+
+          <footer class="footer">
+            <p>LLM Balancer Dashboard • Running on port 3080</p>
+          </footer>
         </div>
-        <button id="darkModeToggle" class="dark-mode-toggle" aria-label="Toggle dark mode">
-          <!-- Sun icon (visible in light mode) -->
-          <svg class="mode-icon sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="5"/>
-            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-          </svg>
-          <!-- Moon icon (visible in dark mode) -->
-          <svg class="mode-icon moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-        </button>
-      </header>
-
-      <main class="main-content">
-        <section class="overview-section">
-          <div class="card horizontal">
-            <div class="card-icon">🖥️</div>
-            <div class="card-content">
-              <span class="card-title" id="totalBackends">-</span>
-              <span class="card-subtitle">Total Backends</span>
-            </div>
-          </div>
-
-          <div class="card horizontal">
-            <div class="card-icon" style="background-color: #dcfce7; color: #166534;">💚</div>
-            <div class="card-content">
-              <span class="card-title" id="healthyBackends">-</span>
-              <span class="card-subtitle">Healthy</span>
-            </div>
-          </div>
-
-          <div class="card horizontal">
-            <div class="card-icon" style="background-color: #fee2e2; color: #991b1b;">💔</div>
-            <div class="card-content">
-              <span class="card-title" id="unhealthyBackends">-</span>
-              <span class="card-subtitle">Unhealthy</span>
-            </div>
-          </div>
-
-          <div class="card horizontal">
-            <div class="card-icon" style="background-color: #fef3c7; color: #92400e;">🔄</div>
-            <div class="card-content">
-              <span class="card-title" id="busyBackends">-</span>
-              <span class="card-subtitle">Busy</span>
-            </div>
-          </div>
-
-          <div class="card horizontal">
-            <div class="card-icon" style="background-color: #d1fae5; color: #065f46;">✅</div>
-            <div class="card-content">
-              <span class="card-title" id="availableBackends">-</span>
-              <span class="card-subtitle">Ready for Requests</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Backends <span class="section-subtitle">(Individual backend status and metrics)</span></h2>
-          </div>
-          <div id="backendsGrid" class="backends-grid">
-            <!-- Backend cards will be rendered here -->
-          </div>
-        </section>
-
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Statistics <span class="section-subtitle">(System-wide statistics and metrics)</span></h2>
-          </div>
-          <div id="statsSection" class="stats-section">
-            <!-- Stats will be rendered here -->
-          </div>
-        </section>
-
-        <!-- ==============================================
-             BENCHMARKS SECTION
-             ============================================== -->
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Benchmarks <span class="section-subtitle">(Performance testing for backends)</span></h2>
-            <button id="toggleBenchmarks" class="toggle-button">Show Benchmarks</button>
-          </div>
-          <div id="benchmarkSection" class="benchmark-section" style="display: none;">
-            <!-- Single Backend Benchmarks -->
-            <div id="singleBackendBenchmarks" class="benchmark-panel">
-              <h3 class="benchmark-panel-title">Single Backend Benchmarks</h3>
-              <p class="benchmark-panel-description">Run performance tests on individual backends</p>
-
-              <div id="benchmarkBackendsGrid" class="benchmark-backends-grid">
-                <!-- Benchmark cards will be rendered here -->
-              </div>
-            </div>
-
-            <!-- Multi-Backend Benchmarks -->
-            <div id="multiBackendBenchmarks" class="benchmark-panel">
-              <h3 class="benchmark-panel-title">Multi-Backend Benchmarks</h3>
-              <p class="benchmark-panel-description">Run benchmarks that test the balancer's coordination across backends</p>
-
-              <div class="benchmark-controls">
-                <div class="benchmark-option-group">
-                  <label class="benchmark-option-label">Number of Prompts</label>
-                  <input type="number" id="benchmarkNumPrompts" class="benchmark-option-input" value="4" min="1" max="16" />
-                </div>
-
-                <div class="benchmark-option-group">
-                  <label class="benchmark-option-label">Tokens per Prompt</label>
-                  <input type="number" id="benchmarkTokens" class="benchmark-option-input" value="5000" min="100" max="50000" />
-                </div>
-
-                <div class="benchmark-option-group">
-                  <label class="benchmark-option-label">Model</label>
-                  <input type="text" id="benchmarkModel" class="benchmark-option-input" value="qwen/qwen3.5-35b-a3b" />
-                </div>
-
-                <button id="runPromptCachingBenchmark" class="button button-primary">
-                  Run Prompt Caching Benchmark
-                </button>
-              </div>
-
-              <div id="multiBenchmarkProgress" class="benchmark-progress" style="display: none;">
-                <div class="benchmark-progress-bar">
-                  <div class="benchmark-progress-fill" id="benchmarkProgressFill"></div>
-                </div>
-                <span id="benchmarkProgressText" class="benchmark-progress-text">Running benchmark...</span>
-              </div>
-            </div>
-
-            <!-- Benchmark Results -->
-            <div id="benchmarkResults" class="benchmark-panel">
-              <div class="benchmark-panel-header">
-                <h3 class="benchmark-panel-title">Benchmark Results</h3>
-                <button id="refreshBenchmarkResults" class="button button-secondary button-small">
-                  Refresh Results
-                </button>
-                <button id="clearBenchmarkResults" class="button button-secondary button-small">
-                  Clear All
-                </button>
-              </div>
-
-              <div id="benchmarkResultsList" class="benchmark-results-list">
-                <p class="benchmark-empty">No benchmark results yet. Run a benchmark to see results here.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Debug <span class="section-subtitle">(Prompt cache statistics and performance metrics)</span></h2>
-            <button id="toggleDebug" class="toggle-button">Show Debug</button>
-          </div>
-          <div id="debugSection" class="debug-section" style="display: none;">
-            <div class="debug-header-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-              <button id="refreshDebug" class="button button-secondary">Refresh</button>
-            </div>
-
-            <div class="debug-stats">
-              <div class="debug-stat-item">
-                <span class="debug-stat-label">Debug Enabled</span>
-                <span class="debug-stat-value" id="debugEnabled">-</span>
-              </div>
-            </div>
-
-            <!-- Cache Control Buttons -->
-            <div id="cacheControls" class="debug-controls" style="display: none;">
-              <h3 class="debug-section-header">Cache Management</h3>
-              <div class="cache-management-buttons">
-                <button id="clearAllCache" class="button button-danger">Clear All Caches</button>
-                <button id="clearAllStats" class="button button-danger">Clear All Stats</button>
-              </div>
-            </div>
-
-            <!-- Queue Viewer -->
-            <div id="queueViewer" class="queue-viewer" style="display: none;">
-              <h3 class="debug-section-header">Request Queue</h3>
-              <div id="queueStatsSummary" class="queue-stats-summary"></div>
-              <div id="queueContents" class="queue-contents"></div>
-            </div>
-
-            <div id="debugBackendStatsContainer" class="debug-backend-stats-container">
-              <p class="debug-empty">Loading debug data...</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="backends-section">
-          <div class="section-header">
-            <h2 class="section-title">Configuration <span class="section-subtitle">(API endpoint URL for your applications)</span></h2>
-          </div>
-          <div id="configSection" class="config-section">
-            <!-- Configuration will be rendered here -->
-          </div>
-        </section>
-      </main>
-
-      <footer class="footer">
-        <p>LLM Balancer Dashboard • Running on port 3080</p>
-      </footer>
+      </div>
     `;
   }
 
@@ -297,6 +491,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render backend cards with performance metrics (incremental updates to preserve hover/scroll)
   function renderBackends(backendsData) {
     const backendsGrid = document.getElementById('backendsGrid');
+
+    // Return if grid doesn't exist (section not active)
+    if (!backendsGrid) return;
 
     if (!backendsData.backends || backendsData.backends.length === 0) {
       backendsGrid.innerHTML = `
@@ -619,9 +816,73 @@ document.addEventListener('DOMContentLoaded', () => {
     return { html, hasData };
   }
 
+  // Navigate to a specific section
+  function navigateToSection(sectionId) {
+    // Don't navigate if already on this section
+    if (currentSection === sectionId) return;
+
+    // Update current section
+    currentSection = sectionId;
+
+    // Update sidebar navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('active');
+      if (item.dataset.section === sectionId) {
+        item.classList.add('active');
+      }
+    });
+
+    // Update page title and subtitle
+    const config = sectionConfig[sectionId];
+    if (config) {
+      document.getElementById('currentPageTitle').textContent = config.title;
+      document.getElementById('currentPageSubtitle').textContent = config.subtitle;
+    }
+
+    // Update section visibility
+    document.querySelectorAll('.section-content').forEach(section => {
+      section.classList.remove('active');
+      if (section.dataset.section === sectionId) {
+        section.classList.add('active');
+      }
+    });
+
+    // Load section-specific data
+    loadDataForSection(sectionId);
+  }
+
+  // Load data for specific section
+  function loadDataForSection(sectionId) {
+    switch (sectionId) {
+      case 'backends':
+        // Backends data is already loaded in main poll
+        break;
+      case 'benchmarks':
+        // Render benchmark backends if not already done
+        if (!document.getElementById('benchmarkBackendsGrid').querySelector('.benchmark-card')) {
+          renderBenchmarkBackends();
+        }
+        break;
+      case 'debug':
+        // Load debug data when section is navigated to
+        loadDebugData();
+        if (window.debugAvailable) loadQueueContents();
+        break;
+      case 'configuration':
+        renderConfig();
+        break;
+      default:
+        // Overview (includes statistics) - already rendered
+        break;
+    }
+  }
+
   // Render statistics section (incremental updates to preserve hover states)
   function renderStats(statsData) {
     const statsSection = document.getElementById('statsSection');
+
+    // Return if stats section doesn't exist (section not active)
+    if (!statsSection) return;
 
     if (!statsData) {
       statsSection.innerHTML = '<p>Statistics not available</p>';
@@ -814,6 +1075,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render queue statistics
   function renderQueueStats(queueStats) {
     const statsSection = document.getElementById('statsSection');
+
+    // Return if stats section doesn't exist (section not active)
+    if (!statsSection) return;
+
     const statsGrid = statsSection.querySelector('.stats-grid');
 
     if (!queueStats || !statsGrid) return;
@@ -1066,34 +1331,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Toggle debug section
   function toggleDebugSection() {
-    const debugSection = document.getElementById('debugSection');
-    const toggleButton = document.getElementById('toggleDebug');
-    const refreshSection = document.getElementById('refreshSection');
-    const cacheControls = document.getElementById('cacheControls');
-    const queueViewer = document.getElementById('queueViewer');
-
-    if (debugSection.style.display === 'none') {
-      debugSection.style.display = 'block';
-      toggleButton.textContent = 'Hide Debug';
-      toggleButton.classList.add('active');
-
-      // Show refresh button and debug controls only when debug is shown
-      if (refreshSection) refreshSection.style.display = 'flex';
-      if (cacheControls) cacheControls.style.display = 'block';
-      if (queueViewer) queueViewer.style.display = 'block';
-
-      loadDebugData();
-      if (window.debugAvailable) loadQueueContents();
-    } else {
-      debugSection.style.display = 'none';
-      toggleButton.textContent = 'Show Debug';
-      toggleButton.classList.remove('active');
-
-      // Hide refresh button and debug controls when debug is hidden
-      if (refreshSection) refreshSection.style.display = 'none';
-      if (cacheControls) cacheControls.style.display = 'none';
-      if (queueViewer) queueViewer.style.display = 'none';
-    }
+    // Debug section is no longer collapsible - always visible when navigated to
+    // This function is kept for backward compatibility but does nothing now
   }
 
   // Load debug data (now shows prompt cache stats)
@@ -1303,11 +1542,106 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Only render overview content (5 cards) - this is always visible
     renderOverview(data.health);
-    renderBackends(data.backends);
-    renderStats(data.stats);
-    renderQueueStats(data.queueStats);
-    renderConfig();
+
+    // Render backends if backends section is active
+    if (currentSection === 'backends') {
+      renderBackends(data.backends);
+    }
+
+    // Only render stats if the overview section is active
+    if (currentSection === 'overview') {
+      renderStats(data.stats);
+      renderQueueStats(data.queueStats);
+      // Update chart visualizations (only if function is available)
+      if (typeof updateStatsVisualization === 'function') {
+        updateStatsVisualization(data.stats);
+      }
+    }
+
+    // Don't render config here - it's rendered when section is viewed
+
+    // Render benchmark backends if benchmarks section is active
+    if (currentSection === 'benchmarks') {
+      renderBenchmarkBackends();
+    }
+  }
+
+  // Initialize sidebar collapse
+  function initSidebar() {
+    const collapseBtn = document.getElementById('collapseSidebarBtn');
+    const sidebar = document.getElementById('sidebar');
+
+    if (!collapseBtn) return;
+
+    // Load saved sidebar state
+    const savedCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    if (savedCollapsed) {
+      sidebarCollapsed = true;
+      sidebar.classList.add('collapsed');
+    }
+
+    collapseBtn.addEventListener('click', () => {
+      sidebarCollapsed = !sidebarCollapsed;
+      sidebar.classList.toggle('collapsed', sidebarCollapsed);
+
+      // Toggle nav label visibility
+      document.querySelectorAll('.nav-label').forEach(label => {
+        label.style.display = sidebarCollapsed ? 'none' : 'block';
+      });
+
+      // Toggle logo text visibility
+      const logoText = document.querySelector('.logo-text');
+      if (logoText) {
+        logoText.style.display = sidebarCollapsed ? 'none' : 'block';
+      }
+
+      // Save state
+      localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
+
+      // Update aria-label
+      collapseBtn.setAttribute('aria-label', sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    });
+  }
+
+  // Initialize navigation
+  function initNavigation() {
+    const sidebarNav = document.getElementById('sidebarNav');
+
+    if (!sidebarNav) return;
+
+    // Add click handlers for navigation items
+    sidebarNav.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const sectionId = item.dataset.section;
+        navigateToSection(sectionId);
+      });
+    });
+
+    // Mobile menu button
+    const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+    const sidebar = document.getElementById('sidebar');
+
+    if (mobileMenuBtn && sidebar) {
+      mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('mobile-open');
+      });
+
+      // Close sidebar when clicking on nav item (mobile)
+      sidebarNav.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+          sidebar.classList.remove('mobile-open');
+        });
+      });
+
+      // Close sidebar when clicking outside (mobile)
+      document.addEventListener('click', (e) => {
+        if (!sidebar.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+          sidebar.classList.remove('mobile-open');
+        }
+      });
+    }
   }
 
   // Initialize dark mode toggle
@@ -1329,6 +1663,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize
   async function init() {
     createDashboard();
+    initSidebar();
+    initNavigation();
     initDarkMode();
 
     // Ensure apiClient is loaded
@@ -1343,27 +1679,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const debugCheck = await apiClient.checkDebugAvailability();
     window.debugAvailable = debugCheck.debugAvailable;
 
-    // Add event listener for debug toggle
-    const toggleButton = document.getElementById('toggleDebug');
-    if (toggleButton) {
-      toggleButton.addEventListener('click', toggleDebugSection);
-    }
-
-    // Add event listeners for debug controls
-    const clearButton = document.getElementById('clearDebug');
-    const backendFilter = document.getElementById('backendFilter');
-    const requestLimit = document.getElementById('requestLimit');
-
-    if (clearButton) {
-      clearButton.addEventListener('click', clearDebugHistory);
-    }
-
-    if (backendFilter) {
-      backendFilter.addEventListener('change', loadDebugData);
-    }
-
-    if (requestLimit) {
-      requestLimit.addEventListener('change', loadDebugData);
+    // Add event listener for refresh debug button
+    const refreshDebugBtn = document.getElementById('refreshDebug');
+    if (refreshDebugBtn) {
+      refreshDebugBtn.addEventListener('click', () => {
+        loadDebugData();
+        if (window.debugAvailable) loadQueueContents();
+      });
     }
 
     // Add event listener for cache clear all button
@@ -1378,100 +1700,9 @@ document.addEventListener('DOMContentLoaded', () => {
       clearAllStatsBtn.addEventListener('click', clearAllStats);
     }
 
-    // Add event listener for refresh debug button
-    const refreshDebugBtn = document.getElementById('refreshDebug');
-    if (refreshDebugBtn) {
-      refreshDebugBtn.addEventListener('click', () => {
-        loadDebugData();
-        if (window.debugAvailable) loadQueueContents();
-      });
-    }
-
-    // Add event listener for collapsible sections
-    const debugSection = document.getElementById('debugSection');
-    if (debugSection) {
-      debugSection.addEventListener('click', (e) => {
-        const header = e.target.closest('.collapsible-header');
-        if (header) {
-          const section = header.parentElement;
-          const content = section.querySelector('.collapsible-content');
-          const icon = section.querySelector('.collapsible-icon');
-          const isExpanded = section.classList.contains('expanded');
-
-          if (isExpanded) {
-            section.classList.remove('expanded');
-            content.style.display = 'none';
-            icon.classList.remove('expanded');
-            icon.textContent = '▶';
-            section.setAttribute('data-expanded', 'false');
-          } else {
-            section.classList.add('expanded');
-            content.style.display = 'block';
-            icon.classList.add('expanded');
-            icon.textContent = '▼';
-            section.setAttribute('data-expanded', 'true');
-          }
-        }
-      });
-    }
-
-    // Add event listeners for expand/collapse all
-    const expandAllButton = document.getElementById('expandAll');
-    const collapseAllButton = document.getElementById('collapseAll');
-
-    if (expandAllButton) {
-      expandAllButton.addEventListener('click', () => {
-        document.querySelectorAll('.collapsible-section').forEach(section => {
-          section.classList.add('expanded');
-          const content = section.querySelector('.collapsible-content');
-          const icon = section.querySelector('.collapsible-icon');
-          if (content) content.style.display = 'block';
-          if (icon) {
-            icon.classList.add('expanded');
-            icon.textContent = '▼';
-          }
-          section.setAttribute('data-expanded', 'true');
-        });
-      });
-    }
-
-    if (collapseAllButton) {
-      collapseAllButton.addEventListener('click', () => {
-        document.querySelectorAll('.collapsible-section').forEach(section => {
-          section.classList.remove('expanded');
-          const content = section.querySelector('.collapsible-content');
-          const icon = section.querySelector('.collapsible-icon');
-          if (content) content.style.display = 'none';
-          if (icon) {
-            icon.classList.remove('expanded');
-            icon.textContent = '▶';
-          }
-          section.setAttribute('data-expanded', 'false');
-        });
-      });
-    }
-
     // ============================================================
     // BENCHMARK SECTION INITIALIZATION
     // ============================================================
-
-    // Toggle benchmark section
-    const toggleBenchmarksButton = document.getElementById('toggleBenchmarks');
-    if (toggleBenchmarksButton) {
-      toggleBenchmarksButton.addEventListener('click', () => {
-        const benchmarkSection = document.getElementById('benchmarkSection');
-        if (benchmarkSection.style.display === 'none') {
-          benchmarkSection.style.display = 'block';
-          toggleBenchmarksButton.textContent = 'Hide Benchmarks';
-          toggleBenchmarksButton.classList.add('active');
-          renderBenchmarkBackends();
-        } else {
-          benchmarkSection.style.display = 'none';
-          toggleBenchmarksButton.textContent = 'Show Benchmarks';
-          toggleBenchmarksButton.classList.remove('active');
-        }
-      });
-    }
 
     // Refresh benchmark results button
     const refreshBenchmarkResultsBtn = document.getElementById('refreshBenchmarkResults');
@@ -1509,8 +1740,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Start polling for benchmark results (when section is visible)
     setInterval(() => {
-      const section = document.getElementById('benchmarkSection');
-      if (section && section.style.display !== 'none') {
+      if (currentSection === 'benchmarks') {
         // Check for completed benchmark jobs
         apiClient.listBenchmarkResults().then(result => {
           if (result.success && result.data?.results) {
@@ -1936,6 +2166,649 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+  }
+
+  // ============================================================
+  // CHART VISUALIZATION FUNCTIONS (Chart.js integration)
+  // ============================================================
+
+  /**
+   * Chart instances registry for cleanup
+   */
+  const chartInstances = {};
+
+  /**
+   * Last rendered data snapshot for change detection
+   * This tracks the last rendered state to avoid unnecessary re-renders
+   * Uses JSON serialization to compare data snapshots
+   */
+  let lastRenderedSnapshot = null;
+
+  /**
+   * Compute a hash/snapshot of the current stats data for change detection
+   * @param {Object} statsData - Statistics data from API
+   * @returns {string} Hash of relevant data fields
+   */
+  function computeDataSnapshot(statsData) {
+    if (!statsData?.backendDetails) return null;
+
+    // Only track relevant data fields that affect charts
+    const snapshot = statsData.backendDetails.map(b => ({
+      url: b.url,
+      name: b.name,
+      totalTimeMs: b.performanceStats?.rawSamples?.timeStats?.totalTimeMs?.length || 0,
+      generationTimeMs: b.performanceStats?.rawSamples?.generationTimeMs?.length || 0,
+      totalTokens: b.performanceStats?.rawSamples?.tokenStats?.totalTokens?.length || 0,
+      generationRate: b.performanceStats?.rawSamples?.rateStats?.generationRate?.length || 0,
+      cacheHits: b.promptCacheStats?.totalHits || 0
+    }));
+
+    return JSON.stringify(snapshot);
+  }
+
+  /**
+   * Clean up a chart instance before creating a new one
+   * @param {string} canvasId - The ID of the canvas element
+   */
+  function cleanupChart(canvasId) {
+    if (chartInstances[canvasId]) {
+      chartInstances[canvasId].destroy();
+      delete chartInstances[canvasId];
+    }
+  }
+
+  /**
+   * Clean up a chart instance before creating a new one
+   * @param {string} canvasId - The ID of the canvas element
+   */
+  function cleanupChart(canvasId) {
+    if (chartInstances[canvasId]) {
+      chartInstances[canvasId].destroy();
+      delete chartInstances[canvasId];
+    }
+  }
+
+  /**
+   * Format URL for display in chart labels
+   * @param {string} url - The URL to format
+   * @returns {string} Formatted URL
+   */
+  function formatUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.hostname}:${parsed.port || parsed.protocol === 'https:' ? '443' : '80'}`;
+    } catch {
+      return url;
+    }
+  }
+
+  /**
+   * Render time metrics line charts (Total Time, Generation Time, Network Latency, Prompt Processing)
+   * Uses incremental updates pattern - returns early if DOM doesn't exist
+   * @param {Object} statsData - Statistics data from API
+   */
+  function renderTimeMetricsCharts(statsData) {
+    // Return early if section not active
+    if (!isChartSectionActive()) return;
+
+    const backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Cleanup existing charts
+    ['totalTime', 'generationTime', 'networkLatency', 'promptProcessing'].forEach(type => {
+      cleanupChart(`${type}Chart`);
+    });
+
+    // Use the first backend for visualization
+    const backend = backendDetails[0];
+    if (!backend) return;
+
+    const rawSamples = backend.performanceStats?.rawSamples || {};
+
+    // Total Time Chart
+    const totalTimeMs = rawSamples.timeStats?.totalTimeMs || [];
+    const totalTimeCanvas = document.getElementById('totalTimeChart');
+    if (totalTimeCanvas && totalTimeMs.length > 0) {
+      const ctx = totalTimeCanvas.getContext('2d');
+      chartInstances.totalTimeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: totalTimeMs.map((_, i) => `#${i + 1}`),
+          datasets: [{
+            label: `${backend.name || formatUrl(backend.url)} - Total Time`,
+            data: totalTimeMs,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Time (ms)' }
+            }
+          }
+        }
+      });
+    } else if (totalTimeCanvas) {
+      totalTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No time data available yet</p>';
+    }
+
+    // Generation Time Chart
+    const generationTimeMs = rawSamples.timeStats?.generationTimeMs || [];
+    const generationTimeCanvas = document.getElementById('generationTimeChart');
+    if (generationTimeCanvas && generationTimeMs.length > 0) {
+      const ctx = generationTimeCanvas.getContext('2d');
+      chartInstances.generationTimeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: generationTimeMs.map((_, i) => `#${i + 1}`),
+          datasets: [{
+            label: `${backend.name || formatUrl(backend.url)} - Generation Time`,
+            data: generationTimeMs,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Time (ms)' }
+            }
+          }
+        }
+      });
+    } else if (generationTimeCanvas) {
+      generationTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No generation time data available yet</p>';
+    }
+
+    // Network Latency Chart
+    const networkLatencyMs = rawSamples.timeStats?.networkLatencyMs || [];
+    const networkLatencyCanvas = document.getElementById('networkLatencyChart');
+    if (networkLatencyCanvas && networkLatencyMs.length > 0) {
+      const ctx = networkLatencyCanvas.getContext('2d');
+      chartInstances.networkLatencyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: networkLatencyMs.map((_, i) => `#${i + 1}`),
+          datasets: [{
+            label: `${backend.name || formatUrl(backend.url)} - Network Latency`,
+            data: networkLatencyMs,
+            borderColor: '#8b5cf6',
+            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Time (ms)' }
+            }
+          }
+        }
+      });
+    } else if (networkLatencyCanvas) {
+      networkLatencyCanvas.parentElement.innerHTML = '<p class="chart-no-data">No network latency data available yet</p>';
+    }
+
+    // Prompt Processing Chart
+    const promptProcessingMs = rawSamples.timeStats?.promptProcessingTimeMs || [];
+    const promptProcessingCanvas = document.getElementById('promptProcessingChart');
+    if (promptProcessingCanvas && promptProcessingMs.length > 0) {
+      const ctx = promptProcessingCanvas.getContext('2d');
+      chartInstances.promptProcessingChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: promptProcessingMs.map((_, i) => `#${i + 1}`),
+          datasets: [{
+            label: `${backend.name || formatUrl(backend.url)} - Prompt Processing`,
+            data: promptProcessingMs,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Time (ms)' }
+            }
+          }
+        }
+      });
+    } else if (promptProcessingCanvas) {
+      promptProcessingCanvas.parentElement.innerHTML = '<p class="chart-no-data">No prompt processing data available yet</p>';
+    }
+  }
+
+  /**
+   * Render token metrics bar charts
+   * Uses incremental updates pattern - returns early if DOM doesn't exist
+   * @param {Object} statsData - Statistics data from API
+   */
+  function renderTokenMetricsCharts(statsData) {
+    // Return early if section not active
+    if (!isChartSectionActive()) return;
+
+    const backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Token Comparison Chart (Grouped Bar)
+    cleanupChart('tokenComparisonChart');
+
+    const backends = backendDetails.filter(b => b.performanceStats?.rawSamples);
+    if (backends.length === 0) return;
+
+    const tokenComparisonCanvas = document.getElementById('tokenComparisonChart');
+    if (tokenComparisonCanvas) {
+      const promptTokens = backends.map(b => {
+        const samples = b.performanceStats.rawSamples.tokenStats;
+        const arr = samples?.promptTokens || [];
+        return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+      });
+      const completionTokens = backends.map(b => {
+        const samples = b.performanceStats.rawSamples.tokenStats;
+        const arr = samples?.completionTokens || [];
+        return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+      });
+      const totalTokens = backends.map(b => {
+        const samples = b.performanceStats.rawSamples.tokenStats;
+        const arr = samples?.totalTokens || [];
+        return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+      });
+
+      const ctx = tokenComparisonCanvas.getContext('2d');
+      chartInstances.tokenComparisonChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: backends.map(b => b.name || formatUrl(b.url)),
+          datasets: [
+            {
+              label: 'Avg Prompt Tokens',
+              data: promptTokens,
+              backgroundColor: 'rgba(59, 130, 246, 0.8)',
+              borderColor: 'rgba(59, 130, 246, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Avg Completion Tokens',
+              data: completionTokens,
+              backgroundColor: 'rgba(16, 185, 129, 0.8)',
+              borderColor: 'rgba(16, 185, 129, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Avg Total Tokens',
+              data: totalTokens,
+              backgroundColor: 'rgba(107, 114, 128, 0.8)',
+              borderColor: 'rgba(107, 114, 128, 1)',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Average Token Count' }
+            }
+          }
+        }
+      });
+    }
+
+    // Token Distribution Chart (Per Backend)
+    cleanupChart('tokenDistributionChart');
+    const tokenDistributionCanvas = document.getElementById('tokenDistributionChart');
+    if (tokenDistributionCanvas && backends.length > 0) {
+      const ctx = tokenDistributionCanvas.getContext('2d');
+      chartInstances.tokenDistributionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Prompt Tokens', 'Completion Tokens'],
+          datasets: [{
+            data: backends.map(b => {
+              const samples = b.performanceStats.rawSamples.tokenStats;
+              const prompt = samples?.promptTokens || [];
+              const completion = samples?.completionTokens || [];
+              const promptAvg = prompt.length > 0 ? prompt.reduce((a, b) => a + b, 0) / prompt.length : 1;
+              const completionAvg = completion.length > 0 ? completion.reduce((a, b) => a + b, 0) / completion.length : 1;
+              return [promptAvg, completionAvg];
+            })[0] || [1, 1]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            title: { display: true, text: `Token Distribution: ${backends[0].name || formatUrl(backends[0].url)}` }
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Render rate metrics comparison charts
+   * Uses incremental updates pattern - returns early if DOM doesn't exist
+   * @param {Object} statsData - Statistics data from API
+   */
+  function renderRateMetricsCharts(statsData) {
+    // Return early if section not active
+    if (!isChartSectionActive()) return;
+
+    const backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Generation Rate Chart
+    cleanupChart('generationRateChart');
+
+    const backends = backendDetails.filter(b => b.performanceStats?.rawSamples);
+    const generationRateCanvas = document.getElementById('generationRateChart');
+    if (generationRateCanvas) {
+      const rates = backends.map(b => {
+        const samples = b.performanceStats.rawSamples.rateStats;
+        const arr = samples?.generationRate || [];
+        return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+      });
+
+      const ctx = generationRateCanvas.getContext('2d');
+      chartInstances.generationRateChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: backends.map(b => b.name || formatUrl(b.url)),
+          datasets: [{
+            label: 'Avg Generation Rate (tokens/sec)',
+            data: rates,
+            backgroundColor: 'rgba(139, 92, 246, 0.8)',
+            borderColor: 'rgba(139, 92, 246, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Tokens/Second' }
+            }
+          }
+        }
+      });
+    }
+
+    // Total Rate Over Time Chart
+    cleanupChart('totalRateChart');
+    const totalRateCanvas = document.getElementById('totalRateChart');
+    if (totalRateCanvas && backends.length > 0) {
+      const backend = backends[0];
+      const samples = backend.performanceStats.rawSamples.rateStats;
+      const totalRate = samples?.totalRate || [];
+
+      if (totalRate.length > 0) {
+        const ctx = totalRateCanvas.getContext('2d');
+        chartInstances.totalRateChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: totalRate.map((_, i) => `#${i + 1}`),
+            datasets: [{
+              label: 'Total Rate Over Requests',
+              data: totalRate,
+              borderColor: 'rgba(236, 72, 153, 0.8)',
+              backgroundColor: 'rgba(236, 72, 153, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: true, position: 'top' }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Tokens/Second' }
+              }
+            }
+          }
+        });
+      } else {
+        totalRateCanvas.parentElement.innerHTML = '<p class="chart-no-data">No rate data available yet</p>';
+      }
+    }
+  }
+
+  /**
+   * Render health and cache efficiency charts
+   * Uses incremental updates pattern - returns early if DOM doesn't exist
+   * @param {Object} statsData - Statistics data from API
+   */
+  function renderHealthMetricsCharts(statsData) {
+    // Return early if section not active
+    if (!isChartSectionActive()) return;
+
+    const backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Cache Efficiency Chart (Donut)
+    cleanupChart('cacheEfficiencyChart');
+
+    const backend = backendDetails[0];
+    const cacheChartCanvas = document.getElementById('cacheEfficiencyChart');
+    if (cacheChartCanvas) {
+      const cacheStats = backend.promptCacheStats || {};
+      const hits = cacheStats.totalHits || 0;
+      const misses = cacheStats.totalMisses || 0;
+      const total = hits + misses;
+
+      if (total > 0) {
+        const ctx = cacheChartCanvas.getContext('2d');
+        chartInstances.cacheEfficiencyChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Cache Hits', 'Cache Misses'],
+            datasets: [{
+              data: [hits, misses],
+              backgroundColor: ['#10b981', '#ef4444'],
+              borderWidth: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'right' },
+              title: {
+                display: true,
+                text: `Cache Efficiency: ${((hits / total) * 100).toFixed(1)}% hit rate`
+              }
+            }
+          }
+        });
+      } else {
+        cacheChartCanvas.parentElement.innerHTML = '<p class="chart-no-data">No cache data available yet</p>';
+      }
+    }
+  }
+
+  /**
+   * Render the performance summary card with KPI metrics
+   * @param {Object} statsData - Statistics data from API
+   */
+  function renderPerformanceSummaryCard(statsData) {
+    const container = document.getElementById('performanceSummaryCard');
+    if (!container || !statsData?.backendDetails) return;
+
+    const backends = statsData.backendDetails.filter(b => b.performanceStats);
+
+    // Calculate KPIs
+    const avgGenRate = backends.length > 0
+      ? backends.reduce((sum, b) => {
+          const samples = b.performanceStats.rawSamples?.rateStats?.generationRate || [];
+          return sum + (samples.length > 0 ? samples.reduce((a, c) => a + c, 0) / samples.length : 0);
+        }, 0) / backends.length
+      : 0;
+
+    const avgTotalTime = backends.length > 0
+      ? backends.reduce((sum, b) => {
+          const samples = b.performanceStats.rawSamples?.timeStats?.totalTimeMs || [];
+          return sum + (samples.length > 0 ? samples.reduce((a, c) => a + c, 0) / samples.length : 0);
+        }, 0) / backends.length
+      : 0;
+
+    const overallCacheHitRate = backends.length > 0
+      ? backends.reduce((sum, b) => {
+          const cache = b.promptCacheStats || {};
+          const total = (cache.totalHits || 0) + (cache.totalMisses || 0);
+          return sum + (total > 0 ? (cache.totalHits || 0) / total : 0);
+        }, 0) / backends.length * 100
+      : 0;
+
+    const totalConc = statsData.stats?.totalConcurrency || 0;
+    const maxConc = statsData.stats?.maxConcurrency || 100;
+    const utilization = (totalConc / maxConc) * 100;
+
+    // Generate sparkline data for generation rate trend
+    const genRateTrend = backends.length > 0
+      ? backends[0].performanceStats.rawSamples?.rateStats?.generationRate?.slice(-10) || []
+      : [];
+
+    // Determine trend direction
+    let trendDirection = 'stable';
+    if (genRateTrend.length >= 2) {
+      const firstHalf = genRateTrend.slice(0, genRateTrend.length / 2);
+      const secondHalf = genRateTrend.slice(genRateTrend.length / 2);
+      const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+      const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+      if (secondAvg > firstAvg * 1.1) trendDirection = 'improving';
+      else if (secondAvg < firstAvg * 0.9) trendDirection = 'declining';
+    }
+
+    container.innerHTML = `
+      <div class="kpi-row">
+        <div class="kpi-item">
+          <div class="kpi-value">${avgGenRate.toFixed(1)} t/s</div>
+          <div class="kpi-label">Avg Generation Rate</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-value">${avgTotalTime.toFixed(0)} ms</div>
+          <div class="kpi-label">Avg Total Time</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-value">${overallCacheHitRate.toFixed(1)}%</div>
+          <div class="kpi-label">Cache Hit Rate</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-value">${utilization.toFixed(0)}%</div>
+          <div class="kpi-label">System Utilization</div>
+        </div>
+        <div class="kpi-item">
+          <div class="kpi-value ${trendDirection === 'improving' ? 'trend-up' : trendDirection === 'declining' ? 'trend-down' : ''}">
+            ${trendDirection === 'improving' ? '↑' : trendDirection === 'declining' ? '↓' : '→'}
+          </div>
+          <div class="kpi-label">Performance Trend</div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Check if chart visualization section is active (DOM exists)
+   * @returns {boolean} True if the section is visible
+   */
+  function isChartSectionActive() {
+    return document.getElementById('statsVisualizationSection') !== null;
+  }
+
+  /**
+   * Update chart visualizations incrementally (preserves DOM, prevents re-render flicker)
+   * This uses the "incremental updates" pattern - only update values when DOM exists
+   * AND when data actually changes (change detection)
+   * @param {Object} statsData - Statistics data from API
+   */
+  function updateStatsVisualization(statsData) {
+    // Return early if section not active (DOM not rendered)
+    if (!isChartSectionActive()) return;
+
+    // Change detection: compute snapshot and compare with last rendered
+    const currentSnapshot = computeDataSnapshot(statsData);
+    const hasChanged = currentSnapshot !== lastRenderedSnapshot;
+
+    // Only re-render if data has changed
+    if (hasChanged) {
+      lastRenderedSnapshot = currentSnapshot;
+      renderPerformanceSummaryCard(statsData);
+      renderTimeMetricsCharts(statsData);
+      renderTokenMetricsCharts(statsData);
+      renderRateMetricsCharts(statsData);
+      renderHealthMetricsCharts(statsData);
+    }
   }
 
   // Start the dashboard

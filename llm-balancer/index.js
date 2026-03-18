@@ -452,7 +452,7 @@ app.get('/stats', (req, res) => {
       errorCount: b.errorCount,
       apiTypes: b.getApiTypes(),
       primaryApiType: b.getPrimaryApiType(),
-      performanceStats: b.getPerformanceStats(),
+      performanceStats: b.getPerformanceStatsWithSamples(),
       promptCacheStats: b.getPromptCacheStats()
     })),
     // Add: Prompt cache statistics summary
