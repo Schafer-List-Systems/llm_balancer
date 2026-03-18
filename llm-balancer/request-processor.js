@@ -510,12 +510,12 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
                   completionTokens = (backendCompletionTokens === 0 && completionTokenCount > 0)
                     ? completionTokenCount
                     : backendCompletionTokens;
-                  // Compute non-cached prompt tokens
+                  // Compute non-cached prompt tokens using backend's cached tokens (if provided)
                   nonCachedPromptTokens = totalPrompt !== null ? Math.max(0, totalPrompt - cachedTokens) : null;
                 }
                 // Collect last message for response caching
-                streamedResponse = msg;
                 console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Usage found in stream: prompt=${totalPrompt}, completion=${backendCompletionTokens}, cached=${cachedTokens}`);
+                streamedResponse = msg;
               } catch (e) {
                 // Not a JSON line, skip
               }
@@ -529,8 +529,21 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         // Only one variable tracks promptTokens: either from backend (accurate) or counted (fallback)
         if (promptTokens === null || promptTokens === undefined) {
           promptTokens = requestTokens ?? null;
-          // If using request-counted tokens, assume all are non-cached
-          nonCachedPromptTokens = requestTokens ?? null;
+        }
+
+        // Adjust non-cached prompt tokens using cache hit ratio when backend reports 0 cached tokens
+        // (Backend doesn't provide prompt_tokens_details.cached_tokens in most cases)
+        const cacheStats = backend.getPromptCacheStats();
+        const backendCachedTokens = 0; // Backend doesn't provide prompt_tokens_details.cached_tokens
+        if (backendCachedTokens === 0 && nonCachedPromptTokens === promptTokens && cacheStats && cacheStats.hits + cacheStats.misses > 0) {
+          console.log(`[${getTimestamp()}] [Gateway][${requestId}] Cache stats at calculation time: hits=${cacheStats.hits}, misses=${cacheStats.misses}`);
+          // Use hit ratio to estimate non-cached portion
+          // Note: This includes the current request as a miss, so the ratio is slightly off
+          const totalRequests = cacheStats.hits + cacheStats.misses;
+          const missRatio = cacheStats.misses / totalRequests;
+          const adjustedNonCached = Math.round(promptTokens * missRatio);
+          console.log(`[${getTimestamp()}] [Gateway][${requestId}] Adjusted nonCached from cache ratio: ${adjustedNonCached} (prompt=${promptTokens}, hits=${cacheStats.hits}, misses=${cacheStats.misses}, missRatio=${missRatio.toFixed(3)})`);
+          nonCachedPromptTokens = adjustedNonCached;
         }
 
         // Final fallback: if completionTokens is still null/undefined, use chunk count
@@ -750,15 +763,33 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         //
         // Only totalTime and token counts are reliably measurable for non-streaming.
 
+        // Calculate non-cached prompt tokens based on cache hit ratio
+        // Backend doesn't provide prompt_tokens_details.cached_tokens, so use cache hit ratio
+        const cacheStats = backend.getPromptCacheStats();
+        console.log(`[${getTimestamp()}] [Gateway][${requestId}] Cache stats at calculation time: hits=${cacheStats?.hits}, misses=${cacheStats?.misses}`);
+        const backendCachedTokens = 0; // Backend doesn't provide prompt_tokens_details.cached_tokens
+
+        let adjustedNonCached = tokenCounts.promptTokens; // Default to all non-cached
+        if (backendCachedTokens > 0) {
+          // Backend provided cached tokens
+          adjustedNonCached = Math.max(0, tokenCounts.promptTokens - backendCachedTokens);
+        } else if (cacheStats && cacheStats.hits + cacheStats.misses > 0) {
+          // Use hit ratio to estimate non-cached portion
+          const totalRequests = cacheStats.hits + cacheStats.misses;
+          const missRatio = cacheStats.misses / totalRequests;
+          adjustedNonCached = Math.round(tokenCounts.promptTokens * missRatio);
+          console.log(`[${getTimestamp()}] [Gateway][${requestId}] Adjusted nonCached from cache ratio: ${adjustedNonCached} (prompt=${tokenCounts.promptTokens}, hits=${cacheStats.hits}, misses=${cacheStats.misses}, missRatio=${missRatio.toFixed(3)})`);
+        }
+
         backend.updateNonStreamingStats(
           tokenCounts.promptTokens,
           tokenCounts.completionTokens,
           totalTime,
           null,                    // promptProcessingTimeMs = null (cannot measure)
           null,                    // networkLatencyMs = null (unreliable in non-streaming)
-          tokenCounts.nonCachedPromptTokens  // Pass non-cached prompt tokens
+          adjustedNonCached       // Use adjusted non-cached tokens
         );
-        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, ${tokenCounts.nonCachedPromptTokens} non-cached, totalTime=${totalTime}ms`);
+        console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Non-streaming stats: ${tokenCounts.promptTokens + tokenCounts.completionTokens} tokens, nonCached=${adjustedNonCached}, totalTime=${totalTime}ms`);
       }
 
       if (!res.headersSent) {

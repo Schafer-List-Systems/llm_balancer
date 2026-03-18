@@ -345,7 +345,7 @@ class BackendSelector {
 
         const selected = availableCacheHits[0];
         console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)})`);
-        return { status: 'found', backend: selected.backend, actualModel: modelString, message: null };
+        return { status: 'found', backend: selected.backend, actualModel: modelString, message: null, cacheMatch: { similarity: selected.similarity, matchType: selected.matchType } };
       }
 
       // All cache-hit backends are busy - return the highest priority cache-hit backend
@@ -362,7 +362,7 @@ class BackendSelector {
 
       const selected = allCacheMatches[0];
       console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)}) - backend is busy, will queue`);
-      return { status: 'busy', backend: selected.backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend' };
+      return { status: 'busy', backend: selected.backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend', cacheMatch: { similarity: selected.similarity, matchType: selected.matchType } };
       // End of cache-hit preference block (only executed when prompt exceeds threshold)
       }
     }
@@ -377,7 +377,8 @@ class BackendSelector {
     const backend = this._selectBackendByPriorityFirst(availableBackends, modelString);
 
     if (backend) {
-      return { status: 'found', backend, actualModel: modelString, message: null };
+      let cacheMatchInfo = { hasCacheHit: false };
+      return { status: 'found', backend, actualModel: modelString, message: null, cacheMatchInfo };
     }
 
     // No available backend for this model

@@ -36,7 +36,7 @@ const DEFAULTS = {
   prompt: {
     cache: {
       maxSize: 5,
-      similarityThreshold: 0.85,
+      similarityThreshold: 0.7, // Reduced from 0.85 for testing to allow more cache hits
       minHitThreshold: 15000 // Minimum token count to enforce cache-hit preference
     }
   },
