@@ -96,13 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="app-layout">
         <!-- Sidebar Navigation -->
         <aside class="sidebar ${sidebarCollapsed ? 'collapsed' : ''}" id="sidebar">
-          <div class="sidebar-header">
-            <div class="logo" id="sidebarLogo">
-              <span class="logo-icon">🧠</span>
-              <span class="logo-text" ${sidebarCollapsed ? 'style="display: none;"' : ''}>LLM Balancer</span>
-            </div>
-          </div>
-
           <nav class="sidebar-nav" id="sidebarNav">
             ${Object.entries(sectionConfig).filter(([key]) => key !== 'statistics').map(([key, config]) => `
               <button class="nav-item ${currentSection === key ? 'active' : ''}" data-section="${key}">
@@ -1434,6 +1427,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="stat-label">Avg Prompt</span>
                 <span class="stat-value">${Math.round(perf.tokenStats.avgPromptTokens)}</span>
               </div>` : ''}
+              ${(perf.tokenStats?.avgNonCachedPromptTokens != null) ? `
+              <div class="stat-row">
+                <span class="stat-label">Avg Non-Cached Prompt</span>
+                <span class="stat-value">${Math.round(perf.tokenStats.avgNonCachedPromptTokens)}</span>
+              </div>` : ''}
               ${(perf.tokenStats?.avgCompletionTokens != null) ? `
               <div class="stat-row">
                 <span class="stat-label">Avg Generation</span>
@@ -1453,6 +1451,11 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="stat-row">
                 <span class="stat-label">Prompt Rate</span>
                 <span class="stat-value">${perf.rateStats.promptRate.avgTokensPerSecond.toFixed(1)}</span>
+              </div>` : ''}
+              ${(perf.rateStats?.nonCachedPromptRate?.avgTokensPerSecond != null) ? `
+              <div class="stat-row">
+                <span class="stat-label">Non-Cached Prompt Rate</span>
+                <span class="stat-value">${perf.rateStats.nonCachedPromptRate.avgTokensPerSecond.toFixed(1)}</span>
               </div>` : ''}
               ${(perf.rateStats?.generationRate?.avgTokensPerSecond != null) ? `
               <div class="stat-row">
