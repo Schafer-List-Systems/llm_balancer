@@ -476,31 +476,57 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Render backend cards with performance metrics (incremental updates to preserve hover/scroll)
-  function renderBackends(backendsData) {
-    const backendsGrid = document.getElementById('backendsGrid');
+  // ============================================================
+  // LED FUNCTIONS - Updates LED indicators regardless of section
+  // ============================================================
+
+  function updateBackendLeds(backendsData) {
     const backendLedsContainer = document.getElementById('backendLedsContainer');
 
-    // Return if grid doesn't exist (section not active)
-    if (!backendsGrid) return;
-
-    if (!backendsData.backends || backendsData.backends.length === 0) {
-      backendsGrid.innerHTML = `
-        <div class="card">
-          <p>No backends configured</p>
-        </div>
-      `;
-      // Clear LEDs if no backends
-      if (backendLedsContainer) {
-        backendLedsContainer.innerHTML = '';
-      }
+    if (!backendLedsContainer || !backendsData.backends || backendsData.backends.length === 0) {
       return;
     }
 
     // Initialize LED container if it doesn't exist
-    if (!backendLedsContainer || backendLedsContainer.innerHTML === '') {
+    if (backendLedsContainer.innerHTML === '') {
       backendLedsContainer.innerHTML = backendsData.backends.map((backend, index) => `
         <div class="backend-led" data-backend-url="${encodeURIComponent(backend.url)}" title="Loading..."></div>
       `).join('');
+    }
+
+    // Update LED states for each backend
+    backendsData.backends.forEach(backend => {
+      const led = backendLedsContainer.querySelector(`[data-backend-url="${encodeURIComponent(backend.url)}"]`);
+      if (led) {
+        let ledState = 'idle';
+        let ledTitle = `${backend.name || 'Backend'} - Idle`;
+
+        if (!backend.healthy) {
+          ledState = 'unhealthy';
+          ledTitle = `${backend.name || 'Backend'} - Unhealthy`;
+        } else if ((backend.activeStreamingRequests || 0) > 0) {
+          ledState = 'streaming';
+          ledTitle = `${backend.name || 'Backend'} - Streaming`;
+        } else if ((backend.activeNonStreamingRequests || 0) > 0) {
+          ledState = 'non-streaming';
+          ledTitle = `${backend.name || 'Backend'} - Non-Streaming`;
+        }
+
+        led.classList.remove('unhealthy', 'idle', 'streaming', 'non-streaming', 'green-glowing');
+        led.classList.add(ledState);
+        led.title = ledTitle;
+      }
+    });
+  }
+
+  /**
+   * Render backend cards (only when Backends section is active)
+   */
+  function renderBackendCards(backendsData) {
+    const backendsGrid = document.getElementById('backendsGrid');
+
+    if (!backendsGrid || !backendsData.backends || backendsData.backends.length === 0) {
+      return;
     }
 
     // Initialize cards if they don't exist
@@ -551,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `).join('');
     }
 
-    // Incremental updates - always update LED states and cards without destroying DOM
+    // Incremental updates - update existing cards without destroying DOM
     backendsData.backends.forEach((backend, index) => {
       const healthClass = backend.healthy ? 'healthy' : 'unhealthy';
       const healthText = backend.healthy ? 'Healthy' : 'Unhealthy';
@@ -577,35 +603,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if ((backend.activeNonStreamingRequests || 0) > 0) {
           card.classList.add('non-streaming-active');
         }
-      }
-
-      // Update LED indicator
-      const led = backendLedsContainer.querySelector(`[data-backend-url="${encodeURIComponent(backend.url)}"]`);
-      if (led) {
-        // Determine LED state
-        let ledState = 'idle';
-        let ledTitle = `${backend.name || 'Backend'} - Idle`;
-
-        if (!backend.healthy) {
-          ledState = 'unhealthy';
-          ledTitle = `${backend.name || 'Backend'} - Unhealthy`;
-        } else if ((backend.activeStreamingRequests || 0) > 0) {
-          ledState = 'streaming';
-          ledTitle = `${backend.name || 'Backend'} - Streaming`;
-        } else if ((backend.activeNonStreamingRequests || 0) > 0) {
-          ledState = 'non-streaming';
-          ledTitle = `${backend.name || 'Backend'} - Non-Streaming`;
-        } else if (backend.activeRequestCount > 0) {
-          ledState = 'green-glowing';
-          ledTitle = `${backend.name || 'Backend'} - Busy`;
-        }
-
-        // Remove old state classes
-        led.classList.remove('unhealthy', 'idle', 'streaming', 'non-streaming', 'green-glowing');
-        // Add new state class
-        led.classList.add(ledState);
-        // Update title for tooltip
-        led.title = ledTitle;
       }
 
       // Update text values using textContent (preserves event listeners)
@@ -1649,9 +1646,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only render overview content (5 cards) - this is always visible
     renderOverview(data.health);
 
-    // Render backends if backends section is active
+    // Always update LEDs regardless of which section is active
+    if (data.backends && data.backends.backends) {
+      updateBackendLeds(data.backends);
+    }
+
+    // Render backends cards only if backends section is active
     if (currentSection === 'backends') {
-      renderBackends(data.backends);
+      renderBackendCards(data.backends);
     }
 
     // Only render stats if the overview section is active
