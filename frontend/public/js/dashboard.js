@@ -132,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span id="currentPageSubtitle">${sectionConfig.overview.subtitle}</span>
               </div>
               <div class="header-info">
+                <div id="backendLedsContainer" class="backend-leds-container"></div>
                 <div id="connectionStatus" class="status-badge disconnected">
                   <span class="status-dot"></span>
                   <span>Connecting...</span>
@@ -484,6 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render backend cards with performance metrics (incremental updates to preserve hover/scroll)
   function renderBackends(backendsData) {
     const backendsGrid = document.getElementById('backendsGrid');
+    const backendLedsContainer = document.getElementById('backendLedsContainer');
 
     // Return if grid doesn't exist (section not active)
     if (!backendsGrid) return;
@@ -494,7 +496,18 @@ document.addEventListener('DOMContentLoaded', () => {
           <p>No backends configured</p>
         </div>
       `;
+      // Clear LEDs if no backends
+      if (backendLedsContainer) {
+        backendLedsContainer.innerHTML = '';
+      }
       return;
+    }
+
+    // Initialize LED container if it doesn't exist
+    if (!backendLedsContainer || backendLedsContainer.innerHTML === '') {
+      backendLedsContainer.innerHTML = backendsData.backends.map((backend, index) => `
+        <div class="backend-led" data-backend-url="${encodeURIComponent(backend.url)}" title="Loading..."></div>
+      `).join('');
     }
 
     // Initialize cards if they don't exist
@@ -574,6 +587,35 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if ((backend.activeNonStreamingRequests || 0) > 0) {
           card.classList.add('non-streaming-active');
         }
+      }
+
+      // Update LED indicator
+      const led = backendLedsContainer.querySelector(`[data-backend-url="${encodeURIComponent(backend.url)}"]`);
+      if (led) {
+        // Determine LED state
+        let ledState = 'idle';
+        let ledTitle = `${backend.name || 'Backend'} - Idle`;
+
+        if (!backend.healthy) {
+          ledState = 'unhealthy';
+          ledTitle = `${backend.name || 'Backend'} - Unhealthy`;
+        } else if ((backend.activeStreamingRequests || 0) > 0) {
+          ledState = 'streaming';
+          ledTitle = `${backend.name || 'Backend'} - Streaming`;
+        } else if ((backend.activeNonStreamingRequests || 0) > 0) {
+          ledState = 'non-streaming';
+          ledTitle = `${backend.name || 'Backend'} - Non-Streaming`;
+        } else if (backend.activeRequestCount > 0) {
+          ledState = 'green-glowing';
+          ledTitle = `${backend.name || 'Backend'} - Busy`;
+        }
+
+        // Remove old state classes
+        led.classList.remove('unhealthy', 'idle', 'streaming', 'non-streaming', 'green-glowing');
+        // Add new state class
+        led.classList.add(ledState);
+        // Update title for tooltip
+        led.title = ledTitle;
       }
 
       // Update text values using textContent (preserves event listeners)
@@ -748,7 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Token Counts Section
-    const hasTokenStats = tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined || tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined || tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined;
+    const hasTokenStats = tokenStats.avgPromptTokens !== null && tokenStats.avgPromptTokens !== undefined || tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined || tokenStats.avgTotalTokens !== null && tokenStats.avgTotalTokens !== undefined || tokenStats.avgNonCachedPromptTokens !== null && tokenStats.avgNonCachedPromptTokens !== undefined;
     if (hasTokenStats) {
       hasData = true;
       html += `
@@ -758,6 +800,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="perf-metric-row">
               <span class="perf-metric-label">Prompt</span>
               <span class="perf-metric-value">${tokenStats.avgPromptTokens.toFixed(1)}</span>
+            </div>
+          ` : ''}
+          ${tokenStats.avgNonCachedPromptTokens !== null && tokenStats.avgNonCachedPromptTokens !== undefined ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">~Non-Cached Prompt</span>
+              <span class="perf-metric-value">${tokenStats.avgNonCachedPromptTokens.toFixed(1)}</span>
             </div>
           ` : ''}
           ${tokenStats.avgCompletionTokens !== null && tokenStats.avgCompletionTokens !== undefined ? `
@@ -777,10 +825,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Token Rates Section
-    const hasAnyRate = rateStats.totalRate?.count > 0 || rateStats.promptRate?.count > 0 || rateStats.generationRate?.count > 0;
+    const hasAnyRate = rateStats.totalRate?.count > 0 || rateStats.promptRate?.count > 0 || rateStats.generationRate?.count > 0 || rateStats.nonCachedPromptRate?.count > 0;
     if (hasAnyRate) {
       hasData = true;
-      const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples\nTotal Rate: ${rateStats.totalRate?.count || 0} samples`;
+      const tooltipText = `The numbers shown are averages calculated from multiple requests.\nHover over each rate to see the sample count used.\n\nPrompt Rate: ${rateStats.promptRate?.count || 0} samples\n~Non-Cached Prompt Rate: ${rateStats.nonCachedPromptRate?.count || 0} samples\nGeneration Rate: ${rateStats.generationRate?.count || 0} samples\nTotal Rate: ${rateStats.totalRate?.count || 0} samples`;
       html += `
         <div class="perf-section">
           <div class="perf-section-title with-tooltip" data-tooltip="${tooltipText}">⚡ Avg Token Rates (tokens/sec)</div>
@@ -788,6 +836,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="perf-metric-row">
               <span class="perf-metric-label">Prompt Rate</span>
               <span class="perf-metric-value">${formatRate(rateStats.promptRate)}</span>
+            </div>
+          ` : ''}
+          ${rateStats.nonCachedPromptRate?.count > 0 ? `
+            <div class="perf-metric-row">
+              <span class="perf-metric-label">~Non-Cached Prompt Rate</span>
+              <span class="perf-metric-value">${formatRate(rateStats.nonCachedPromptRate)}</span>
             </div>
           ` : ''}
           ${rateStats.generationRate?.count > 0 ? `
@@ -1429,7 +1483,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>` : ''}
               ${(perf.tokenStats?.avgNonCachedPromptTokens != null) ? `
               <div class="stat-row">
-                <span class="stat-label">Avg Non-Cached Prompt</span>
+                <span class="stat-label">~Avg Non-Cached Prompt</span>
                 <span class="stat-value">${Math.round(perf.tokenStats.avgNonCachedPromptTokens)}</span>
               </div>` : ''}
               ${(perf.tokenStats?.avgCompletionTokens != null) ? `
@@ -1454,7 +1508,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>` : ''}
               ${(perf.rateStats?.nonCachedPromptRate?.avgTokensPerSecond != null) ? `
               <div class="stat-row">
-                <span class="stat-label">Non-Cached Prompt Rate</span>
+                <span class="stat-label">~Non-Cached Prompt Rate</span>
                 <span class="stat-value">${perf.rateStats.nonCachedPromptRate.avgTokensPerSecond.toFixed(1)}</span>
               </div>` : ''}
               ${(perf.rateStats?.generationRate?.avgTokensPerSecond != null) ? `
