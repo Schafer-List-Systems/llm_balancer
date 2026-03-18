@@ -298,6 +298,25 @@ document.addEventListener('DOMContentLoaded', () => {
                       </div>
                     </div>
                   </section>
+
+                  <!-- Queue Visualization -->
+                  <section id="queueVisualizationSection" class="stats-section">
+                    <h3 class="section-title">🗂️ Queue Visualization</h3>
+                    <div class="chart-grid">
+                      <div class="chart-container">
+                        <div class="chart-title">📊 Queue Depth Over Time</div>
+                        <canvas id="queueDepthChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">🎚️ Queue Utilization</div>
+                        <canvas id="queueUtilizationChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container">
+                        <div class="chart-title">⏱️ Queue Wait Time Distribution</div>
+                        <canvas id="queueWaitTimeChart" class="chart-canvas"></canvas>
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </div>
             </section>

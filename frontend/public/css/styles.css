@@ -3547,6 +3547,97 @@ body.dark-mode .chart-legend {
   }
 }
 
+/* Queue Visualization Styles */
+.queue-utilization-chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.queue-utilization-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.queue-utilization-percentage {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+
+.queue-utilization-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+body.dark-mode .queue-utilization-percentage {
+  color: #e2e8f0;
+}
+
+.queue-utilization-status {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.queue-utilization-status.low {
+  background-color: var(--success-bg);
+  color: var(--success-text);
+}
+
+.queue-utilization-status.medium {
+  background-color: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.queue-utilization-status.high {
+  background-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+body.dark-mode .queue-utilization-status.low {
+  background-color: #065f46;
+  color: #d1fae5;
+}
+
+body.dark-mode .queue-utilization-status.medium {
+  background-color: #92400e;
+  color: #fed7aa;
+}
+
+body.dark-mode .queue-utilization-status.high {
+  background-color: #b91c1c;
+  color: #fecaca;
+}
+
+/* Histogram bar styles */
+.histogram-bar {
+  fill: var(--primary-color);
+  opacity: 0.8;
+}
+
+.histogram-bar:hover {
+  opacity: 1;
+}
+
+.queue-axis-label {
+  font-size: 0.75rem;
+  fill: var(--text-secondary);
+}
+
+.queue-tick-label {
+  font-size: 0.625rem;
+  fill: var(--text-secondary);
+}
+
 /* ============================================
    CONDENSED BACKEND CARDS (Dashboard Landing)
    ============================================ */

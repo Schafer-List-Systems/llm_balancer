@@ -28,6 +28,10 @@ class Balancer {
     this.queueTimeout = queueTimeout;
     this.queue = []; // Single global queue
 
+    // Queue history for visualization (tracks depth snapshots)
+    this._queueDepthHistory = [];
+    this.maxQueueHistory = config.queue.depthHistorySize || 100;
+
     // Debug request ID counter (internal, separate from user-provided IDs)
     this._internalRequestIdCounter = 0;
 
@@ -58,13 +62,35 @@ class Balancer {
     const queue = this.queue;
     const now = Date.now();
 
+    // Track queue depth history for visualization
+    const currentDepth = queue.length;
+    this._queueDepthHistory.push({
+      depth: currentDepth,
+      timestamp: now
+    });
+
+    // Limit history size
+    if (this._queueDepthHistory.length > this.maxQueueHistory) {
+      this._queueDepthHistory.shift();
+    }
+
     return {
-      depth: queue.length,
+      depth: currentDepth,
       maxQueueSize: this.maxQueueSize,
       queueTimeout: this.queueTimeout,
       oldestRequestAge: queue.length > 0 ? now - queue[0].timestamp : 0,
-      isFull: queue.length >= this.maxQueueSize
+      isFull: currentDepth >= this.maxQueueSize,
+      // Add history for visualization
+      depthHistory: [...this._queueDepthHistory]
     };
+  }
+
+  /**
+   * Get queue depth history for visualization
+   * @returns {Array} Array of {depth, timestamp} objects
+   */
+  getQueueDepthHistory() {
+    return [...this._queueDepthHistory];
   }
 
   /**
