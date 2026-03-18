@@ -439,4 +439,13 @@ curl http://localhost:3001/stats
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](./LICENSE).
+
+### Third-Party Licenses
+
+This project includes numerous third-party dependencies, each with their own license.
+For a complete list of third-party licenses and attributions, see:
+
+- **[Third-Party Licenses](./docs/THIRD-PARTY-LICENSES.md)** - Complete license documentation for all 520+ dependencies
+
+**Summary:** All dependencies use permissive licenses (MIT, ISC, BSD, Apache-2.0, 0BSD) compatible with our MIT license.
