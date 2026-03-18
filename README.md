@@ -289,6 +289,19 @@ Configure cache behavior:
 }
 ```
 
+### Performance Metrics and Token Counting
+
+The balancer tracks comprehensive performance metrics for each backend, including:
+
+- **Time Metrics**: Total time, prompt processing time, generation time, network latency
+- **Token Metrics**: Prompt tokens, completion tokens, non-cached prompt tokens
+- **Rate Metrics**: Tokens per second for total, prompt, and generation
+- **Cache Statistics**: Prompt cache hits, misses, and evictions
+
+**Streaming vs Non-Streaming**: Token counting behavior differs between streaming and non-streaming modes. In streaming mode, completion tokens are counted from response chunks when the backend doesn't provide usage details. In non-streaming mode, only the backend's `usage.completion_tokens` is used.
+
+For detailed documentation on metrics tracking and token counting, see [Performance Metrics and Token Counting](docs/developer/METRICS.md).
+
 ## Configuration Options
 
 ### JSON Configuration File (`config.json`)

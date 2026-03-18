@@ -228,6 +228,57 @@ Capability detection results for a backend.
 
 ---
 
+### Performance Statistics
+
+For detailed performance metrics, token counting behavior, and rate statistics, see [Performance Metrics](../developer/METRICS.md).
+
+```json
+{
+  "performanceStats": {
+    "requestCount": 4,
+    "timeStats": {
+      "avgTotalTimeMs": 18630.25,
+      "avgNetworkLatencyMs": 141.375,
+      "avgPromptProcessingTimeMs": 11570.25,
+      "avgGenerationTimeMs": 7090.27
+    },
+    "tokenStats": {
+      "avgPromptTokens": 88745,
+      "avgNonCachedPromptTokens": 88745,
+      "avgCompletionTokens": 185.25,
+      "avgTotalTokens": 88930.25
+    },
+    "rateStats": {
+      "totalRate": {
+        "count": 4,
+        "avgTokensPerSecond": 4523.1
+      },
+      "promptRate": {
+        "count": 4,
+        "avgTokensPerSecond": 7667.3
+      },
+      "generationRate": {
+        "count": 4,
+        "avgTokensPerSecond": 25.4
+      }
+    }
+  },
+  "promptCacheStats": {
+    "hits": 0,
+    "misses": 4,
+    "evictions": 0,
+    "similarityMatches": 0,
+    "idMatches": 0,
+    "size": 1,
+    "maxSize": 5
+  }
+}
+```
+
+**See Also**: For comprehensive documentation on streaming vs non-streaming token counting, time metrics, and rate calculations, see [Performance Metrics and Token Counting](../developer/METRICS.md).
+
+---
+
 ## Debug Request Object
 
 Tracked request in debug history.

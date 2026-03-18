@@ -68,6 +68,7 @@ This guide helps you quickly find the documentation you need based on your role 
 - [docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) - System architecture, component diagrams
 - [docs/developer/DATA_FLOW.md](docs/developer/DATA_FLOW.md) - Data flow diagrams, request processing, component interaction
 - [docs/developer/CLASSES.md](docs/developer/CLASSES.md) - Class hierarchy, interfaces, data structures
+- [docs/developer/METRICS.md](docs/developer/METRICS.md) - Performance metrics, token counting, statistics
 - [docs/developer/TESTING.md](docs/developer/TESTING.md) - Test structure, how to run tests, writing tests
 - [docs/developer/CONTRIBUTING.md](docs/developer/CONTRIBUTING.md) - Contribution guidelines, code style
 - [docs/developer/DEBUGGING.md](docs/developer/DEBUGGING.md) - Debug features, troubleshooting for developers
@@ -133,6 +134,7 @@ llm_balancer/
 │   │   ├── ARCHITECTURE.md            # System architecture, component diagrams
 │   │   ├── DATA_FLOW.md               # Data flow diagrams, request processing, component interaction
 │   │   ├── CLASSES.md                 # Class hierarchy, interfaces, data structures
+│   │   ├── METRICS.md                 # Performance metrics, token counting, statistics
 │   │   ├── TESTING.md                 # Test structure, how to run tests, writing tests
 │   │   ├── CONTRIBUTING.md            # Contribution guidelines, code style
 │   │   └── DEBUGGING.md               # Debug features, troubleshooting for developers
