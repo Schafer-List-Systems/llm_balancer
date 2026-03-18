@@ -1,0 +1,5 @@
+# Exclude build artifacts and node_modules from Docker build
+node_modules/
+dist/
+*.log
+npm-debug.log*
