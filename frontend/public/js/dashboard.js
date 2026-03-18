@@ -200,13 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
                   </div>
                 </section>
 
-                <!-- Performance Summary Card -->
-                <section class="stats-section">
-                  <div id="performanceSummaryCard" class="performance-summary-card">
-                    <!-- Rendered dynamically -->
-                  </div>
-                </section>
-
                 <!-- Statistics -->
                 <section class="stats-section">
                   <h2 class="section-title">Statistics <span class="section-subtitle">(System-wide statistics and metrics)</span></h2>
@@ -556,13 +549,10 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
       `).join('');
-
-
-      return;
     }
 
-    // Incremental updates - update existing cards without destroying DOM
-    backendsData.backends.forEach(backend => {
+    // Incremental updates - always update LED states and cards without destroying DOM
+    backendsData.backends.forEach((backend, index) => {
       const healthClass = backend.healthy ? 'healthy' : 'unhealthy';
       const healthText = backend.healthy ? 'Healthy' : 'Unhealthy';
       const isBusy = backend.activeRequestCount > 0;
@@ -1119,8 +1109,8 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
   document.head.appendChild(style);
 
-  // Render queue statistics
-  function renderQueueStats(queueStats) {
+  // Render queue statistics (includes performance metrics merged in)
+  function renderQueueStats(queueStats, statsData) {
     const statsSection = document.getElementById('statsSection');
 
     // Return if stats section doesn't exist (section not active)
@@ -1136,6 +1126,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxQueueSize = queueStats.maxQueueSize || 0;
     const queueUtilization = maxQueueSize > 0 ? pendingRequests / maxQueueSize : 0;
 
+    // Calculate performance metrics from statsData for merged card
+    const backends = statsData?.backendDetails?.filter(b => b.performanceStats) || [];
+    const avgGenRate = backends.length > 0
+      ? backends.reduce((sum, b) => {
+          const samples = b.performanceStats.rawSamples?.rateStats?.generationRate || [];
+          return sum + (samples.length > 0 ? samples.reduce((a, c) => a + c, 0) / samples.length : 0);
+        }, 0) / backends.length
+      : 0;
+
+    const avgTotalTime = backends.length > 0
+      ? backends.reduce((sum, b) => {
+          const samples = b.performanceStats.rawSamples?.timeStats?.totalTimeMs || [];
+          return sum + (samples.length > 0 ? samples.reduce((a, c) => a + c, 0) / samples.length : 0);
+        }, 0) / backends.length
+      : 0;
+
+    const overallCacheHitRate = backends.length > 0
+      ? backends.reduce((sum, b) => {
+          const cache = b.promptCacheStats || {};
+          const total = (cache.totalHits || 0) + (cache.totalMisses || 0);
+          return sum + (total > 0 ? (cache.totalHits || 0) / total : 0);
+        }, 0) / backends.length * 100
+      : 0;
+
+    const totalConc = statsData?.stats?.totalConcurrency || 0;
+    const maxConc = statsData?.stats?.maxConcurrency || 100;
+    const utilization = (totalConc / maxConc) * 100;
+    const utilizationPercent = totalConc / maxConc;
+
     // Check if queue stats already exist, if not create them
     if (!statsGrid.querySelector('.queue-stats-card')) {
       const queueStatsCard = document.createElement('div');
@@ -1145,7 +1164,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       queueStatsCard.innerHTML = `
         <div class="card-header" style="display: flex; align-items: center; gap: 0.5rem;">
-          <span class="card-title">🚦 Queue Statistics</span>
+          <span class="card-title">🚦 Queue & Performance Statistics</span>
         </div>
         <div class="queue-stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
           <div class="queue-stat-item">
@@ -1167,6 +1186,26 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
         </div>
+        <div class="queue-stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Avg Generation Rate</div>
+            <div class="queue-stat-value" style="font-size: 1.5rem; font-weight: 800;">${avgGenRate.toFixed(1)} t/s</div>
+          </div>
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Avg Total Time</div>
+            <div class="queue-stat-value" style="font-size: 1.5rem; font-weight: 800;">${avgTotalTime.toFixed(0)} ms</div>
+          </div>
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">Cache Hit Rate</div>
+            <div class="queue-stat-value" style="font-size: 1.5rem; font-weight: 800;">${overallCacheHitRate.toFixed(1)}%</div>
+          </div>
+          <div class="queue-stat-item">
+            <div class="queue-stat-label">System Utilization</div>
+            <div class="queue-stat-value ${getUtilizationColor(utilizationPercent)}" style="font-size: 1.5rem; font-weight: 800;">
+              ${utilization.toFixed(0)}%
+            </div>
+          </div>
+        </div>
       `;
 
       statsGrid.appendChild(queueStatsCard);
@@ -1174,13 +1213,21 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update existing queue stats
       const queueStatsCard = statsGrid.querySelector('.queue-stats-card');
       if (queueStatsCard) {
-        const values = queueStatsCard.querySelectorAll('.queue-stat-value');
-        values[0].textContent = pendingRequests;
-        values[1].textContent = processingRequests;
-        values[2].textContent = maxQueueSize;
-        const utilizationEl = values[3];
+        const allValues = queueStatsCard.querySelectorAll('.queue-stat-value');
+        // First 4 values: queue stats
+        allValues[0].textContent = pendingRequests;
+        allValues[1].textContent = processingRequests;
+        allValues[2].textContent = maxQueueSize;
+        const utilizationEl = allValues[3];
         utilizationEl.textContent = `${(queueUtilization * 100).toFixed(1)}%`;
         utilizationEl.className = `queue-stat-value ${getUtilizationColor(queueUtilization)}`;
+        // Next 4 values: performance metrics
+        allValues[4].textContent = `${avgGenRate.toFixed(1)} t/s`;
+        allValues[5].textContent = `${avgTotalTime.toFixed(0)} ms`;
+        allValues[6].textContent = `${overallCacheHitRate.toFixed(1)}%`;
+        const sysUtilEl = allValues[7];
+        sysUtilEl.textContent = `${utilization.toFixed(0)}%`;
+        sysUtilEl.className = `queue-stat-value ${getUtilizationColor(utilizationPercent)}`;
       }
     }
   }
@@ -1610,7 +1657,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only render stats if the overview section is active
     if (currentSection === 'overview') {
       renderStats(data.stats);
-      renderQueueStats(data.queueStats);
+      renderQueueStats(data.queueStats, data.stats);
       // Update chart visualizations (only if function is available)
       if (typeof updateStatsVisualization === 'function') {
         updateStatsVisualization(data.stats);
@@ -2754,86 +2801,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Render the performance summary card with KPI metrics
-   * @param {Object} statsData - Statistics data from API
-   */
-  function renderPerformanceSummaryCard(statsData) {
-    const container = document.getElementById('performanceSummaryCard');
-    if (!container || !statsData?.backendDetails) return;
-
-    const backends = statsData.backendDetails.filter(b => b.performanceStats);
-
-    // Calculate KPIs
-    const avgGenRate = backends.length > 0
-      ? backends.reduce((sum, b) => {
-          const samples = b.performanceStats.rawSamples?.rateStats?.generationRate || [];
-          return sum + (samples.length > 0 ? samples.reduce((a, c) => a + c, 0) / samples.length : 0);
-        }, 0) / backends.length
-      : 0;
-
-    const avgTotalTime = backends.length > 0
-      ? backends.reduce((sum, b) => {
-          const samples = b.performanceStats.rawSamples?.timeStats?.totalTimeMs || [];
-          return sum + (samples.length > 0 ? samples.reduce((a, c) => a + c, 0) / samples.length : 0);
-        }, 0) / backends.length
-      : 0;
-
-    const overallCacheHitRate = backends.length > 0
-      ? backends.reduce((sum, b) => {
-          const cache = b.promptCacheStats || {};
-          const total = (cache.totalHits || 0) + (cache.totalMisses || 0);
-          return sum + (total > 0 ? (cache.totalHits || 0) / total : 0);
-        }, 0) / backends.length * 100
-      : 0;
-
-    const totalConc = statsData.stats?.totalConcurrency || 0;
-    const maxConc = statsData.stats?.maxConcurrency || 100;
-    const utilization = (totalConc / maxConc) * 100;
-
-    // Generate sparkline data for generation rate trend
-    const genRateTrend = backends.length > 0
-      ? backends[0].performanceStats.rawSamples?.rateStats?.generationRate?.slice(-10) || []
-      : [];
-
-    // Determine trend direction
-    let trendDirection = 'stable';
-    if (genRateTrend.length >= 2) {
-      const firstHalf = genRateTrend.slice(0, genRateTrend.length / 2);
-      const secondHalf = genRateTrend.slice(genRateTrend.length / 2);
-      const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
-      const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
-      if (secondAvg > firstAvg * 1.1) trendDirection = 'improving';
-      else if (secondAvg < firstAvg * 0.9) trendDirection = 'declining';
-    }
-
-    container.innerHTML = `
-      <div class="kpi-row">
-        <div class="kpi-item">
-          <div class="kpi-value">${avgGenRate.toFixed(1)} t/s</div>
-          <div class="kpi-label">Avg Generation Rate</div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-value">${avgTotalTime.toFixed(0)} ms</div>
-          <div class="kpi-label">Avg Total Time</div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-value">${overallCacheHitRate.toFixed(1)}%</div>
-          <div class="kpi-label">Cache Hit Rate</div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-value">${utilization.toFixed(0)}%</div>
-          <div class="kpi-label">System Utilization</div>
-        </div>
-        <div class="kpi-item">
-          <div class="kpi-value ${trendDirection === 'improving' ? 'trend-up' : trendDirection === 'declining' ? 'trend-down' : ''}">
-            ${trendDirection === 'improving' ? '↑' : trendDirection === 'declining' ? '↓' : '→'}
-          </div>
-          <div class="kpi-label">Performance Trend</div>
-        </div>
-      </div>
-    `;
-  }
 
   /**
    * Check if chart visualization section is active (DOM exists)
@@ -2860,7 +2827,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Only re-render if data has changed
     if (hasChanged) {
       lastRenderedSnapshot = currentSnapshot;
-      renderPerformanceSummaryCard(statsData);
       renderTimeMetricsCharts(statsData);
       renderTokenMetricsCharts(statsData);
       renderRateMetricsCharts(statsData);

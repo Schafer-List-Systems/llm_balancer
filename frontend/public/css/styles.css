@@ -403,6 +403,41 @@ body.dark-mode {
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
 }
 
+/* Dark mode LED enhancements */
+body.dark-mode .backend-led.unhealthy {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.8), 0 0 20px rgba(239, 68, 68, 0.4);
+}
+
+body.dark-mode .backend-led.green-glowing,
+body.dark-mode .backend-led.non-streaming {
+  animation: led-pulsing-glow-dark 2.5s ease-in-out infinite;
+}
+
+@keyframes led-pulsing-glow-dark {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6), 0 0 14px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(16, 185, 129, 1), 0 0 28px rgba(16, 185, 129, 0.6);
+  }
+}
+
+body.dark-mode .backend-led.streaming {
+  animation: led-gradient-shift-dark 2s ease-in-out infinite;
+}
+
+@keyframes led-gradient-shift-dark {
+  0% {
+    box-shadow: 0 0 8px rgba(56, 189, 252, 0.6), 0 0 16px rgba(56, 189, 252, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(56, 189, 252, 1.2), 0 0 35px rgba(56, 189, 252, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 8px rgba(56, 189, 252, 0.6), 0 0 16px rgba(56, 189, 252, 0.3);
+  }
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background-color: var(--bg-color) !important;
@@ -672,7 +707,14 @@ body.dark-mode body {
 }
 
 .header-info {
-  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.header-info > div {
+  flex-shrink: 0;
 }
 
 /* Main Content */
@@ -825,6 +867,68 @@ body.dark-mode body {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* Backend LED Indicators Container */
+.backend-leds-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-right: 0.75rem;
+}
+
+/* Base LED Styles */
+.backend-led {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #6b7280;
+  transition: all 0.3s ease;
+}
+
+/* LED State: Unhealthy (Red) */
+.backend-led.unhealthy {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+/* LED State: Idle (Green - solid) */
+.backend-led.idle {
+  background-color: #10b981;
+}
+
+/* LED State: Green Glowing (Busy Non-Streaming) */
+@keyframes led-pulsing-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.4), 0 0 10px rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.8), 0 0 20px rgba(16, 185, 129, 0.4);
+  }
+}
+
+.backend-led.green-glowing,
+.backend-led.non-streaming {
+  background-color: #10b981;
+  animation: led-pulsing-glow 2.5s ease-in-out infinite;
+}
+
+/* LED State: Blue Glowing (Streaming) */
+@keyframes led-gradient-shift {
+  0% {
+    box-shadow: 0 0 5px rgba(56, 189, 252, 0.4), 0 0 10px rgba(56, 189, 252, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(56, 189, 252, 0.9), 0 0 25px rgba(56, 189, 252, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 5px rgba(56, 189, 252, 0.4), 0 0 10px rgba(56, 189, 252, 0.2);
+  }
+}
+
+.backend-led.streaming {
+  background-color: #38bdf8;
+  animation: led-gradient-shift 2s ease-in-out infinite;
 }
 
 /* Main Content */
