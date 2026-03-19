@@ -61,14 +61,14 @@ document.addEventListener('DOMContentLoaded', () => {
     'overview': {
       label: 'Overview',
       icon: '📊',
-      title: 'Overview & Statistics',
-      subtitle: 'System health summary and metrics'
+      title: 'Overview',
+      subtitle: 'System health and backend status'
     },
-    'backends': {
-      label: 'Backends',
-      icon: '🖥️',
-      title: 'Backends',
-      subtitle: 'Individual backend status and metrics'
+    'statistics': {
+      label: 'Statistics',
+      icon: '📈',
+      title: 'Statistics',
+      subtitle: 'Deep-dive analytics and visualizations'
     },
     'benchmarks': {
       label: 'Benchmarks',
@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <!-- Sidebar Navigation -->
         <aside class="sidebar ${sidebarCollapsed ? 'collapsed' : ''}" id="sidebar">
           <nav class="sidebar-nav" id="sidebarNav">
-            ${Object.entries(sectionConfig).filter(([key]) => key !== 'statistics').map(([key, config]) => `
+            ${Object.entries(sectionConfig).filter(([key]) => key !== 'backends').map(([key, config]) => `
               <button class="nav-item ${currentSection === key ? 'active' : ''}" data-section="${key}">
                 <span class="nav-icon">${config.icon}</span>
                 <span class="nav-label" ${sidebarCollapsed ? 'style="display: none;"' : ''}>${config.label}</span>
@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </header>
 
           <main class="main-content">
-            <!-- Overview & Statistics Section -->
+            <!-- Overview Section -->
             <section id="overviewSection" class="section-content active" data-section="overview">
               <div class="overview-stats-container">
                 <!-- Overview Cards -->
@@ -200,13 +200,27 @@ document.addEventListener('DOMContentLoaded', () => {
                   </div>
                 </section>
 
-                <!-- Statistics -->
-                <section class="stats-section">
-                  <h2 class="section-title">Statistics <span class="section-subtitle">(System-wide statistics and metrics)</span></h2>
-                  <div id="statsSection">
-                    <!-- Stats will be rendered here -->
+                <!-- Backend Cards Section -->
+                <section class="backend-section">
+                  <h2 class="section-title">Backends <span class="section-subtitle">(Individual backend status)</span></h2>
+                  <div id="backendsGrid" class="backends-grid">
+                    <!-- Backend cards will be rendered here -->
                   </div>
                 </section>
+              </div>
+            </section>
+
+            <!-- Statistics Section -->
+            <section id="statisticsSection" class="section-content" data-section="statistics">
+              <section class="backends-section">
+                <div class="section-header">
+                  <h2 class="section-title">Statistics <span class="section-subtitle">(Deep-dive analytics and visualizations)</span></h2>
+                </div>
+
+                <!-- Stats Grid -->
+                <div id="statsSection">
+                  <!-- Stats will be rendered here -->
+                </div>
 
                 <!-- Chart Visualization Section -->
                 <div id="statsVisualizationSection" class="page-section">
@@ -352,19 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                   </section>
                 </div>
-              </div>
-            </section>
-
-            <!-- Backends Section -->
-            <section id="backendsSection" class="section-content" data-section="backends">
-              <div class="backends-section">
-                <div class="section-header">
-                  <h2 class="section-title">Backends <span class="section-subtitle">(Individual backend status and metrics)</span></h2>
-                </div>
-                <div id="backendsGrid" class="backends-grid">
-                  <!-- Backend cards will be rendered here -->
-                </div>
-              </div>
+              </section>
             </section>
 
             <!-- Benchmarks Section -->
@@ -517,6 +519,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       connectionStatus.className = 'status-badge disconnected';
       connectionStatus.querySelector('span:last-child').textContent = 'No Available Backends';
+    }
+
+    // Update backend cards on overview page
+    const backendsData = apiClient.getData()?.backends;
+    if (backendsData && backendsData.backends && currentSection === 'overview') {
+      renderBackendCards(backendsData);
     }
   }
 
@@ -944,12 +952,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load data for specific section
   function loadDataForSection(sectionId) {
     switch (sectionId) {
-      case 'backends':
-        // Render backends cards when section is navigated to
+      case 'overview':
+        // Render backends cards when overview is active
         const backendsData = apiClient.getData()?.backends;
         if (backendsData && backendsData.backends) {
           renderBackendCards(backendsData);
         }
+        break;
+      case 'statistics':
+        // Load stats data
+        const statsData = apiClient.getData()?.stats;
+        renderStats(statsData);
         break;
       case 'benchmarks':
         // Render benchmark backends if not already done
@@ -966,7 +979,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderConfig();
         break;
       default:
-        // Overview (includes statistics) - already rendered
+        // Overview - already rendered
         break;
     }
   }
@@ -1711,13 +1724,13 @@ document.addEventListener('DOMContentLoaded', () => {
       updateBackendLeds(data.backends);
     }
 
-    // Render backends cards only if backends section is active
-    if (currentSection === 'backends') {
+    // Render backends cards only if overview section is active
+    if (currentSection === 'overview') {
       renderBackendCards(data.backends);
     }
 
-    // Only render stats if the overview section is active
-    if (currentSection === 'overview') {
+    // Only render stats if the statistics section is active
+    if (currentSection === 'statistics') {
       renderStats(data.stats);
       renderQueueStats(data.queueStats, data.stats);
       // Update chart visualizations (only if function is available)
@@ -3235,7 +3248,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {boolean} True if the overview section is currently active
    */
   function isChartSectionActive() {
-    return currentSection === 'overview' && document.getElementById('statsVisualizationSection') !== null;
+    return (currentSection === 'overview' || currentSection === 'statistics') && document.getElementById('statsVisualizationSection') !== null;
   }
 
   /**

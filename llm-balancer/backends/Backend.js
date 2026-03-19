@@ -17,6 +17,7 @@ class Backend {
     this.maxConcurrency = maxConcurrency;
     this.healthy = false;
     this.failCount = 0;
+    this.timeoutCount = 0; // Track timeout failures separately
     this.activeRequestCount = 0;
     this.activeStreamingRequests = 0;
     this.activeNonStreamingRequests = 0;
@@ -26,6 +27,10 @@ class Backend {
     // BackendInfo (discovery data) will be attached after capability detection
     // This follows composition over duplication - BackendInfo is attached directly
     this.backendInfo = null;
+
+    // Health check tracking
+    this.lastCheckTime = null;
+    this.lastCheckDuration = null;
 
     // Performance statistics tracking - stored separately from discovery data
     // Discovery data is a plain object, but we track stats as methods on Backend

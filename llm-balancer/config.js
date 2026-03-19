@@ -42,7 +42,10 @@ const DEFAULTS = {
   },
   healthCheck: {
     interval: 120000, // 2 minutes
-    timeout: 5000
+    timeout: 15000, // 15 seconds - increased from 5000ms to account for network latency and concurrent requests
+    maxRetries: 1, // Retry timeout failures once
+    retryDelay: 2000, // 2 seconds delay between retries
+    staggerDelay: 500 // 500ms delay between each backend health check to prevent request stacking
   },
   queue: {
     timeout: 30000,

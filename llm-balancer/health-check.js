@@ -70,7 +70,8 @@ class HealthChecker {
   }
 
   /**
-   * Run health checks on all backends
+   * Run health checks on all backends with staggered execution
+   * Staggering prevents request stacking and network contention
    */
   async checkAll() {
     if (process.env.NODE_ENV !== 'test') {
@@ -78,8 +79,13 @@ class HealthChecker {
     }
     this.lastCheckTime = new Date().toISOString();
 
-    // Run health checks in parallel for better performance
-    await Promise.all(this.backends.map(backend => this.checkBackend(backend)));
+    // Staggered health check execution - check one backend at a time with delay
+    // This prevents request stacking and network contention that causes timeouts
+    const staggerDelay = this.config.healthCheck.staggerDelay || 500;
+    for (const backend of this.backends) {
+      await this.checkBackendWithRetry(backend);
+      await new Promise(resolve => setTimeout(resolve, staggerDelay));
+    }
 
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[${getTimestamp()}] [HealthChecker] Health check cycle complete`);
@@ -87,41 +93,63 @@ class HealthChecker {
   }
 
   /**
-   * Check a single backend's health using backend.checkHealth()
+   * Check a single backend's health with retry logic
    * Delegates to backend.healthChecker.check(this)
    * @param {Backend} backend - Backend instance with healthChecker assigned
    */
-  async checkBackend(backend) {
+  async checkBackendWithRetry(backend) {
     const url = backend.url;
+    const wasHealthy = backend.healthy;
     console.log(`[${getTimestamp()}] [HealthChecker] Checking ${url}`);
 
+    // Try initial health check
+    let result = await this.performHealthCheck(backend);
+
+    // If timeout and retries allowed, retry once
+    const isTimeout = result.error === 'Timeout' || (result.error && result.error.includes('ETIMEDOUT'));
+    if (isTimeout && this.config.healthCheck.maxRetries > 0) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn(`[${getTimestamp()}] [HealthChecker] Timeout on ${url}, retrying...`);
+      }
+      // Wait for retry delay
+      const retryDelay = this.config.healthCheck.retryDelay || 2000;
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      // Retry once
+      result = await this.performHealthCheck(backend);
+    }
+
+    // Update backend state from final result
+    if (result.healthy) {
+      if (!wasHealthy) {
+        console.log(`[${getTimestamp()}] [HealthChecker] Backend RECOVERED: ${url} (${backend.getApiTypes().join(', ')}) - models:`, result.models || []);
+      }
+      backend.healthy = true;
+      backend.failCount = 0;
+    } else {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (${result.error || 'unknown error'})`);
+      }
+      backend.healthy = false;
+      backend.failCount = (backend.failCount || 0) + 1;
+    }
+  }
+
+  /**
+   * Perform a single health check on a backend
+   * @param {Backend} backend - Backend instance
+   * @returns {Object} Health check result
+   */
+  async performHealthCheck(backend) {
     try {
       // ★ Insight ───────────────────────────────────────────────────
       // Use backend's own checkHealth method which delegates to the
       // assigned healthChecker. This ensures we use the correct
       // endpoint/port discovered at startup.
       // ──────────────────────────────────────────────────────────────
-      const result = await backend.checkHealth();
-
-      if (result.healthy) {
-        // Update backend state from check result
-        backend.healthy = true;
-        backend.failCount = 0;
-
-        // Log with detected API types and models
-        const apiTypes = backend.getApiTypes();
-        console.log(`[${getTimestamp()}] [HealthChecker] Backend healthy: ${url} (${apiTypes.join(', ')}) - models:`, result.models || []);
-      } else {
-        if (process.env.NODE_ENV !== 'test') {
-          console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (${result.error || 'unknown error'})`);
-        }
-        backend.healthy = false;
-        backend.failCount = (backend.failCount || 0) + 1;
-      }
+      return await backend.checkHealth();
     } catch (err) {
-      console.error(`[${getTimestamp()}] [HealthChecker] Error checking ${url}:`, err.message);
-      backend.healthy = false;
-      backend.failCount = (backend.failCount || 0) + 1;
+      console.error(`[${getTimestamp()}] [HealthChecker] Error checking ${backend.url}:`, err.message);
+      return { healthy: false, error: err.message };
     }
   }
 
@@ -133,13 +161,16 @@ class HealthChecker {
     const healthyBackends = this.backends.filter(b => b.healthy);
     const unhealthyBackends = this.backends.filter(b => !b.healthy);
 
-    // Health-only backend info
+    // Health-only backend info with enhanced stats
     const backendsWithStats = this.backends.map(b => ({
       url: b.url,
       healthy: b.healthy,
       activeRequestCount: b.activeRequestCount,
       maxConcurrency: b.maxConcurrency,
-      failCount: b.failCount || 0
+      failCount: b.failCount || 0,
+      timeoutCount: b.timeoutCount || 0,
+      lastCheck: b.lastCheckTime || null,
+      lastCheckDuration: b.lastCheckDuration || null
     }));
 
     return {
@@ -149,6 +180,9 @@ class HealthChecker {
       lastCheck: this.lastCheckTime,
       interval: this.config.healthCheck.interval,
       timeout: this.config.healthCheck.timeout,
+      maxRetries: this.config.healthCheck.maxRetries,
+      retryDelay: this.config.healthCheck.retryDelay,
+      staggerDelay: this.config.healthCheck.staggerDelay,
       backends: backendsWithStats
     };
   }
