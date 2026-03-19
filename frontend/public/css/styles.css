@@ -3198,6 +3198,62 @@ body.dark-mode .chart-title {
   margin-top: 1.5rem;
 }
 
+/* Utilization Gauges Container */
+#utilizationGauges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+}
+
+.utilization-gauge-canvas {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Health Status Summary Donut */
+.healthStatusChartContainer {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+}
+
+/* Cache Size Indicator */
+.cacheSizeIndicator {
+  width: 100%;
+  height: 24px;
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.cacheSizeFill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  transition: width 0.3s ease;
+}
+
+.cacheSizeText {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Cache Hit Rate Trend */
+.cacheHitRateTrendContainer {
+  position: relative;
+  height: 250px;
+}
+
 /* Sparkline Container - mini charts for condensed cards */
 .sparkline-container {
   height: 60px;

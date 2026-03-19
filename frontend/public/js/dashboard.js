@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="chart-grid">
                       <div class="chart-container">
                         <div class="chart-title">📉 Backend Utilization Gauges</div>
-                        <div id="utilizationGauges" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;"></div>
+                        <div id="utilizationGauges" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; height: calc(100% - 40px);"></div>
                       </div>
                       <div class="chart-container">
                         <div class="chart-title">🎯 Cache Hit/Miss Ratio</div>
@@ -1723,6 +1723,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update chart visualizations (only if function is available)
       if (typeof updateStatsVisualization === 'function') {
         updateStatsVisualization(data.stats, data.queueStats);
+        // Populate backend filter checkboxes after visualization update
+        if (typeof populateBackendFilter === 'function') {
+          populateBackendFilter(data.stats.backendDetails || []);
+        }
       }
     }
 
@@ -2427,7 +2431,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Return early if section not active
     if (!isChartSectionActive()) return;
 
-    const backendDetails = statsData?.backendDetails || [];
+    let backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Apply backend filter
+    backendDetails = getFilteredBackends(backendDetails);
     if (backendDetails.length === 0) return;
 
     // Cleanup existing charts
@@ -2441,8 +2449,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const rawSamples = backend.performanceStats?.rawSamples || {};
 
-    // Total Time Chart
-    const totalTimeMs = rawSamples.timeStats?.totalTimeMs || [];
+    // Total Time Chart - Apply time range filter
+    let totalTimeMs = rawSamples.timeStats?.totalTimeMs || [];
+    totalTimeMs = getFilteredSamples(totalTimeMs);
     const totalTimeCanvas = document.getElementById('totalTimeChart');
     if (totalTimeCanvas && totalTimeMs.length > 0) {
       const ctx = totalTimeCanvas.getContext('2d');
@@ -2483,8 +2492,9 @@ document.addEventListener('DOMContentLoaded', () => {
       totalTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No time data available yet</p>';
     }
 
-    // Generation Time Chart
-    const generationTimeMs = rawSamples.timeStats?.generationTimeMs || [];
+    // Generation Time Chart - Apply time range filter
+    let generationTimeMs = rawSamples.timeStats?.generationTimeMs || [];
+    generationTimeMs = getFilteredSamples(generationTimeMs);
     const generationTimeCanvas = document.getElementById('generationTimeChart');
     if (generationTimeCanvas && generationTimeMs.length > 0) {
       const ctx = generationTimeCanvas.getContext('2d');
@@ -2525,8 +2535,9 @@ document.addEventListener('DOMContentLoaded', () => {
       generationTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No generation time data available yet</p>';
     }
 
-    // Network Latency Chart
-    const networkLatencyMs = rawSamples.timeStats?.networkLatencyMs || [];
+    // Network Latency Chart - Apply time range filter
+    let networkLatencyMs = rawSamples.timeStats?.networkLatencyMs || [];
+    networkLatencyMs = getFilteredSamples(networkLatencyMs);
     const networkLatencyCanvas = document.getElementById('networkLatencyChart');
     if (networkLatencyCanvas && networkLatencyMs.length > 0) {
       const ctx = networkLatencyCanvas.getContext('2d');
@@ -2567,8 +2578,9 @@ document.addEventListener('DOMContentLoaded', () => {
       networkLatencyCanvas.parentElement.innerHTML = '<p class="chart-no-data">No network latency data available yet</p>';
     }
 
-    // Prompt Processing Chart
-    const promptProcessingMs = rawSamples.timeStats?.promptProcessingTimeMs || [];
+    // Prompt Processing Chart - Apply time range filter
+    let promptProcessingMs = rawSamples.timeStats?.promptProcessingTimeMs || [];
+    promptProcessingMs = getFilteredSamples(promptProcessingMs);
     const promptProcessingCanvas = document.getElementById('promptProcessingChart');
     if (promptProcessingCanvas && promptProcessingMs.length > 0) {
       const ctx = promptProcessingCanvas.getContext('2d');
@@ -2619,7 +2631,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Return early if section not active
     if (!isChartSectionActive()) return;
 
-    const backendDetails = statsData?.backendDetails || [];
+    let backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Apply backend filter
+    backendDetails = getFilteredBackends(backendDetails);
     if (backendDetails.length === 0) return;
 
     // Token Comparison Chart (Grouped Bar)
@@ -2732,7 +2748,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Return early if section not active
     if (!isChartSectionActive()) return;
 
-    const backendDetails = statsData?.backendDetails || [];
+    let backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Apply backend filter
+    backendDetails = getFilteredBackends(backendDetails);
     if (backendDetails.length === 0) return;
 
     // Generation Rate Chart
@@ -2825,12 +2845,142 @@ document.addEventListener('DOMContentLoaded', () => {
    * Uses incremental updates pattern - returns early if DOM doesn't exist
    * @param {Object} statsData - Statistics data from API
    */
+  /**
+   * Create a gauge chart for backend utilization
+   * Uses a doughnut chart with masked second dataset to create gauge effect
+   * @param {HTMLCanvasElement} canvas - The canvas element for the gauge
+   * @param {number} value - Current value (0-100%)
+   * @param {string} label - Label to display
+   * @param {string} statusText - Status text (Normal/Warning/Critical)
+   */
+  function createGaugeChart(canvas, value, label, statusText) {
+    if (!canvas) return null;
+
+    // Normalize value to 0-1 range for chart
+    const normalizedValue = value / 100;
+
+    // Determine color based on utilization thresholds
+    let gaugeColor;
+    if (value < 70) {
+      gaugeColor = '#10b981'; // Green - Low utilization
+    } else if (value < 90) {
+      gaugeColor = '#f59e0b'; // Yellow - Medium utilization
+    } else {
+      gaugeColor = '#ef4444'; // Red - High utilization
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    // Create gauge using doughnut chart with two datasets:
+    // 1. Actual value (partial arc from 0 to value)
+    // 2. Mask (full circle, covers first dataset except visible portion)
+    const gaugeChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Used', 'Remaining'],
+        datasets: [
+          {
+            data: [normalizedValue, 0],
+            backgroundColor: gaugeColor,
+            borderWidth: 0,
+            circumference: 180,
+            rotation: 0,
+            cutout: '80%',
+            spacing: 0
+          },
+          {
+            data: [1, 0],
+            backgroundColor: '#e5e7eb',
+            borderWidth: 0,
+            circumference: 180,
+            rotation: 180,
+            cutout: '80%',
+            spacing: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          tooltip: { enabled: false },
+          legend: { display: false },
+          title: {
+            display: true,
+            text: `${label}\n${value.toFixed(0)}% ${statusText}`,
+            font: { size: 13 },
+            padding: { bottom: 10 }
+          }
+        },
+        layout: {
+          padding: { top: 5, bottom: 10 }
+        }
+      }
+    });
+
+    return gaugeChart;
+  }
+
+  /**
+   * Render health metrics charts including utilization gauges and cache efficiency
+   * @param {Object} statsData - Statistics data from API
+   */
   function renderHealthMetricsCharts(statsData) {
     // Return early if section not active
     if (!isChartSectionActive()) return;
 
     const backendDetails = statsData?.backendDetails || [];
     if (backendDetails.length === 0) return;
+
+    // Backend Utilization Gauges
+    const utilizationContainer = document.getElementById('utilizationGauges');
+    if (utilizationContainer && backendDetails.length > 0) {
+      // Clear existing gauges
+      utilizationContainer.innerHTML = '';
+
+      backendDetails.forEach(backend => {
+        const activeRequestCount = backend.activeRequestCount || 0;
+        const maxConcurrency = backend.maxConcurrency || 10;
+        const utilization = maxConcurrency > 0 ? (activeRequestCount / maxConcurrency) * 100 : 0;
+
+        // Determine status based on utilization
+        let statusText;
+        if (utilization < 70) {
+          statusText = 'Normal';
+        } else if (utilization < 90) {
+          statusText = 'Warning';
+        } else {
+          statusText = 'Critical';
+        }
+
+        // Use URL as backend identifier (since backend doesn't have 'name' field)
+        const backendLabel = backend.url || 'Unknown Backend';
+        const backendId = backend.url;
+
+        // Create gauge canvas for this backend
+        const gaugeCanvas = document.createElement('canvas');
+        gaugeCanvas.className = 'utilization-gauge-canvas';
+        gaugeCanvas.style.width = '180px';
+        gaugeCanvas.style.height = '140px';
+
+        // Create gauge chart
+        createGaugeChart(gaugeCanvas, utilization, backendLabel, statusText);
+
+        // Add label below gauge
+        const labelDiv = document.createElement('div');
+        labelDiv.style.textAlign = 'center';
+        labelDiv.style.padding = '5px';
+        labelDiv.textContent = `${backendLabel} (${activeRequestCount}/${maxConcurrency})`;
+        labelDiv.style.fontSize = '12px';
+        labelDiv.style.color = '#6b7280';
+
+        utilizationContainer.appendChild(gaugeCanvas);
+        utilizationContainer.appendChild(labelDiv);
+
+        // Store backend ID for filtering
+        backend.id = backendId;
+      });
+    }
 
     // Cache Efficiency Chart (Donut)
     cleanupChart('cacheEfficiencyChart');
@@ -3161,7 +3311,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Return early if section not active
     if (!isChartSectionActive()) return;
 
-    const backendDetails = statsData?.backendDetails || [];
+    let backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    // Apply backend filter
+    backendDetails = getFilteredBackends(backendDetails);
     if (backendDetails.length === 0) return;
 
     // Total Time Box Plot
@@ -3432,7 +3586,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderCorrelationCharts(statsData) {
     if (!isChartSectionActive()) return;
 
-    const backendDetails = statsData?.backendDetails || [];
+    let backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length < 2) return;
+
+    // Apply backend filter
+    backendDetails = getFilteredBackends(backendDetails);
     if (backendDetails.length < 2) return;
 
     // Correlation Heatmap
@@ -3596,6 +3754,120 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * P12: Interactive filtering and time range selection
    * Enables users to filter charts by time range and backends
+   * @type {Object}
+   */
+  const chartFilterState = {
+    timeRange: 'all',
+    selectedBackends: []
+  };
+
+  /**
+   * Populate backend filter checkboxes based on available backends
+   * @param {Array} backendDetails - Array of backend details from API
+   */
+  function populateBackendFilter(backendDetails) {
+    const backendFilterContainer = document.getElementById('backendFilter');
+    if (!backendFilterContainer || !backendDetails || backendDetails.length === 0) {
+      return;
+    }
+
+    // Clear existing checkboxes
+    backendFilterContainer.innerHTML = '';
+
+    // Create checkboxes for each backend
+    backendDetails.forEach(backend => {
+      const backendId = `backend-${backend.id || backend.url}`;
+      const label = document.createElement('label');
+      label.className = 'backend-checkbox-label';
+      label.style.display = 'block';
+      label.style.margin = '0.25rem 0';
+      label.style.cursor = 'pointer';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = backendId;
+      checkbox.value = backend.id || backend.url;
+      checkbox.checked = true; // Select all by default
+      checkbox.addEventListener('change', handleBackendFilterChange);
+
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(backend.name || formatUrl(backend.url)));
+
+      backendFilterContainer.appendChild(label);
+    });
+
+    // Set initial state from checked boxes
+    updateBackendFilterState();
+  }
+
+  /**
+   * Handle backend filter checkbox changes
+   */
+  function handleBackendFilterChange() {
+    updateBackendFilterState();
+    refreshChartsWithFilters();
+  }
+
+  /**
+   * Update backend filter state from checkboxes
+   */
+  function updateBackendFilterState() {
+    const checkboxes = document.querySelectorAll('#backendFilter input[type="checkbox"]:checked');
+    chartFilterState.selectedBackends = Array.from(checkboxes).map(cb => cb.value);
+  }
+
+  /**
+   * Refresh all charts with current filter settings
+   */
+  function refreshChartsWithFilters() {
+    // Reload the current stats data to apply filters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('view') === 'stats') {
+      const url = '/api/v1/stats';
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          updateStatsVisualization(data.stats, data.queueStats);
+        })
+        .catch(err => {
+          console.error('[Filter] Failed to refresh charts:', err);
+        });
+    }
+  }
+
+  /**
+   * Get filtered backend details based on current filter state
+   * @param {Array} backendDetails - All backend details
+   * @returns {Array} Filtered backend details
+   */
+  function getFilteredBackends(backendDetails) {
+    if (!chartFilterState.selectedBackends.length) {
+      return backendDetails;
+    }
+    return backendDetails.filter(backend =>
+      chartFilterState.selectedBackends.includes(backend.id || backend.url)
+    );
+  }
+
+  /**
+   * Get filtered samples based on time range selection
+   * @param {Array} samples - Array of sample values
+   * @param {number} limit - Maximum number of samples to return
+   * @returns {Array} Filtered samples
+   */
+  function getFilteredSamples(samples, limit = null) {
+    if (!samples || samples.length === 0) return [];
+
+    if (chartFilterState.timeRange === 'all' || limit === null) {
+      return samples;
+    }
+
+    const numSamples = Math.min(parseInt(chartFilterState.timeRange, 10), samples.length);
+    return samples.slice(-numSamples);
+  }
+
+  /**
+   * Initialize filter controls
    */
   function initFilterControls() {
     const timeRangeSelect = document.getElementById('timeRangeSelect');
@@ -3613,17 +3885,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (timeRangeSelect) {
       timeRangeSelect.addEventListener('change', (e) => {
         const selectedRange = e.target.value;
+        chartFilterState.timeRange = selectedRange;
         localStorage.setItem('chartTimeRange', selectedRange);
         console.log(`[Filter] Time range changed to: ${selectedRange} requests`);
-        // Note: The filtering is applied in the chart rendering functions
-        // This is a marker for where filtering logic would be integrated
+        refreshChartsWithFilters();
       });
     }
 
-    // Backend filter checkboxes
+    // Backend filter checkboxes - populated dynamically when data is available
     if (backendFilterContainer) {
-      // Backend checkboxes would be rendered here dynamically
-      // For now, the filter is structural
       console.log('[Filter] Backend filter container ready');
     }
 
@@ -3650,7 +3920,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (exportDataBtn) {
       exportDataBtn.addEventListener('click', () => {
         console.log('[Export] Exporting statistics data as JSON...');
-        // This would fetch current stats and export
         fetch('/api/v1/stats')
           .then(res => res.json())
           .then(data => {
@@ -3674,6 +3943,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedRange = localStorage.getItem('chartTimeRange');
     if (savedRange && timeRangeSelect) {
       timeRangeSelect.value = savedRange;
+      chartFilterState.timeRange = savedRange;
     }
   }
 
