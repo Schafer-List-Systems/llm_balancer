@@ -2,6 +2,12 @@
 
 A load balancer for LLM servers with health checking and automatic failover. Supports OpenAI, Anthropic, Google Gemini, and Ollama APIs.
 
+## Disclaimer
+
+We built and use this balancer internally to improve computation speed for agentic clients with fixed endpoints and to enhance hardware utilization for our in-house LLM backends. This project is actively used in production and has proven effective for our needs.
+
+**However**, we provide this tool as-is to the community without any warranty. When using this software, we assume no responsibility for any possible damage, data loss, service disruptions, or other issues that may arise. Use at your own risk.
+
 ## Overview
 
 The LLM Balancer provides priority-based load balancing across multiple backend LLM servers with:
