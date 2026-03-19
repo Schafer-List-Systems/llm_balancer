@@ -464,8 +464,7 @@ static async _selectBackendByPriorityFirst(backends, models) {
 | `markFailed(backendUrl)` | `void` | Mark backend as failed |
 | `markHealthy(backendUrl)` | `void` | Mark backend as healthy |
 | `getStats()` | `BalancerStats` | Get balancer statistics |
-| `getAllQueueStats()` | `QueueStats` | Get queue statistics |
-| `getQueueStatsByPriority()` | `Object` | Get per-priority queue stats |
+| `getQueueStats()` | `QueueStats` | Get queue statistics |
 
 **Selection Algorithm**:
 ```javascript

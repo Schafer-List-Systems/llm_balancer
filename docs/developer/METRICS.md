@@ -249,7 +249,7 @@ When debug mode is enabled, streaming token counting produces detailed logs:
 
 ## Related Documentation
 
-- [System Architecture](../developer/ARCHITECTURE.md) - High-level architecture
-- [Data Flow](../developer/DATA_FLOW.md) - Request processing details
-- [Prompt Cache](../components/balancer/PROMPT_CACHE.md) - KV cache behavior
-- [API Endpoints](../api/ENDPOINTS.md) - All API routes
+- [System Architecture](docs/developer/ARCHITECTURE.md) - High-level architecture
+- [Data Flow](docs/developer/DATA_FLOW.md) - Request processing details
+- [Prompt Cache](docs/components/balancer/PROMPT_CACHE.md) - KV cache behavior
+- [API Endpoints](docs/api/ENDPOINTS.md) - All API routes

@@ -102,10 +102,12 @@ describe('Balancer', () => {
       expect(stats.queueTimeout).toBe(30000);
     });
 
-    it('should provide all queue statistics', () => {
-      const allStats = balancer.getAllQueueStats();
-      expect(Array.isArray(allStats)).toBe(true);
-      expect(allStats.length).toBeGreaterThan(0);
+    it('should provide queue statistics', () => {
+      const queueStats = balancer.getQueueStats();
+      expect(queueStats).toBeDefined();
+      expect(queueStats).toHaveProperty('depth');
+      expect(queueStats).toHaveProperty('maxQueueSize');
+      expect(queueStats).toHaveProperty('queueTimeout');
     });
   });
 

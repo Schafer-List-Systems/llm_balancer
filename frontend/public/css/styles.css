@@ -1093,7 +1093,11 @@ body.dark-mode body {
 
 /* Backend Cards */
 .backends-section {
-  margin-bottom: 2rem;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .section-header {

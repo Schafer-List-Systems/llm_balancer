@@ -1,5 +1,11 @@
 # Documentation Guide
 
+:::note Template/Example Document
+This file serves as a documentation structure template and example for the LLM Balancer project.
+Some content may need verification for accuracy. Always cross-reference with actual file structure
+and documentation before relying on this guide.
+:::
+
 ## Find Documentation by Role
 
 This guide helps you quickly find the documentation you need based on your role and goals.

@@ -413,6 +413,6 @@ Debug endpoints expose request/response content:
 
 ## Related Documentation
 
-- [API Reference](../api/ENDPOINTS.md#api-reference) - Debug endpoints
-- [Testing Guide](TESTING.md#testing-guide) - Test debugging
-- [Troubleshooting](../user/TROUBLESHOOTING.md#common-issues) - Common issues
+- [API Reference](docs/api/ENDPOINTS.md#api-reference) - Debug endpoints
+- [Testing Guide](docs/developer/TESTING.md#testing-guide) - Test debugging
+- [Troubleshooting](docs/user/TROUBLESHOOTING.md#common-issues) - Common issues

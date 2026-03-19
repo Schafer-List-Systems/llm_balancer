@@ -910,6 +910,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update current section
     currentSection = sectionId;
 
+    // Update URL without reload
+    const newPath = '/' + sectionId;
+    history.pushState({ section: sectionId }, '', newPath);
+
     // Update sidebar navigation
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');
@@ -3486,7 +3490,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let j = i + 1; j < metricNames.length; j++) {
           heatmapLabels.push(metricNames[i] + '\nvs ' + metricNames[j]);
           heatmapData.push(correlations[i][j] * 100);
-          heatmapColors.push(correlations[i][j] >= 0 ? '#10b981' : '#ef4444');
+          heatmapColorCodes.push(correlations[i][j] >= 0 ? '#10b981' : '#ef4444');
         }
       }
 

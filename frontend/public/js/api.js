@@ -113,6 +113,7 @@ class ApiClient {
       this.lastUpdateTime = new Date();
       return { success: true, data };
     } catch (error) {
+      console.error('getHealth error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -302,6 +303,12 @@ class ApiClient {
           backends: backendsData.data,
           queueStats: queueStatsData.data
         };
+        console.log('Poll data received:', {
+          health: healthData,
+          stats: statsData,
+          backends: backendsData,
+          queueStats: queueStatsData
+        });
 
         if (window.updateCallback) {
           window.updateCallback(this.dataCache);

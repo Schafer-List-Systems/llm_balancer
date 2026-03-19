@@ -60,29 +60,6 @@ The LLM Balancer is built using a modular, interface-based architecture that emp
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### BackendPool vs BackendSelector Distinction
-
-| Aspect | BackendPool | BackendSelector |
-|--------|-------------|-----------------|
-| **Responsibility** | Owns the backend collection (source of truth) | Selects the best backend from a list |
-| **Returns** | New `BackendPool` instance (filtered collection) | Single `Backend` object (or null) |
-| **State** | Stateful (`this._backends`) | Stateless (takes backends as parameter) |
-| **Interface** | `filter(criteria)` - unified criteria object | `selectBackend(backends, options)` |
-| **Pattern** | Collection pattern (filtered views) | Strategy pattern (selection algorithms) |
-
-**Example Usage:**
-```javascript
-// BackendPool owns and filters backends
-const pool = new BackendPool(backends);
-const filteredPool = pool.filter({ healthy: true, models: ['llama3'] });
-
-// BackendSelector picks best backend from filtered list
-const candidates = filteredPool.getAll();
-const bestBackend = selector.selectBackend(candidates, { models: ['llama3'] });
-```
-
----
-
 ## Core Components
 
 ### 1. Configuration Module
@@ -311,11 +288,13 @@ supportsApi(apiType) -> boolean
 - Discover available models
 - Track endpoint information
 
-**Detection Order**:
-1. OpenAI-compatible (`/v1/models`)
-2. Anthropic (`/v1/messages`)
-3. Google Gemini (`/v1beta/models`)
-4. Ollama (`/api/tags`)
+**Detection Order** (from backend-info.js):
+1. OpenAI (`/v1/models`)
+2. Google (`/v1beta/models`)
+3. Ollama (`/api/tags`)
+4. Groq (`/openai/v1/models`)
+5. Anthropic (`/v1/messages`)
+6. OpenAI chat (`/v1/chat/completions`)
 
 ---
 
