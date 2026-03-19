@@ -212,19 +212,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             <!-- Statistics Section -->
             <section id="statisticsSection" class="section-content" data-section="statistics">
-              <section class="backends-section">
-                <div class="section-header">
-                  <h2 class="section-title">Statistics <span class="section-subtitle">(Deep-dive analytics and visualizations)</span></h2>
-                </div>
+              <!-- Stats Grid -->
+              <div id="statsSection">
+                <!-- Stats will be rendered here -->
+              </div>
 
-                <!-- Stats Grid -->
-                <div id="statsSection">
-                  <!-- Stats will be rendered here -->
-                </div>
-
-                <!-- Chart Visualization Section -->
-                <div id="statsVisualizationSection" class="page-section">
-                  <h2 class="section-title">📊 Visual Statistics <span class="section-subtitle">(Interactive charts and graphs)</span></h2>
+              <!-- Chart Visualization Section -->
+              <div id="statsVisualizationSection" class="page-section">
 
                   <!-- Filter Controls -->
                   <div id="chartFilters" class="filter-container" style="display: none;">
