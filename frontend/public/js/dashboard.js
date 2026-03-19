@@ -1822,7 +1822,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle URL path-based navigation on initial load (without history changes)
     const path = window.location.pathname.replace(/^\//, '');
-    const validSections = ['overview', 'backends', 'benchmarks', 'debug', 'configuration'];
+    const validSections = ['overview', 'statistics', 'benchmarks', 'debug', 'configuration'];
     console.log('[Dashboard] Initial path:', path);
     if (path && validSections.includes(path) && path !== 'overview') {
       console.log('[Dashboard] Navigating to:', path);
