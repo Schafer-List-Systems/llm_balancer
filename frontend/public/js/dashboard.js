@@ -1681,7 +1681,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderQueueStats(data.queueStats, data.stats);
       // Update chart visualizations (only if function is available)
       if (typeof updateStatsVisualization === 'function') {
-        updateStatsVisualization(data.stats);
+        updateStatsVisualization(data.stats, data.queueStats);
       }
     }
 
@@ -2822,6 +2822,212 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  /**
+   * Render queue visualization charts
+   * Uses incremental updates pattern - returns early if DOM doesn't exist
+   * @param {Object} queueStats - Queue statistics data from API
+   */
+  function renderQueueVisualizationCharts(queueStats) {
+    // Return early if section not active
+    if (!isChartSectionActive()) return;
+
+    if (!queueStats) return;
+
+    // Queue Depth Over Time Chart
+    cleanupChart('queueDepthChart');
+    const queueDepthCanvas = document.getElementById('queueDepthChart');
+    if (queueDepthCanvas && queueStats.depthHistory && queueStats.depthHistory.length > 1) {
+      const ctx = queueDepthCanvas.getContext('2d');
+      chartInstances.queueDepthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: queueStats.depthHistory.map((item, i) => `#${i + 1}`),
+          datasets: [{
+            label: 'Queue Depth',
+            data: queueStats.depthHistory.map(item => item.depth),
+            borderColor: '#8b5cf6',
+            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Queue depth: ${ctx.parsed.y} requests`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Queue Depth' },
+              max: queueStats.maxQueueSize || 100
+            },
+            x: {
+              display: false
+            }
+          }
+        }
+      });
+    } else if (queueDepthCanvas) {
+      queueDepthCanvas.parentElement.innerHTML = '<p class="chart-no-data">No queue history data available yet</p>';
+    }
+
+    // Queue Utilization Gauge (Doughnut Chart)
+    cleanupChart('queueUtilizationChart');
+    const queueUtilCanvas = document.getElementById('queueUtilizationChart');
+    if (queueUtilCanvas) {
+      const currentDepth = queueStats.depth || 0;
+      const maxQueueSize = queueStats.maxQueueSize || 100;
+      const utilization = maxQueueSize > 0 ? (currentDepth / maxQueueSize) * 100 : 0;
+
+      // Determine status color based on utilization
+      let statusColor, statusText;
+      if (utilization < 50) {
+        statusColor = '#10b981'; // Green - Low
+        statusText = 'Low';
+      } else if (utilization < 80) {
+        statusColor = '#f59e0b'; // Yellow - Medium
+        statusText = 'Medium';
+      } else {
+        statusColor = '#ef4444'; // Red - High
+        statusText = 'High';
+      }
+
+      const ctx = queueUtilCanvas.getContext('2d');
+      chartInstances.queueUtilizationChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Used', 'Available'],
+          datasets: [{
+            data: [currentDepth, Math.max(0, maxQueueSize - currentDepth)],
+            backgroundColor: [statusColor, '#e2e8f0'],
+            borderWidth: 0,
+            cutout: '70%'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const label = ctx.label || '';
+                  const value = ctx.parsed || 0;
+                  return `${label}: ${value} requests`;
+                }
+              }
+            }
+          },
+          layout: {
+            padding: {
+              top: 20
+            }
+          }
+        }
+      });
+
+      // Add utilization value overlay
+      const utilizationContainer = queueUtilCanvas.parentElement;
+      utilizationContainer.innerHTML = `
+        <div class="queue-utilization-chart">
+          <canvas id="queueUtilizationChart"></canvas>
+          <div class="queue-utilization-value">
+            <div class="queue-utilization-percentage">${utilization.toFixed(0)}%</div>
+            <div class="queue-utilization-label">Utilization</div>
+            <div class="queue-utilization-status ${statusText.toLowerCase()}">${statusText} Load</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Queue Wait Time Distribution Histogram
+    cleanupChart('queueWaitTimeChart');
+    const waitTimeCanvas = document.getElementById('queueWaitTimeChart');
+    if (waitTimeCanvas && queueStats.queueLengths) {
+      const queueLengths = queueStats.queueLengths;
+
+      // Create histogram bins
+      const bins = [
+        { range: '0-10', label: '0-10', count: 0 },
+        { range: '10-20', label: '10-20', count: 0 },
+        { range: '20-30', label: '20-30', count: 0 },
+        { range: '30-40', label: '30-40', count: 0 },
+        { range: '40-50', label: '40-50', count: 0 },
+        { range: '50+', label: '50+', count: 0 }
+      ];
+
+      queueLengths.forEach(depth => {
+        if (depth <= 10) bins[0].count++;
+        else if (depth <= 20) bins[1].count++;
+        else if (depth <= 30) bins[2].count++;
+        else if (depth <= 40) bins[3].count++;
+        else if (depth <= 50) bins[4].count++;
+        else bins[5].count++;
+      });
+
+      const ctx = waitTimeCanvas.getContext('2d');
+      chartInstances.queueWaitTimeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: bins.map(b => b.label),
+          datasets: [{
+            label: 'Queue Depth Distribution',
+            data: bins.map(b => b.count),
+            backgroundColor: [
+              'rgba(16, 185, 129, 0.7)',
+              'rgba(16, 185, 129, 0.7)',
+              'rgba(245, 158, 11, 0.7)',
+              'rgba(245, 158, 11, 0.7)',
+              'rgba(239, 68, 68, 0.7)',
+              'rgba(239, 68, 68, 0.7)'
+            ],
+            borderColor: [
+              'rgba(16, 185, 129, 1)',
+              'rgba(16, 185, 129, 1)',
+              'rgba(245, 158, 11, 1)',
+              'rgba(245, 158, 11, 1)',
+              'rgba(239, 68, 68, 1)',
+              'rgba(239, 68, 68, 1)'
+            ],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.parsed.y} samples in ${bins[ctx.dataIndex].range}`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Number of Snapshots' }
+            },
+            x: {
+              title: { display: true, text: 'Queue Depth Range' }
+            }
+          }
+        }
+      });
+    } else if (waitTimeCanvas) {
+      waitTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No queue distribution data available yet</p>';
+    }
+  }
+
 
   /**
    * Check if chart visualization section is active (DOM exists)
@@ -2836,12 +3042,13 @@ document.addEventListener('DOMContentLoaded', () => {
    * This uses the "incremental updates" pattern - only update values when DOM exists
    * AND when data actually changes (change detection)
    * @param {Object} statsData - Statistics data from API
+   * @param {Object} queueStats - Queue statistics data (separate from main stats)
    */
-  function updateStatsVisualization(statsData) {
+  function updateStatsVisualization(statsData, queueStats) {
     // Return early if section not active (DOM not rendered)
     if (!isChartSectionActive()) return;
 
-    // Change detection: compute snapshot and compare with last rendered
+    // Change detection for main stats: compute snapshot and compare with last rendered
     const currentSnapshot = computeDataSnapshot(statsData);
     const hasChanged = currentSnapshot !== lastRenderedSnapshot;
 
@@ -2852,6 +3059,11 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTokenMetricsCharts(statsData);
       renderRateMetricsCharts(statsData);
       renderHealthMetricsCharts(statsData);
+    }
+
+    // Always update queue visualization if queueStats is available
+    if (queueStats) {
+      renderQueueVisualizationCharts(queueStats);
     }
   }
 

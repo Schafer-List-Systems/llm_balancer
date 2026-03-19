@@ -10,6 +10,7 @@
 
 const BackendPool = require('./backend-pool');
 const { BackendSelector, ModelMatcher } = require('./backend-selector');
+const configModule = require('./config');
 
 // Helper function to get formatted timestamp
 function getTimestamp() {
@@ -30,7 +31,7 @@ class Balancer {
 
     // Queue history for visualization (tracks depth snapshots)
     this._queueDepthHistory = [];
-    this.maxQueueHistory = config.queue.depthHistorySize || 100;
+    this.maxQueueHistory = configModule.loadConfig().queue.depthHistorySize;
 
     // Debug request ID counter (internal, separate from user-provided IDs)
     this._internalRequestIdCounter = 0;

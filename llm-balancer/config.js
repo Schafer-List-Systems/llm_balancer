@@ -45,7 +45,8 @@ const DEFAULTS = {
     timeout: 5000
   },
   queue: {
-    timeout: 30000
+    timeout: 30000,
+    depthHistorySize: 100
   },
   request: {
     timeout: 300000 // 5 minutes
