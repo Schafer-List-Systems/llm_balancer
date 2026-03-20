@@ -10,6 +10,8 @@ services:
       - "3001:3001"
     environment:
       - DEBUG=true
+    volumes:
+      - ./llm-balancer/config.json:/app/config.json:rw
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
       interval: 10s

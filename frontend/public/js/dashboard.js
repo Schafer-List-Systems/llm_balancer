@@ -1047,39 +1047,492 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function renderConfig() {
+  // ============================================================
+  // CONFIGURATION SECTION - FULL CONFIG DISPLAY WITH EDITING
+  // ============================================================
+
+  let globalConfig = null;
+  let editedFields = new Map(); // Track edited fields: path -> originalValue
+
+  /**
+   * Render the full configuration section
+   */
+  async function renderConfig() {
     const configSection = document.getElementById('configSection');
 
-    // Config is static - only render once on init
-    if (configSection.querySelector('.config-card')) {
+    // Only render once on init
+    if (configSection.querySelector('.config-section-title')) {
       return;
     }
 
-    const frontendUrl = 'http://localhost:3080';
-    const apiUrl = 'http://localhost:3001';
+    try {
+      const result = await window.apiClient.getConfig();
+      if (!result.success || !result.data) {
+        configSection.innerHTML = `<div class="config-field">Error loading configuration: ${result.error}</div>`;
+        return;
+      }
 
-    configSection.innerHTML = `
-      <div class="config-container">
-        <div class="config-card" data-config="frontend" style="flex: 1; min-width: 250px;">
-          <div class="config-label">Frontend URL</div>
-          <div class="config-url">${frontendUrl}</div>
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Dashboard access point</p>
+      globalConfig = result.data;
+      renderFullConfigUI(configSection, globalConfig);
+    } catch (error) {
+      configSection.innerHTML = `<div class="config-field">Error loading configuration: ${error.message}</div>`;
+    }
+  }
+
+  /**
+   * Render the full configuration UI
+   */
+  function renderFullConfigUI(container, config) {
+    container.innerHTML = `
+      <div class="config-container-full">
+        <div class="config-section-info">
+          <strong>Note:</strong> Configuration changes are saved to config.json but require server restart to take effect.
+          After making changes, click "Save Configuration" then restart the backend.
         </div>
 
-        <div class="config-card" data-config="api" style="flex: 1; min-width: 250px;">
-          <div class="config-label">API Base URL</div>
-          <div class="config-url">${apiUrl}</div>
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Load balancer endpoint for Ollama/Anthropic APIs</p>
+        <!-- General Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">General</h3>
+          <div class="config-field-group">
+            ${renderConfigField('version', config.version, false, 'Application version')}
+            ${renderConfigField('port', config.port, true, 'Port the balancer listens on')}
+            ${renderConfigField('maxRetries', config.maxRetries, true, 'Maximum retry attempts for failed requests')}
+            ${renderConfigField('maxStatsSamples', config.maxStatsSamples, true, 'Number of samples to keep for statistics')}
+          </div>
         </div>
 
-        <div class="config-card" data-config="integration" style="flex: 1; min-width: 250px;">
-          <div class="config-label">Application Integration</div>
-          <div class="config-url">${frontendUrl}/api</div>
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Set your app's BASE_URL to this endpoint</p>
+        <!-- Performance Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Performance</h3>
+          <div class="config-field-group">
+            ${renderConfigField('maxPayloadSize', config.maxPayloadSize, true, 'Maximum request payload size in bytes')}
+            ${renderConfigField('maxPayloadSizeMB', config.maxPayloadSizeMB, false, 'Maximum payload size in MB (calculated)')}
+          </div>
+        </div>
+
+        <!-- Health Check Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Health Check</h3>
+          <div class="config-field-group">
+            ${renderConfigNestedField('healthCheck', config.healthCheck, {
+              interval: { editable: true, label: 'Check Interval (ms)', type: 'number' },
+              timeout: { editable: true, label: 'Timeout (ms)', type: 'number' },
+              maxRetries: { editable: true, label: 'Max Retries', type: 'number' },
+              retryDelay: { editable: true, label: 'Retry Delay (ms)', type: 'number' },
+              staggerDelay: { editable: true, label: 'Stagger Delay (ms)', type: 'number' }
+            })}
+          </div>
+        </div>
+
+        <!-- Queue Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Queue</h3>
+          <div class="config-field-group">
+            ${renderConfigNestedField('queue', config.queue, {
+              timeout: { editable: true, label: 'Queue Timeout (ms)', type: 'number' },
+              depthHistorySize: { editable: true, label: 'Depth History Size', type: 'number' }
+            })}
+          </div>
+        </div>
+
+        <!-- Request Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Request</h3>
+          <div class="config-field-group">
+            ${renderConfigNestedField('request', config.request, {
+              timeout: { editable: true, label: 'Request Timeout (ms)', type: 'number' }
+            })}
+          </div>
+        </div>
+
+        <!-- Debug Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Debug</h3>
+          <div class="config-field-group">
+            ${renderConfigNestedField('debug', config.debug, {
+              enabled: { editable: true, label: 'Enable Debug Mode', type: 'boolean' },
+              requestHistorySize: { editable: true, label: 'Request History Size', type: 'number' }
+            })}
+          </div>
+        </div>
+
+        <!-- Prompt Cache Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Prompt Cache</h3>
+          <div class="config-field-group">
+            ${renderConfigNestedField('prompt.cache', config.prompt?.cache || {}, {
+              maxSize: { editable: true, label: 'Cache Max Size', type: 'number' },
+              similarityThreshold: { editable: true, label: 'Similarity Threshold', type: 'number', step: 0.01 },
+              minHitThreshold: { editable: true, label: 'Min Hit Threshold (tokens)', type: 'number' }
+            })}
+          </div>
+        </div>
+
+        <!-- Backends Section -->
+        <div class="config-section">
+          <h3 class="config-section-title">Backends</h3>
+          <div id="backendsConfigContainer" style="margin-bottom: 1rem;">
+            ${renderBackendsList(config.backends || [])}
+          </div>
+          <button class="config-array-add-btn" onclick="window.addBackend()">
+            + Add Backend
+          </button>
+        </div>
+
+        <!-- Save Button -->
+        <div style="margin-top: 2rem; text-align: center;">
+          <button class="config-field-btn save" style="width: 200px; padding: 1rem; font-size: 1rem;"
+            onclick="window.saveAllConfig()">
+            Save Configuration
+          </button>
         </div>
       </div>
     `;
   }
+
+  /**
+   * Render a simple editable config field
+   */
+  function renderConfigField(name, value, editable, description) {
+    const fieldName = formatFieldName(name);
+    const displayValue = typeof value === 'number' ? value : `"${value}"`;
+    const isBoolean = typeof value === 'boolean';
+
+    return `
+      <div class="config-field" data-field="${name}">
+        <div class="config-field-header">
+          <span class="config-field-name">${fieldName}</span>
+          <button class="config-field-toggle" onclick="window.toggleEdit(this, '${name}', ${editable})">
+            Edit
+          </button>
+        </div>
+        <div class="config-field-value" id="value-${name}">${displayValue}</div>
+        <div class="config-field-input-container" id="input-${name}" style="display: none;">
+          ${isBoolean
+            ? `<input type="checkbox" class="config-field-input" id="input-${name}" ${value ? 'checked' : ''} onchange="window.updateField('${name}', this.checked)">`
+            : `<input type="number" class="config-field-input" id="input-${name}" value="${value}" onchange="window.updateField('${name}', this.value)">`
+          }
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">${description}</p>
+      </div>
+    `;
+  }
+
+  /**
+   * Render a nested config object field
+   */
+  function renderConfigNestedField(path, value, fields) {
+    const fieldName = formatFieldName(path);
+    const hasEditable = Object.values(fields).some(f => f.editable);
+
+    return `
+      <div class="config-field" data-field="${path}">
+        <div class="config-field-header">
+          <span class="config-field-name">${fieldName}</span>
+          ${hasEditable
+            ? `<button class="config-field-toggle" onclick="window.toggleEdit(this, '${path}', true)">Edit</button>`
+            : `<span style="font-size: 0.75rem; color: var(--text-secondary);">Read-only</span>`
+          }
+        </div>
+        <div class="config-field-value" id="value-${path}">${formatNestedValue(value)}</div>
+        <div class="config-field-input-container" id="input-${path}" style="display: none;">
+          ${renderNestedFieldsInput(path, value, fields)}
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Configuration object for ${fieldName}</p>
+      </div>
+    `;
+  }
+
+  /**
+   * Render input fields for nested config
+   */
+  function renderNestedFieldsInput(path, value, fields) {
+    let html = '';
+
+    for (const [key, config] of Object.entries(fields)) {
+      const fieldValue = value[key];
+      const fieldType = config.type || 'number';
+      const step = config.step || '';
+      const inputLabel = config.label || key;
+
+      if (fieldType === 'boolean') {
+        html += `
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <input type="checkbox" class="config-field-input" id="${path}.${key}" ${fieldValue ? 'checked' : ''}
+              onchange="window.updateNestedField('${path}', '${key}', this.checked)">
+            <label style="font-size: 0.875rem; color: var(--text-primary);">${inputLabel}</label>
+          </div>
+        `;
+      } else {
+        html += `
+          <div style="margin-bottom: 0.5rem;">
+            <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">${inputLabel}</label>
+            <input type="number" ${step ? `step="${step}"` : ''} class="config-field-input"
+              id="${path}.${key}" value="${fieldValue}"
+              onchange="window.updateNestedField('${path}', '${key}', this.value)">
+          </div>
+        `;
+      }
+    }
+
+    return html;
+  }
+
+  /**
+   * Render backends list
+   */
+  function renderBackendsList(backends) {
+    if (!backends || backends.length === 0) {
+      return '<p style="font-size: 0.875rem; color: var(--text-secondary);">No backends configured</p>';
+    }
+
+    return backends.map((backend, index) => `
+      <div class="config-array-item" data-backend="${index}">
+        <div class="config-array-item-header">
+          <span class="config-array-item-name">${backend.name || `Backend ${index + 1}`}</span>
+          <button class="config-array-item-remove" onclick="window.removeBackend(${index})">Remove</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem;">
+          ${renderBackendField('url', backend.url, index)}
+          ${renderBackendField('priority', backend.priority, index)}
+          ${renderBackendField('maxConcurrency', backend.maxConcurrency, index)}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Render editable backend field
+   */
+  function renderBackendField(field, value, index) {
+    const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+    return `
+      <div>
+        <label style="font-size: 0.75rem; color: var(--text-secondary);">${fieldName}</label>
+        <input type="${field === 'url' ? 'text' : 'number'}" class="config-field-input"
+          id="backend-${index}-${field}" value="${value}"
+          onchange="window.updateBackendField(${index}, '${field}', this.value)"
+          style="width: 100%; margin-top: 0.25rem;">
+      </div>
+    `;
+  }
+
+  /**
+   * Format field name for display
+   */
+  function formatFieldName(name) {
+    return name
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, str => str.toUpperCase());
+  }
+
+  /**
+   * Format nested value for display
+   */
+  function formatNestedValue(value) {
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .map(([k, v]) => `${k}: ${typeof v === 'number' ? v : `"${v}"`}`)
+        .join(', ');
+    }
+    return typeof value === 'number' ? value : `"${value}"`;
+  }
+
+  /**
+   * Toggle edit mode for a field
+   */
+  window.toggleEdit = function(button, path, editable) {
+    if (!editable) return;
+
+    const valueContainer = document.getElementById(`value-${path}`);
+    const inputContainer = document.getElementById(`input-${path}`);
+
+    if (inputContainer.style.display === 'none') {
+      // Enter edit mode
+      button.textContent = 'Save';
+      button.classList.add('editing');
+      inputContainer.style.display = 'block';
+
+      // Focus first input
+      const firstInput = inputContainer.querySelector('.config-field-input');
+      if (firstInput) firstInput.focus();
+    } else {
+      // Exit edit mode without saving
+      button.textContent = 'Edit';
+      button.classList.remove('editing');
+      inputContainer.style.display = 'none';
+    }
+  };
+
+  /**
+   * Update a simple field value (preview)
+   */
+  window.updateField = function(name, value) {
+    const input = document.getElementById(`input-${name}`);
+    if (input) {
+      document.getElementById(`value-${name}`).textContent = typeof value === 'number' ? value : `"${value}"`;
+    }
+  };
+
+  /**
+   * Update a nested field value (preview)
+   */
+  window.updateNestedField = function(path, key, value) {
+    const container = document.getElementById(`value-${path}`);
+    if (container) {
+      // Recalculate and update display
+      const currentValue = getNestedValue(globalConfig, path);
+      currentValue[key] = value;
+      container.textContent = formatNestedValue(currentValue);
+    }
+  };
+
+  /**
+   * Update a backend field value
+   */
+  window.updateBackendField = function(index, field, value) {
+    const backends = globalConfig.backends || [];
+    if (backends[index]) {
+      backends[index][field] = field === 'priority' || field === 'maxConcurrency' ? parseInt(value) : value;
+      document.getElementById(`value-${field}`).textContent = backends[index][field];
+    }
+  };
+
+  /**
+   * Get nested value from object
+   */
+  function getNestedValue(obj, path) {
+    const keys = path.split('.');
+    let current = obj;
+    for (const key of keys) {
+      if (current === undefined || current === null) return undefined;
+      current = current[key];
+    }
+    return current;
+  }
+
+  /**
+   * Set nested value in object
+   */
+  function setNestedValue(obj, path, value) {
+    const keys = path.split('.');
+    let current = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (current[keys[i]] === undefined) {
+        current[keys[i]] = {};
+      }
+      current = current[keys[i]];
+    }
+    current[keys[keys.length - 1]] = value;
+  }
+
+  /**
+   * Add a new backend
+   */
+  window.addBackend = function() {
+    if (!globalConfig.backends) {
+      globalConfig.backends = [];
+    }
+
+    const container = document.getElementById('backendsConfigContainer');
+    const newIndex = globalConfig.backends.length;
+
+    globalConfig.backends.push({
+      url: 'http://',
+      name: 'New Backend',
+      priority: 1,
+      maxConcurrency: 10
+    });
+
+    container.insertAdjacentHTML('beforeend', renderBackendItem(newIndex, globalConfig.backends[newIndex]));
+  };
+
+  /**
+   * Remove a backend
+   */
+  window.removeBackend = function(index) {
+    if (!globalConfig.backends || globalConfig.backends.length <= 1) {
+      alert('At least one backend is required');
+      return;
+    }
+
+    globalConfig.backends.splice(index, 1);
+
+    const container = document.getElementById('backendsConfigContainer');
+    const item = container.querySelector(`[data-backend="${index}"]`);
+    if (item) {
+      item.remove();
+    }
+  };
+
+  /**
+   * Render a single backend item
+   */
+  function renderBackendItem(index, backend) {
+    return `
+      <div class="config-array-item" data-backend="${index}">
+        <div class="config-array-item-header">
+          <span class="config-array-item-name">${backend.name || `Backend ${index + 1}`}</span>
+          <button class="config-array-item-remove" onclick="window.removeBackend(${index})">Remove</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem;">
+          <div>
+            <label style="font-size: 0.75rem; color: var(--text-secondary);">URL</label>
+            <input type="text" class="config-field-input" id="backend-${index}-url"
+              value="${backend.url}" onchange="window.updateBackendField(${index}, 'url', this.value)"
+              style="width: 100%; margin-top: 0.25rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--text-secondary);">Priority</label>
+            <input type="number" class="config-field-input" id="backend-${index}-priority"
+              value="${backend.priority}" onchange="window.updateBackendField(${index}, 'priority', this.value)"
+              style="width: 100%; margin-top: 0.25rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--text-secondary);">Max Concurrency</label>
+            <input type="number" class="config-field-input" id="backend-${index}-maxConcurrency"
+              value="${backend.maxConcurrency}" onchange="window.updateBackendField(${index}, 'maxConcurrency', this.value)"
+              style="width: 100%; margin-top: 0.25rem;">
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Save all configuration changes
+   */
+  window.saveAllConfig = async function() {
+    const btn = document.querySelector('button[onclick="window.saveAllConfig()"]');
+    const originalText = btn.textContent;
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+
+    try {
+      const result = await window.apiClient.updateConfig(globalConfig);
+
+      if (result.success) {
+        alert('Configuration saved successfully! Remember to restart the server for changes to take effect.');
+        btn.textContent = 'Saved!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }, 2000);
+      } else {
+        alert('Failed to save configuration: ' + result.error);
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    } catch (error) {
+      alert('Error saving configuration: ' + error.message);
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  };
+
+  // ============================================================
+  // END CONFIGURATION SECTION
+  // ============================================================
 
   // Show token speed indicator
   function showTokenSpeedIndicator(tokenSpeed) {

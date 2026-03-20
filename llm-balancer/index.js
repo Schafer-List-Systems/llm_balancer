@@ -664,6 +664,54 @@ if (config.debug.enabled) {
       backendUrl
     });
   });
+
+  /**
+   * Route: Get full configuration
+   * GET /config - Returns the complete merged configuration
+   */
+  app.get('/config', (req, res) => {
+    console.info(`[${getTimestamp()}] Configuration requested`);
+    res.json(config);
+  });
+
+  /**
+   * Route: Update configuration
+   * POST /config - Updates config.json with new configuration
+   * Note: Changes require server restart to take effect
+   */
+  app.post('/config', (req, res) => {
+    const configModule = require('./config');
+
+    console.info(`[${getTimestamp()}] Configuration update requested`);
+    const newConfig = req.body;
+
+    // Validate request body
+    if (!newConfig || typeof newConfig !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid configuration object'
+      });
+    }
+
+    // Write configuration to file
+    const result = configModule.writeConfig(newConfig);
+
+    if (result.success) {
+      console.info(`[${getTimestamp()}] Configuration saved successfully`);
+      res.json({
+        success: true,
+        message: result.message,
+        note: 'Configuration changes require server restart to take effect',
+        config: newConfig
+      });
+    } else {
+      console.error(`[${getTimestamp()}] Failed to save configuration: ${result.error}`);
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+  });
 }
 
 /**

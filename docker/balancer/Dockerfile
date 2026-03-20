@@ -7,7 +7,7 @@ WORKDIR /app
 COPY llm-balancer/package*.json ./
 RUN npm ci
 
-# Copy all files including tests
+# Copy all files
 COPY llm-balancer/ ./
 
 # Expose the backend port

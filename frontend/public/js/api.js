@@ -466,6 +466,36 @@ class ApiClient {
     window.updateCallback = null;
   }
 
+  /**
+   * Get full configuration
+   */
+  async getConfig() {
+    try {
+      const data = await this.request('/config');
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update configuration
+   * @param {Object} config - New configuration object
+   */
+  async updateConfig(config) {
+    try {
+      await this.request('/config', {
+        method: 'POST',
+        body: JSON.stringify(config)
+      });
+      this.lastUpdateTime = new Date();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // ============================================================
   // BENCHMARK API METHODS
   // ============================================================

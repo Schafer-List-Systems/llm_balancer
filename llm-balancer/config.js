@@ -221,6 +221,35 @@ function loadConfig() {
   return mergeConfig(configJson, process.env);
 }
 
+/**
+ * Write configuration to config.json
+ * @param {Object} config - Configuration object to write
+ * @returns {{success: boolean, message?: string, error?: string}}
+ */
+function writeConfig(config) {
+  const configPath = path.join(__dirname, 'config.json');
+
+  try {
+    // Validate config object (exclude arrays and null)
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      return { success: false, error: 'Invalid configuration object' };
+    }
+
+    // Pretty-print JSON with 2-space indentation
+    const jsonContent = JSON.stringify(config, null, 2);
+
+    // Write directly to file (atomic rename doesn't work well with Docker volumes)
+    fs.writeFileSync(configPath, jsonContent, 'utf8');
+
+    console.info(`[Config] Configuration written to ${configPath}`);
+    return { success: true, message: 'Configuration saved successfully' };
+  } catch (err) {
+    console.error(`[Config] Failed to write config.json: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
-  loadConfig
+  loadConfig,
+  writeConfig
 };
