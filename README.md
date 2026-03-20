@@ -42,6 +42,8 @@ We share it with the community as a way to give back something in return.
 
 ## Documentation
 
+The documentation is structured hierarchically. use the following references to find relevant information to you.
+
 ### User
 **For installing, configuring, and using the LLM Balancer.**
 
@@ -72,20 +74,6 @@ We share it with the community as a way to give back something in return.
 
 ## Quick Start
 
-### Docker Installation (Recommended)
-
-Start the LLM Balancer with Docker Compose:
-
-```bash
-# Build and start all containers
-docker compose up --build
-
-# Or run in detached mode
-docker compose up -d --build
-```
-
-The load balancer will be available at `http://localhost:3001` and the dashboard at `http://localhost:3080`, unless you configured it differently.
-
 ### Quick Configuration
 
 Create a `config.json` file in the project root for Docker:
@@ -113,6 +101,17 @@ Edit `llm-balancer/config.json` to add your backends:
 **The config file is automatically mounted as a volume.**
 
 **For complete configuration options, see [Configuration Guide](docs/components/balancer/CONFIGURATION.md).**
+
+### Docker Installation (Recommended)
+
+Start the LLM Balancer with Docker Compose:
+
+```bash
+# Build and start all containers
+docker compose up -d --build
+```
+
+The load balancer will be available at `http://localhost:3001` and the dashboard at `http://localhost:3080`, unless you configured it differently.
 
 ### Manual Installation
 
