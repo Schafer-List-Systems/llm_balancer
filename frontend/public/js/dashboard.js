@@ -307,25 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                   </section>
 
-                  <!-- Queue Visualization -->
-                  <section id="queueVisualizationSection" class="stats-section">
-                    <h3 class="section-title">🗂️ Queue Visualization</h3>
-                    <div class="chart-grid">
-                      <div class="chart-container">
-                        <div class="chart-title">📊 Queue Depth Over Time</div>
-                        <canvas id="queueDepthChart" class="chart-canvas"></canvas>
-                      </div>
-                      <div class="chart-container">
-                        <div class="chart-title">🎚️ Queue Utilization</div>
-                        <canvas id="queueUtilizationChart" class="chart-canvas"></canvas>
-                      </div>
-                      <div class="chart-container">
-                        <div class="chart-title">⏱️ Queue Wait Time Distribution</div>
-                        <canvas id="queueWaitTimeChart" class="chart-canvas"></canvas>
-                      </div>
-                    </div>
-                  </section>
-
                   <!-- Distribution & Percentile Charts -->
                   <section id="distributionSection" class="stats-section">
                     <h3 class="section-title">📈 Distribution & Percentile Charts</h3>
@@ -2182,7 +2163,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderQueueStats(data.queueStats, data.stats);
       // Update chart visualizations (only if function is available)
       if (typeof updateStatsVisualization === 'function') {
-        updateStatsVisualization(data.stats, data.queueStats);
+        updateStatsVisualization(data.stats);
         // Populate backend filter checkboxes after visualization update
         if (typeof populateBackendFilter === 'function') {
           populateBackendFilter(data.stats.backendDetails || []);
@@ -3613,243 +3594,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Render queue visualization charts
-   * Uses incremental updates pattern - returns early if DOM doesn't exist
-   * @param {Object} queueStats - Queue statistics data from API
-   */
-  function renderQueueVisualizationCharts(queueStats) {
-    // Return early if section not active
-    if (!isChartSectionActive()) return;
-
-    if (!queueStats) return;
-
-    // Queue Depth Over Time Chart
-    cleanupChart('queueDepthChart');
-    const queueDepthCanvas = document.getElementById('queueDepthChart');
-    if (queueDepthCanvas && queueStats.depthHistory && queueStats.depthHistory.length > 1) {
-      const ctx = queueDepthCanvas.getContext('2d');
-      chartInstances.queueDepthChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: queueStats.depthHistory.map((item, i) => `#${i + 1}`),
-          datasets: [{
-            label: 'Queue Depth',
-            data: queueStats.depthHistory.map(item => item.depth),
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, position: 'top' },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `Queue depth: ${ctx.parsed.y} requests`
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: 'Queue Depth' },
-              max: queueStats.maxQueueSize || 100
-            },
-            x: {
-              display: false
-            }
-          }
-        }
-      });
-    } else if (queueDepthCanvas) {
-      queueDepthCanvas.parentElement.innerHTML = '<p class="chart-no-data">No queue history data available yet</p>';
-    }
-
-    // Queue Utilization Gauge (Doughnut Chart) - incremental update to prevent flickering
-    const queueUtilCanvas = document.getElementById('queueUtilizationChart');
-    if (queueUtilCanvas && queueStats) {
-      const currentDepth = queueStats.depth || 0;
-      const maxQueueSize = queueStats.maxQueueSize || 100;
-      const utilization = maxQueueSize > 0 ? (currentDepth / maxQueueSize) * 100 : 0;
-
-      // Determine status color based on utilization
-      let statusColor, statusText;
-      if (utilization < 50) {
-        statusColor = '#10b981'; // Green - Low
-        statusText = 'Low';
-      } else if (utilization < 80) {
-        statusColor = '#f59e0b'; // Yellow - Medium
-        statusText = 'Medium';
-      } else {
-        statusColor = '#ef4444'; // Red - High
-        statusText = 'High';
-      }
-
-      // Incremental update: preserve existing chart instance
-      const existingChart = chartInstances.queueUtilizationChart;
-      if (existingChart) {
-        existingChart.data.datasets[0].data = [currentDepth, Math.max(0, maxQueueSize - currentDepth)];
-        existingChart.data.datasets[0].backgroundColor = [statusColor, '#e2e8f0'];
-        existingChart.update();
-      } else {
-        const ctx = queueUtilCanvas.getContext('2d');
-        chartInstances.queueUtilizationChart = new Chart(ctx, {
-          type: 'doughnut',
-          data: {
-            labels: ['Used', 'Available'],
-            datasets: [{
-              data: [currentDepth, Math.max(0, maxQueueSize - currentDepth)],
-              backgroundColor: [statusColor, '#e2e8f0'],
-              borderWidth: 0,
-              cutout: '92%'  // Much smaller cutout - creates a thin ring
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => {
-                    const label = ctx.label || '';
-                    const value = ctx.parsed || 0;
-                    return `${label}: ${value} requests`;
-                  }
-                }
-              }
-            },
-            layout: {
-              padding: {
-                top: 20
-              }
-            }
-          }
-        });
-      }
-
-      // Add utilization value overlay (only if not already added)
-      // CRITICAL FIX: Use DOM manipulation to preserve canvas and Chart.js instance
-      const utilizationContainer = queueUtilCanvas.parentElement;
-      const overlayExists = utilizationContainer.querySelector('.queue-utilization-value');
-
-      if (!overlayExists) {
-        // Create overlay elements and append WITHOUT destroying canvas
-        const overlay = document.createElement('div');
-        overlay.className = 'queue-utilization-value';
-        overlay.innerHTML = `
-          <div class="queue-utilization-percentage">${utilization.toFixed(0)}%</div>
-          <div class="queue-utilization-label">Utilization</div>
-          <div class="queue-utilization-status ${statusText.toLowerCase()}">${statusText} Load</div>
-        `;
-        utilizationContainer.appendChild(overlay);
-        // Position overlay over canvas
-        overlay.style.cssText = `
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          text-align: center;
-          pointer-events: none;
-          z-index: 10;
-        `;
-      } else {
-        // Update existing overlay with new values - no DOM recreation
-        const percentageEl = utilizationContainer.querySelector('.queue-utilization-percentage');
-        const statusEl = utilizationContainer.querySelector('.queue-utilization-status');
-        if (percentageEl) percentageEl.textContent = `${utilization.toFixed(0)}%`;
-        if (statusEl) {
-          statusEl.className = `queue-utilization-status ${statusText.toLowerCase()}`;
-          statusEl.textContent = `${statusText} Load`;
-        }
-      }
-    }
-
-    // Queue Wait Time Distribution Histogram
-    cleanupChart('queueWaitTimeChart');
-    const waitTimeCanvas = document.getElementById('queueWaitTimeChart');
-    if (waitTimeCanvas && queueStats.queueLengths) {
-      const queueLengths = queueStats.queueLengths;
-
-      // Create histogram bins
-      const bins = [
-        { range: '0-10', label: '0-10', count: 0 },
-        { range: '10-20', label: '10-20', count: 0 },
-        { range: '20-30', label: '20-30', count: 0 },
-        { range: '30-40', label: '30-40', count: 0 },
-        { range: '40-50', label: '40-50', count: 0 },
-        { range: '50+', label: '50+', count: 0 }
-      ];
-
-      queueLengths.forEach(depth => {
-        if (depth <= 10) bins[0].count++;
-        else if (depth <= 20) bins[1].count++;
-        else if (depth <= 30) bins[2].count++;
-        else if (depth <= 40) bins[3].count++;
-        else if (depth <= 50) bins[4].count++;
-        else bins[5].count++;
-      });
-
-      const ctx = waitTimeCanvas.getContext('2d');
-      chartInstances.queueWaitTimeChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: bins.map(b => b.label),
-          datasets: [{
-            label: 'Queue Depth Distribution',
-            data: bins.map(b => b.count),
-            backgroundColor: [
-              'rgba(16, 185, 129, 0.7)',
-              'rgba(16, 185, 129, 0.7)',
-              'rgba(245, 158, 11, 0.7)',
-              'rgba(245, 158, 11, 0.7)',
-              'rgba(239, 68, 68, 0.7)',
-              'rgba(239, 68, 68, 0.7)'
-            ],
-            borderColor: [
-              'rgba(16, 185, 129, 1)',
-              'rgba(16, 185, 129, 1)',
-              'rgba(245, 158, 11, 1)',
-              'rgba(245, 158, 11, 1)',
-              'rgba(239, 68, 68, 1)',
-              'rgba(239, 68, 68, 1)'
-            ],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.parsed.y} samples in ${bins[ctx.dataIndex].range}`
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: 'Number of Snapshots' }
-            },
-            x: {
-              title: { display: true, text: 'Queue Depth Range' }
-            }
-          }
-        }
-      });
-    } else if (waitTimeCanvas) {
-      waitTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No queue distribution data available yet</p>';
-    }
-  }
-
-
-  /**
    * Check if chart visualization section is active (overview section is visible)
    * @returns {boolean} True if the overview section is currently active
    */
@@ -3862,9 +3606,8 @@ document.addEventListener('DOMContentLoaded', () => {
    * This uses the "incremental updates" pattern - only update values when DOM exists
    * AND when data actually changes (change detection)
    * @param {Object} statsData - Statistics data from API
-   * @param {Object} queueStats - Queue statistics data (separate from main stats)
    */
-  function updateStatsVisualization(statsData, queueStats) {
+  function updateStatsVisualization(statsData) {
     // Return early if section not active (DOM not rendered)
     if (!isChartSectionActive()) return;
 
@@ -3881,11 +3624,6 @@ document.addEventListener('DOMContentLoaded', () => {
       renderHealthMetricsCharts(statsData);
       renderDistributionCharts(statsData);
       renderCorrelationCharts(statsData);
-    }
-
-    // Always update queue visualization if queueStats is available
-    if (queueStats) {
-      renderQueueVisualizationCharts(queueStats);
     }
   }
 
@@ -4446,7 +4184,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fetch(url)
         .then(res => res.json())
         .then(data => {
-          updateStatsVisualization(data.stats, data.queueStats);
+          updateStatsVisualization(data.stats);
         })
         .catch(err => {
           console.error('[Filter] Failed to refresh charts:', err);
