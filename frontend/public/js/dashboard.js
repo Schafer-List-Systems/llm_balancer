@@ -2467,7 +2467,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="benchmark-card" data-backend-url="${encodeURIComponent(backend.url)}">
         <div class="benchmark-card-header">
           <div class="benchmark-card-title">
-            <span class="benchmark-backend-name">${backend.name || formatUrl(backend.url)}</span>
+            <span class="benchmark-backend-name">${getBackendName(backend)}</span>
             <span class="benchmark-backend-status ${backend.healthy ? 'healthy' : 'unhealthy'}">
               ${backend.healthy ? 'Healthy' : 'Unhealthy'}
             </span>
@@ -2883,6 +2883,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
+   * Get backend name for display, falling back to formatted URL if not available
+   * @param {Object} backend - The backend object with name and url properties
+   * @returns {string} Backend name or formatted URL
+   */
+  function getBackendName(backend) {
+    if (backend.name && backend.name.trim()) {
+      return backend.name;
+    }
+    return formatUrl(backend.url);
+  }
+
+  /**
    * Render time metrics line charts (Total Time, Generation Time, Network Latency, Prompt Processing)
    * Uses incremental updates pattern - returns early if DOM doesn't exist
    * @param {Object} statsData - Statistics data from API
@@ -2917,7 +2929,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalTimeMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.totalTimeMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${backend.name || formatUrl(backend.url)} - Total Time`,
+          label: `${getBackendName(backend)} - Total Time`,
           data: totalTimeMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -2963,7 +2975,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const generationTimeMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.generationTimeMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${backend.name || formatUrl(backend.url)} - Generation Time`,
+          label: `${getBackendName(backend)} - Generation Time`,
           data: generationTimeMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -3009,7 +3021,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const networkLatencyMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.networkLatencyMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${backend.name || formatUrl(backend.url)} - Network Latency`,
+          label: `${getBackendName(backend)} - Network Latency`,
           data: networkLatencyMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -3055,7 +3067,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const promptProcessingMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.promptProcessingTimeMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${backend.name || formatUrl(backend.url)} - Prompt Processing`,
+          label: `${getBackendName(backend)} - Prompt Processing`,
           data: promptProcessingMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -3138,7 +3150,7 @@ document.addEventListener('DOMContentLoaded', () => {
       chartInstances.tokenComparisonChart = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: backends.map(b => b.name || formatUrl(b.url)),
+          labels: backends.map(b => getBackendName(b)),
           datasets: [
             {
               label: 'Avg Prompt Tokens',
@@ -3179,32 +3191,58 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Token Distribution Chart (Per Backend)
+    // Token Distribution Chart (Per Backend) - Bar chart comparing all backends
     cleanupChart('tokenDistributionChart');
     const tokenDistributionCanvas = document.getElementById('tokenDistributionChart');
     if (tokenDistributionCanvas && backends.length > 0) {
       const ctx = tokenDistributionCanvas.getContext('2d');
+
+      // Calculate average token counts for each backend
+      const promptTokens = backends.map(b => {
+        const samples = b.performanceStats.rawSamples.tokenStats;
+        const prompt = samples?.promptTokens || [];
+        return prompt.length > 0 ? prompt.reduce((a, b) => a + b, 0) / prompt.length : 0;
+      });
+
+      const completionTokens = backends.map(b => {
+        const samples = b.performanceStats.rawSamples.tokenStats;
+        const completion = samples?.completionTokens || [];
+        return completion.length > 0 ? completion.reduce((a, b) => a + b, 0) / completion.length : 0;
+      });
+
       chartInstances.tokenDistributionChart = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'bar',
         data: {
-          labels: ['Prompt Tokens', 'Completion Tokens'],
-          datasets: [{
-            data: backends.map(b => {
-              const samples = b.performanceStats.rawSamples.tokenStats;
-              const prompt = samples?.promptTokens || [];
-              const completion = samples?.completionTokens || [];
-              const promptAvg = prompt.length > 0 ? prompt.reduce((a, b) => a + b, 0) / prompt.length : 1;
-              const completionAvg = completion.length > 0 ? completion.reduce((a, b) => a + b, 0) / completion.length : 1;
-              return [promptAvg, completionAvg];
-            })[0] || [1, 1]
-          }]
+          labels: backends.map(b => getBackendName(b)),
+          datasets: [
+            {
+              label: 'Avg Prompt Tokens',
+              data: promptTokens,
+              backgroundColor: 'rgba(59, 130, 246, 0.8)',
+              borderColor: 'rgba(59, 130, 246, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Avg Completion Tokens',
+              data: completionTokens,
+              backgroundColor: 'rgba(16, 185, 129, 0.8)',
+              borderColor: 'rgba(16, 185, 129, 1)',
+              borderWidth: 1
+            }
+          ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
             legend: { display: true, position: 'top' },
-            title: { display: true, text: `Token Distribution: ${backends[0].name || formatUrl(backends[0].url)}` }
+            title: { display: true, text: 'Average Token Counts Comparison (All Backends)' }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Average Token Count' }
+            }
           }
         }
       });
@@ -3243,7 +3281,7 @@ document.addEventListener('DOMContentLoaded', () => {
       chartInstances.generationRateChart = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: backends.map(b => b.name || formatUrl(b.url)),
+          labels: backends.map(b => getBackendName(b)),
           datasets: [{
             label: 'Avg Generation Rate (tokens/sec)',
             data: rates,
@@ -3278,7 +3316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalRate = getFilteredSamples(samples?.totalRate || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${backend.name || formatUrl(backend.url)} - Total Rate`,
+          label: `${getBackendName(backend)} - Total Rate`,
           data: totalRate,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 236) % 256}, 72, 153, 0.1)`,
@@ -3399,11 +3437,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const backendDetails = statsData?.backendDetails || [];
     if (backendDetails.length === 0) return;
 
-    // Backend Utilization Gauges
+    // Backend Utilization Gauges - CRITICAL FIX: Update existing gauges instead of recreating
     const utilizationContainer = document.getElementById('utilizationGauges');
     if (utilizationContainer && backendDetails.length > 0) {
-      // Clear existing gauges
-      utilizationContainer.innerHTML = '';
+      // Build a set of existing backend IDs to track which gauges to update/keep
+      const existingGaugeIds = new Set();
+      utilizationContainer.querySelectorAll('[data-backend-id]').forEach(el => {
+        const backendId = el.getAttribute('data-backend-id');
+        if (backendId) existingGaugeIds.add(backendId);
+      });
 
       backendDetails.forEach(backend => {
         const activeRequestCount = backend.activeRequestCount || 0;
@@ -3424,69 +3466,149 @@ document.addEventListener('DOMContentLoaded', () => {
         const backendLabel = backend.url || 'Unknown Backend';
         const backendId = backend.url;
 
-        // Create gauge canvas for this backend
-        const gaugeCanvas = document.createElement('canvas');
-        gaugeCanvas.className = 'utilization-gauge-canvas';
-        gaugeCanvas.style.width = '180px';
-        gaugeCanvas.style.height = '140px';
-
-        // Create gauge chart
-        createGaugeChart(gaugeCanvas, utilization, backendLabel, statusText);
-
-        // Add label below gauge
-        const labelDiv = document.createElement('div');
-        labelDiv.style.textAlign = 'center';
-        labelDiv.style.padding = '5px';
-        labelDiv.textContent = `${backendLabel} (${activeRequestCount}/${maxConcurrency})`;
-        labelDiv.style.fontSize = '12px';
-        labelDiv.style.color = '#6b7280';
-
-        utilizationContainer.appendChild(gaugeCanvas);
-        utilizationContainer.appendChild(labelDiv);
-
         // Store backend ID for filtering
         backend.id = backendId;
+        existingGaugeIds.delete(backendId);
+
+        // Check if gauge for this backend already exists
+        const existingGaugeCanvas = utilizationContainer.querySelector(`canvas[data-backend-id="${backendId}"]`);
+
+        if (existingGaugeCanvas) {
+          // Update existing gauge chart data
+          const gaugeChart = chartInstances[`gauge_${backendId}`];
+          if (gaugeChart && gaugeChart.data) {
+            // Update chart with new values
+            const normalizedValue = Math.min(utilization, 100);
+            gaugeChart.data.datasets[0].data = [normalizedValue, 0];
+            gaugeChart.options.plugins.title.text = `${backendLabel}\n${utilization.toFixed(0)}% ${statusText}`;
+            gaugeChart.data.datasets[0].backgroundColor = utilization < 70 ? '#10b981' : (utilization < 90 ? '#f59e0b' : '#ef4444');
+            gaugeChart.update();
+          }
+          // Update label
+          const existingLabel = utilizationContainer.querySelector(`[data-backend-id="${backendId}"] + div`);
+          if (existingLabel) {
+            existingLabel.textContent = `${backendLabel} (${activeRequestCount}/${maxConcurrency})`;
+          }
+        } else {
+          // Create new gauge canvas and chart
+          const gaugeCanvas = document.createElement('canvas');
+          gaugeCanvas.className = 'utilization-gauge-canvas';
+          gaugeCanvas.style.width = '180px';
+          gaugeCanvas.style.height = '140px';
+          gaugeCanvas.setAttribute('data-backend-id', backendId);
+
+          // Create gauge chart and store instance
+          const gaugeChart = createGaugeChart(gaugeCanvas, utilization, backendLabel, statusText);
+          chartInstances[`gauge_${backendId}`] = gaugeChart;
+
+          // Add label below gauge
+          const labelDiv = document.createElement('div');
+          labelDiv.style.textAlign = 'center';
+          labelDiv.style.padding = '5px';
+          labelDiv.style.fontSize = '12px';
+          labelDiv.style.color = '#6b7280';
+          labelDiv.setAttribute('data-backend-id', backendId);
+          labelDiv.textContent = `${backendLabel} (${activeRequestCount}/${maxConcurrency})`;
+
+          utilizationContainer.appendChild(gaugeCanvas);
+          utilizationContainer.appendChild(labelDiv);
+        }
+      });
+
+      // Clean up gauges for backends that no longer exist
+      existingGaugeIds.forEach(gaugeId => {
+        const gaugeToRemove = utilizationContainer.querySelector(`canvas[data-backend-id="${gaugeId}"]`);
+        const labelToRemove = utilizationContainer.querySelector(`div[data-backend-id="${gaugeId}"]`);
+        if (gaugeToRemove) {
+          const chartToRemove = chartInstances[`gauge_${gaugeId}`];
+          if (chartToRemove) {
+            chartToRemove.destroy();
+            delete chartInstances[`gauge_${gaugeId}`];
+          }
+          gaugeToRemove.remove();
+        }
+        if (labelToRemove) {
+          labelToRemove.remove();
+        }
       });
     }
 
-    // Cache Efficiency Chart (Donut)
+    // Cache Efficiency Chart (Bar chart showing hit rate per backend)
     cleanupChart('cacheEfficiencyChart');
-
-    const backend = backendDetails[0];
     const cacheChartCanvas = document.getElementById('cacheEfficiencyChart');
-    if (cacheChartCanvas) {
-      const cacheStats = backend.promptCacheStats || {};
-      const hits = cacheStats.totalHits || 0;
-      const misses = cacheStats.totalMisses || 0;
-      const total = hits + misses;
+    if (cacheChartCanvas && backendDetails.length > 0) {
+      const ctx = cacheChartCanvas.getContext('2d');
 
-      if (total > 0) {
-        const ctx = cacheChartCanvas.getContext('2d');
-        chartInstances.cacheEfficiencyChart = new Chart(ctx, {
-          type: 'doughnut',
-          data: {
-            labels: ['Cache Hits', 'Cache Misses'],
-            datasets: [{
-              data: [hits, misses],
-              backgroundColor: ['#10b981', '#ef4444'],
-              borderWidth: 0
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: 'right' },
-              title: {
-                display: true,
-                text: `Cache Efficiency: ${((hits / total) * 100).toFixed(1)}% hit rate`
+      // Calculate cache hit rate for each backend
+      const hitRates = backendDetails.map(b => {
+        const cacheStats = b.promptCacheStats || {};
+        const hits = cacheStats.totalHits || 0;
+        const misses = cacheStats.totalMisses || 0;
+        const total = hits + misses;
+        return total > 0 ? (hits / total) * 100 : 0;
+      });
+
+      const totalRequests = backendDetails.map(b => {
+        const cacheStats = b.promptCacheStats || {};
+        return (cacheStats.totalHits || 0) + (cacheStats.totalMisses || 0);
+      });
+
+      chartInstances.cacheEfficiencyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: backendDetails.map(b => getBackendName(b)),
+          datasets: [
+            {
+              label: 'Cache Hit Rate (%)',
+              data: hitRates,
+              backgroundColor: backendDetails.map(b => {
+                const cacheStats = b.promptCacheStats || {};
+                const hits = cacheStats.totalHits || 0;
+                const misses = cacheStats.totalMisses || 0;
+                const total = hits + misses;
+                const rate = total > 0 ? (hits / total) * 100 : 0;
+                return rate >= 80 ? '#10b981' : (rate >= 50 ? '#f59e0b' : '#ef4444');
+              }),
+              borderColor: backendDetails.map(b => {
+                const cacheStats = b.promptCacheStats || {};
+                const hits = cacheStats.totalHits || 0;
+                const misses = cacheStats.totalMisses || 0;
+                const total = hits + misses;
+                const rate = total > 0 ? (hits / total) * 100 : 0;
+                return rate >= 80 ? '#059669' : (rate >= 50 ? '#d97706' : '#dc2626');
+              }),
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: 'Cache Hit Rate by Backend' },
+            tooltip: {
+              callbacks: {
+                afterLabel: (context) => {
+                  const index = context.dataIndex;
+                  const totalReq = totalRequests[index];
+                  return [`Total Requests: ${totalReq}`];
+                }
               }
             }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              title: { display: true, text: 'Hit Rate (%)' },
+              ticks: { callback: (value) => `${value}%` }
+            }
           }
-        });
-      } else {
-        cacheChartCanvas.parentElement.innerHTML = '<p class="chart-no-data">No cache data available yet</p>';
-      }
+        }
+      });
+    } else if (cacheChartCanvas) {
+      cacheChartCanvas.parentElement.innerHTML = '<p class="chart-no-data">No cache data available yet</p>';
     }
   }
 
@@ -3547,8 +3669,7 @@ document.addEventListener('DOMContentLoaded', () => {
       queueDepthCanvas.parentElement.innerHTML = '<p class="chart-no-data">No queue history data available yet</p>';
     }
 
-    // Queue Utilization Gauge (Doughnut Chart)
-    cleanupChart('queueUtilizationChart');
+    // Queue Utilization Gauge (Doughnut Chart) - incremental update to prevent flickering
     const queueUtilCanvas = document.getElementById('queueUtilizationChart');
     if (queueUtilCanvas && queueStats) {
       const currentDepth = queueStats.depth || 0;
@@ -3568,40 +3689,48 @@ document.addEventListener('DOMContentLoaded', () => {
         statusText = 'High';
       }
 
-      const ctx = queueUtilCanvas.getContext('2d');
-      chartInstances.queueUtilizationChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Used', 'Available'],
-          datasets: [{
-            data: [currentDepth, Math.max(0, maxQueueSize - currentDepth)],
-            backgroundColor: [statusColor, '#e2e8f0'],
-            borderWidth: 0,
-            cutout: '70%'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => {
-                  const label = ctx.label || '';
-                  const value = ctx.parsed || 0;
-                  return `${label}: ${value} requests`;
+      // Incremental update: preserve existing chart instance
+      const existingChart = chartInstances.queueUtilizationChart;
+      if (existingChart) {
+        existingChart.data.datasets[0].data = [currentDepth, Math.max(0, maxQueueSize - currentDepth)];
+        existingChart.data.datasets[0].backgroundColor = [statusColor, '#e2e8f0'];
+        existingChart.update();
+      } else {
+        const ctx = queueUtilCanvas.getContext('2d');
+        chartInstances.queueUtilizationChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Used', 'Available'],
+            datasets: [{
+              data: [currentDepth, Math.max(0, maxQueueSize - currentDepth)],
+              backgroundColor: [statusColor, '#e2e8f0'],
+              borderWidth: 0,
+              cutout: '92%'  // Much smaller cutout - creates a thin ring
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const label = ctx.label || '';
+                    const value = ctx.parsed || 0;
+                    return `${label}: ${value} requests`;
+                  }
                 }
               }
-            }
-          },
-          layout: {
-            padding: {
-              top: 20
+            },
+            layout: {
+              padding: {
+                top: 20
+              }
             }
           }
-        }
-      });
+        });
+      }
 
       // Add utilization value overlay (only if not already added)
       // CRITICAL FIX: Use DOM manipulation to preserve canvas and Chart.js instance
@@ -3824,7 +3953,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const sorted = [...totalTimeMs].sort((a, b) => a - b);
           const n = sorted.length;
           return {
-            name: backend.name || formatUrl(backend.url),
+            name: getBackendName(backend),
             min: sorted[0],
             q1: sorted[Math.floor(n * 0.25)],
             median: sorted[Math.floor(n * 0.5)],
@@ -4201,7 +4330,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                Math.max(1, (stats.promptCacheStats?.totalHits || 0) + (stats.promptCacheStats?.totalMisses || 0));
 
           return {
-            label: backend.name || formatUrl(backend.url),
+            label: getBackendName(backend),
             data: [
               100 - (avgTotalTime / 5000) * 100, // Normalize totalTime (inverted - faster is better)
               100 - (avgGenTime / 3000) * 100,   // Normalize genTime (inverted - faster is better)
@@ -4281,7 +4410,7 @@ document.addEventListener('DOMContentLoaded', () => {
       checkbox.addEventListener('change', handleBackendFilterChange);
 
       label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(backend.name || formatUrl(backend.url)));
+      label.appendChild(document.createTextNode(getBackendName(backend)));
 
       backendFilterContainer.appendChild(label);
     });
