@@ -221,7 +221,13 @@ describe('Request Processor', () => {
         busy: false,
         priority: 5,
         activeRequestCount: 0,
-        maxConcurrency: 10
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 10,
+        incrementStreamingRequest: jest.fn(),
+        decrementStreamingRequest: jest.fn(),
+        incrementNonStreamingRequest: jest.fn(),
+        decrementNonStreamingRequest: jest.fn()
       };
 
       // Create mock config
@@ -346,7 +352,13 @@ describe('Request Processor', () => {
         busy: false,
         priority: 5,
         activeRequestCount: 0,
-        maxConcurrency: 10
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 10,
+        incrementStreamingRequest: jest.fn(),
+        decrementStreamingRequest: jest.fn(),
+        incrementNonStreamingRequest: jest.fn(),
+        decrementNonStreamingRequest: jest.fn()
       };
 
       mockReq = {
@@ -386,7 +398,11 @@ describe('Request Processor', () => {
       const testBackend = {
         id: 'test',
         activeRequestCount: 5,
-        maxConcurrency: 10
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 10,
+        decrementStreamingRequest: jest.fn(),
+        decrementNonStreamingRequest: jest.fn()
       };
 
       requestProcessor.releaseBackend(mockBalancer, testBackend);
@@ -403,7 +419,11 @@ describe('Request Processor', () => {
       const testBackend = {
         id: 'test',
         activeRequestCount: 10,
-        maxConcurrency: 10
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 10,
+        decrementStreamingRequest: jest.fn(),
+        decrementNonStreamingRequest: jest.fn()
       };
 
       requestProcessor.releaseBackend(mockBalancer2, testBackend);
@@ -421,7 +441,11 @@ describe('Request Processor', () => {
       const testBackend = {
         id: 'test',
         activeRequestCount: 2,
-        maxConcurrency: 10
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 10,
+        decrementStreamingRequest: jest.fn(),
+        decrementNonStreamingRequest: jest.fn()
       };
 
       requestProcessor.releaseBackend(mockBalancer3, testBackend);

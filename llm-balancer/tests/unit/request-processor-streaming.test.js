@@ -85,10 +85,17 @@ describe('handleStreamingRequest - Connection Handling', () => {
       url: `http://localhost:${backendPort}`,
       id: 'test-backend',
       activeRequestCount: 0,
+      activeStreamingRequests: 0,
+      activeNonStreamingRequests: 0,
       maxConcurrency: 10,
       updateStreamingStats: jest.fn(),
       updateStreamingStatsFromChunks: jest.fn(),
-      cachePrompt: jest.fn()
+      cachePrompt: jest.fn(),
+      getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
+      incrementStreamingRequest: jest.fn(),
+      decrementStreamingRequest: jest.fn(),
+      incrementNonStreamingRequest: jest.fn(),
+      decrementNonStreamingRequest: jest.fn()
     };
 
     // Create mock Express response
@@ -210,10 +217,17 @@ describe('handleStreamingRequest - Connection Handling', () => {
       url: `http://localhost:${backendPort}`,
       id: 'test-backend',
       activeRequestCount: 0,
+      activeStreamingRequests: 0,
+      activeNonStreamingRequests: 0,
       maxConcurrency: 10,
       updateStreamingStats: jest.fn(),
       updateStreamingStatsFromChunks: jest.fn(),
-      cachePrompt: jest.fn()
+      cachePrompt: jest.fn(),
+      getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
+      incrementStreamingRequest: jest.fn(),
+      decrementStreamingRequest: jest.fn(),
+      incrementNonStreamingRequest: jest.fn(),
+      decrementNonStreamingRequest: jest.fn()
     };
 
     const mockRes = {
@@ -367,12 +381,19 @@ describe('handleStreamingRequest - Token Counting from All Delta Fields', () => 
       url: `http://localhost:${backendPort}`,
       id: 'test-backend',
       activeRequestCount: 0,
+      activeStreamingRequests: 0,
+      activeNonStreamingRequests: 0,
       maxConcurrency: 10,
       updateStreamingStats: function(promptTokens, completionTokens) {
         completionTokensCaptured = completionTokens;
       },
       updateStreamingStatsFromChunks: jest.fn(),
-      cachePrompt: jest.fn()
+      cachePrompt: jest.fn(),
+      getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
+      incrementStreamingRequest: jest.fn(),
+      decrementStreamingRequest: jest.fn(),
+      incrementNonStreamingRequest: jest.fn(),
+      decrementNonStreamingRequest: jest.fn()
     };
 
     const mockRes = {
@@ -510,12 +531,19 @@ describe('handleStreamingRequest - Token Counting from All Delta Fields', () => 
         url: `http://localhost:${responsePort}`,
         id: 'test-backend-2',
         activeRequestCount: 0,
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
         maxConcurrency: 10,
         updateStreamingStats: function(promptTokens, completionTokens) {
           responseTokensCaptured = completionTokens;
         },
         updateStreamingStatsFromChunks: jest.fn(),
-        cachePrompt: jest.fn()
+        cachePrompt: jest.fn(),
+        getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
+        incrementStreamingRequest: jest.fn(),
+        decrementStreamingRequest: jest.fn(),
+        incrementNonStreamingRequest: jest.fn(),
+        decrementNonStreamingRequest: jest.fn()
       };
 
       const mockRes = {
