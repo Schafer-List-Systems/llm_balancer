@@ -2450,31 +2450,34 @@ document.addEventListener('DOMContentLoaded', () => {
       cleanupChart(`${type}Chart`);
     });
 
-    // Use the first backend for visualization
-    const backend = backendDetails[0];
-    if (!backend) return;
+    // Check if any backend has data for each metric type
+    const hasTotalTime = backendDetails.some(b => b.performanceStats?.rawSamples?.timeStats?.totalTimeMs?.length > 0);
+    const hasGenerationTime = backendDetails.some(b => b.performanceStats?.rawSamples?.timeStats?.generationTimeMs?.length > 0);
+    const hasNetworkLatency = backendDetails.some(b => b.performanceStats?.rawSamples?.timeStats?.networkLatencyMs?.length > 0);
+    const hasPromptProcessing = backendDetails.some(b => b.performanceStats?.rawSamples?.timeStats?.promptProcessingTimeMs?.length > 0);
 
-    const rawSamples = backend.performanceStats?.rawSamples || {};
-
-    // Total Time Chart - Apply time range filter
-    let totalTimeMs = rawSamples.timeStats?.totalTimeMs || [];
-    totalTimeMs = getFilteredSamples(totalTimeMs);
+    // Total Time Chart - Show all filtered backends
     const totalTimeCanvas = document.getElementById('totalTimeChart');
-    if (totalTimeCanvas && totalTimeMs.length > 0) {
+    if (totalTimeCanvas && hasTotalTime) {
       const ctx = totalTimeCanvas.getContext('2d');
+      const datasets = backendDetails.map((backend, index) => {
+        const totalTimeMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.totalTimeMs || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: `${backend.name || formatUrl(backend.url)} - Total Time`,
+          data: totalTimeMs,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
       chartInstances.totalTimeChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: totalTimeMs.map((_, i) => `#${i + 1}`),
-          datasets: [{
-            label: `${backend.name || formatUrl(backend.url)} - Total Time`,
-            data: totalTimeMs,
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3
-          }]
+          labels: backendDetails[0].performanceStats?.rawSamples?.timeStats?.totalTimeMs?.map((_, i) => `#${i + 1}`) || [],
+          datasets
         },
         options: {
           responsive: true,
@@ -2483,7 +2486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { display: true, position: 'top' },
             tooltip: {
               callbacks: {
-                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} ms`
               }
             }
           },
@@ -2499,25 +2502,28 @@ document.addEventListener('DOMContentLoaded', () => {
       totalTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No time data available yet</p>';
     }
 
-    // Generation Time Chart - Apply time range filter
-    let generationTimeMs = rawSamples.timeStats?.generationTimeMs || [];
-    generationTimeMs = getFilteredSamples(generationTimeMs);
+    // Generation Time Chart - Show all filtered backends
     const generationTimeCanvas = document.getElementById('generationTimeChart');
-    if (generationTimeCanvas && generationTimeMs.length > 0) {
+    if (generationTimeCanvas && hasGenerationTime) {
       const ctx = generationTimeCanvas.getContext('2d');
+      const datasets = backendDetails.map((backend, index) => {
+        const generationTimeMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.generationTimeMs || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: `${backend.name || formatUrl(backend.url)} - Generation Time`,
+          data: generationTimeMs,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
       chartInstances.generationTimeChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: generationTimeMs.map((_, i) => `#${i + 1}`),
-          datasets: [{
-            label: `${backend.name || formatUrl(backend.url)} - Generation Time`,
-            data: generationTimeMs,
-            borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3
-          }]
+          labels: backendDetails[0].performanceStats?.rawSamples?.timeStats?.generationTimeMs?.map((_, i) => `#${i + 1}`) || [],
+          datasets
         },
         options: {
           responsive: true,
@@ -2526,7 +2532,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { display: true, position: 'top' },
             tooltip: {
               callbacks: {
-                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} ms`
               }
             }
           },
@@ -2542,25 +2548,28 @@ document.addEventListener('DOMContentLoaded', () => {
       generationTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No generation time data available yet</p>';
     }
 
-    // Network Latency Chart - Apply time range filter
-    let networkLatencyMs = rawSamples.timeStats?.networkLatencyMs || [];
-    networkLatencyMs = getFilteredSamples(networkLatencyMs);
+    // Network Latency Chart - Show all filtered backends
     const networkLatencyCanvas = document.getElementById('networkLatencyChart');
-    if (networkLatencyCanvas && networkLatencyMs.length > 0) {
+    if (networkLatencyCanvas && hasNetworkLatency) {
       const ctx = networkLatencyCanvas.getContext('2d');
+      const datasets = backendDetails.map((backend, index) => {
+        const networkLatencyMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.networkLatencyMs || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: `${backend.name || formatUrl(backend.url)} - Network Latency`,
+          data: networkLatencyMs,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
       chartInstances.networkLatencyChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: networkLatencyMs.map((_, i) => `#${i + 1}`),
-          datasets: [{
-            label: `${backend.name || formatUrl(backend.url)} - Network Latency`,
-            data: networkLatencyMs,
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3
-          }]
+          labels: backendDetails[0].performanceStats?.rawSamples?.timeStats?.networkLatencyMs?.map((_, i) => `#${i + 1}`) || [],
+          datasets
         },
         options: {
           responsive: true,
@@ -2569,7 +2578,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { display: true, position: 'top' },
             tooltip: {
               callbacks: {
-                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} ms`
               }
             }
           },
@@ -2585,25 +2594,28 @@ document.addEventListener('DOMContentLoaded', () => {
       networkLatencyCanvas.parentElement.innerHTML = '<p class="chart-no-data">No network latency data available yet</p>';
     }
 
-    // Prompt Processing Chart - Apply time range filter
-    let promptProcessingMs = rawSamples.timeStats?.promptProcessingTimeMs || [];
-    promptProcessingMs = getFilteredSamples(promptProcessingMs);
+    // Prompt Processing Chart - Show all filtered backends
     const promptProcessingCanvas = document.getElementById('promptProcessingChart');
-    if (promptProcessingCanvas && promptProcessingMs.length > 0) {
+    if (promptProcessingCanvas && hasPromptProcessing) {
       const ctx = promptProcessingCanvas.getContext('2d');
+      const datasets = backendDetails.map((backend, index) => {
+        const promptProcessingMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.promptProcessingTimeMs || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: `${backend.name || formatUrl(backend.url)} - Prompt Processing`,
+          data: promptProcessingMs,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
       chartInstances.promptProcessingChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: promptProcessingMs.map((_, i) => `#${i + 1}`),
-          datasets: [{
-            label: `${backend.name || formatUrl(backend.url)} - Prompt Processing`,
-            data: promptProcessingMs,
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3
-          }]
+          labels: backendDetails[0].performanceStats?.rawSamples?.timeStats?.promptProcessingTimeMs?.map((_, i) => `#${i + 1}`) || [],
+          datasets
         },
         options: {
           responsive: true,
@@ -2612,7 +2624,7 @@ document.addEventListener('DOMContentLoaded', () => {
             legend: { display: true, position: 'top' },
             tooltip: {
               callbacks: {
-                label: (ctx) => `Request ${ctx.label}: ${ctx.parsed.y.toFixed(0)} ms`
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)} ms`
               }
             }
           },
@@ -2803,55 +2815,50 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Total Rate Over Time Chart
+    // Total Rate Over Time Chart - Show all filtered backends
     cleanupChart('totalRateChart');
     const totalRateCanvas = document.getElementById('totalRateChart');
     if (totalRateCanvas && backends.length > 0) {
-      const backend = backends[0];
-      const samples = backend.performanceStats.rawSamples.rateStats;
-      const totalRate = samples?.totalRate || [];
-
-      if (totalRate.length > 0) {
-        const ctx = totalRateCanvas.getContext('2d');
-        chartInstances.totalRateChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: totalRate.map((_, i) => `#${i + 1}`),
-            datasets: [{
-              label: 'Total Rate Over Requests',
-              data: totalRate,
-              borderColor: 'rgba(236, 72, 153, 0.8)',
-              backgroundColor: 'rgba(236, 72, 153, 0.1)',
-              borderWidth: 2,
-              fill: true,
-              tension: 0.3
-            }]
-          },
+      const ctx = totalRateCanvas.getContext('2d');
+      const datasets = backends.map((backend, index) => {
+        const samples = backend.performanceStats.rawSamples.rateStats;
+        const totalRate = getFilteredSamples(samples?.totalRate || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: `${backend.name || formatUrl(backend.url)} - Total Rate`,
+          data: totalRate,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 236) % 256}, 72, 153, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
+      chartInstances.totalRateChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: backends[0].performanceStats?.rawSamples?.rateStats?.totalRate?.map((_, i) => `#${i + 1}`) || [],
+          datasets
+        },
           options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: true, position: 'top' }
-            },
-            scales: {
-              y: {
-                beginAtZero: true,
-                title: { display: true, text: 'Tokens/Second' }
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                  legend: { display: true, position: 'top' }
+              },
+              scales: {
+                  y: {
+                      beginAtZero: true,
+                      title: { display: true, text: 'Tokens/Second' }
+                  }
               }
-            }
           }
-        });
-      } else {
+      });
+    } else {
         totalRateCanvas.parentElement.innerHTML = '<p class="chart-no-data">No rate data available yet</p>';
-      }
     }
   }
 
-  /**
-   * Render health and cache efficiency charts
-   * Uses incremental updates pattern - returns early if DOM doesn't exist
-   * @param {Object} statsData - Statistics data from API
-   */
   /**
    * Create a gauge chart for backend utilization
    * Uses a doughnut chart with masked second dataset to create gauge effect
@@ -3090,7 +3097,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Queue Utilization Gauge (Doughnut Chart)
     cleanupChart('queueUtilizationChart');
     const queueUtilCanvas = document.getElementById('queueUtilizationChart');
-    if (queueUtilCanvas) {
+    if (queueUtilCanvas && queueStats) {
       const currentDepth = queueStats.depth || 0;
       const maxQueueSize = queueStats.maxQueueSize || 100;
       const utilization = maxQueueSize > 0 ? (currentDepth / maxQueueSize) * 100 : 0;

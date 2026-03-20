@@ -290,12 +290,21 @@ class ApiClient {
 
     const poll = async () => {
       try {
-        const [healthData, statsData, backendsData, queueStatsData] = await Promise.all([
+        // Fetch all data, but handle queue stats gracefully since it may not be available
+        const [healthData, statsData, backendsData] = await Promise.all([
           this.getHealth(),
           this.getStats(),
-          this.getBackends(),
-          this.getQueueStats()
+          this.getBackends()
         ]);
+
+        // Get queue stats separately since it may fail when debug mode is disabled
+        let queueStatsData = { success: false, error: 'Debug mode not enabled' };
+        try {
+          queueStatsData = await this.getQueueStats();
+        } catch (e) {
+          // Queue stats not available - this is expected when debug mode is disabled
+          queueStatsData = { success: false, data: null };
+        }
 
         this.dataCache = {
           health: healthData.data,
