@@ -638,6 +638,63 @@ Add more backends without downtime:
 
 ---
 
+## Project Structure
+
+```
+llm_balancer/
+├── llm-balancer/                 # Backend load balancer
+│   ├── index.js                  # API server entry point
+│   ├── balancer.js               # Priority-based load balancer with FIFO queue
+│   ├── backend-pool.js           # Backend pool with filtering
+│   ├── backend-selector.js       # Backend selection algorithm
+│   ├── request-processor.js      # Request forwarding logic
+│   ├── health-check.js           # Health monitoring
+│   ├── config.js                 # Configuration loader
+│   ├── backends/                 # Backend implementations
+│   │   ├── Backend.js            # Backend class
+│   │   └── BackendInfo.js        # Backend capability detection
+│   └── interfaces/               # Interface definitions
+│       ├── IHealthCheck.js       # Health check interface
+│       └── IModelList.js         # Model list interface
+├── frontend/                     # Dashboard frontend
+│   ├── public/                   # Static assets (HTML, CSS, JS)
+│   ├── config.js                 # Frontend configuration
+│   └── index.js                  # Express server for dashboard
+├── docker/                       # Docker configuration
+│   ├── balancer/
+│   │   └── Dockerfile
+│   └── docker-compose.yml
+├── docs/                         # Documentation
+├── llm-balancer/                 # Backend load balancer
+│   ├── index.js                  # Load balancer server
+│   ├── balancer.js               # Priority-based balancer with FIFO queue
+│   ├── health-check.js           # Health checker
+│   ├── request-processor.js      # Request forwarding logic
+│   ├── config.js                 # Configuration loader
+│   ├── backends/                 # Backend-related classes
+│   ├── interfaces/               # Interface definitions
+│   └── tests/unit/               # Unit tests
+├── frontend/                     # Dashboard frontend
+│   ├── public/                   # Static assets
+│   ├── config.js                 # Frontend configuration
+│   └── index.js                  # Express server
+├── docker/                       # Docker configuration
+│   ├── balancer/
+│   │   └── Dockerfile
+│   └── docker-compose.yml
+├── docs/                         # Documentation
+│   ├── OVERVIEW.md
+│   ├── user/
+│   ├── api/
+│   ├── developer/
+│   └── components/
+├── README.md                     # Project overview
+├── DOCUMENTATION_GUIDE.md        # Documentation navigation
+└── CLAUDE.md                     # Project instructions
+```
+
+---
+
 ## Related Documentation
 
 - [Class Hierarchy](CLASSES.md#class-hierarchy) - Detailed class documentation

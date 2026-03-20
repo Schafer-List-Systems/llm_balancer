@@ -3603,18 +3603,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Add utilization value overlay
+      // Add utilization value overlay (only if not already added)
+      // CRITICAL FIX: Use DOM manipulation to preserve canvas and Chart.js instance
       const utilizationContainer = queueUtilCanvas.parentElement;
-      utilizationContainer.innerHTML = `
-        <div class="queue-utilization-chart">
-          <canvas id="queueUtilizationChart"></canvas>
-          <div class="queue-utilization-value">
-            <div class="queue-utilization-percentage">${utilization.toFixed(0)}%</div>
-            <div class="queue-utilization-label">Utilization</div>
-            <div class="queue-utilization-status ${statusText.toLowerCase()}">${statusText} Load</div>
-          </div>
-        </div>
-      `;
+      const overlayExists = utilizationContainer.querySelector('.queue-utilization-value');
+
+      if (!overlayExists) {
+        // Create overlay elements and append WITHOUT destroying canvas
+        const overlay = document.createElement('div');
+        overlay.className = 'queue-utilization-value';
+        overlay.innerHTML = `
+          <div class="queue-utilization-percentage">${utilization.toFixed(0)}%</div>
+          <div class="queue-utilization-label">Utilization</div>
+          <div class="queue-utilization-status ${statusText.toLowerCase()}">${statusText} Load</div>
+        `;
+        utilizationContainer.appendChild(overlay);
+        // Position overlay over canvas
+        overlay.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          text-align: center;
+          pointer-events: none;
+          z-index: 10;
+        `;
+      } else {
+        // Update existing overlay with new values - no DOM recreation
+        const percentageEl = utilizationContainer.querySelector('.queue-utilization-percentage');
+        const statusEl = utilizationContainer.querySelector('.queue-utilization-status');
+        if (percentageEl) percentageEl.textContent = `${utilization.toFixed(0)}%`;
+        if (statusEl) {
+          statusEl.className = `queue-utilization-status ${statusText.toLowerCase()}`;
+          statusEl.textContent = `${statusText} Load`;
+        }
+      }
     }
 
     // Queue Wait Time Distribution Histogram

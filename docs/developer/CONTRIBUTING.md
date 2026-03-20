@@ -257,6 +257,8 @@ docs/
 
 ### Writing Documentation
 
+When contributing documentation, follow the **[Documentation Guide](DOCUMENTATION_GUIDE.md)** which defines the documentation structure, role-based separation, and best practices.
+
 - Use clear, concise language
 - Include code examples
 - Use proper markdown formatting
