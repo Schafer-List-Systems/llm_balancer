@@ -295,10 +295,18 @@ document.addEventListener('DOMContentLoaded', () => {
                   <!-- Health & Cache Charts -->
                   <section id="healthMetricsSection" class="stats-section">
                     <h3 class="section-title">💚 Health & Cache Metrics</h3>
-                    <div class="chart-grid">
-                      <div class="chart-container">
-                        <div class="chart-title">🎯 Cache Hit/Miss Ratio</div>
-                        <canvas id="cacheEfficiencyChart" class="chart-canvas"></canvas>
+                    <div class="health-metrics-grid">
+                      <div class="health-metrics-card">
+                        <div class="chart-title">🎯 Cache Hit Rate by Backend</div>
+                        <div class="chart-container">
+                          <canvas id="cacheEfficiencyChart" class="chart-canvas"></canvas>
+                        </div>
+                      </div>
+                      <div class="health-metrics-card">
+                        <div class="chart-title">📊 Cached Prompt Tokens Over Time</div>
+                        <div class="chart-container">
+                          <canvas id="cachedTokensLineChart" class="chart-canvas"></canvas>
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -3473,6 +3481,152 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (cacheChartCanvas) {
       cacheChartCanvas.parentElement.innerHTML = '<p class="chart-no-data">No cache data available yet</p>';
     }
+
+    // Cached Tokens Line Chart
+    renderCachedTokensLineChart(statsData);
+  }
+
+  /**
+   * Render cached tokens line chart showing cached tokens per request over time
+   * @param {Object} statsData - Statistics data from API
+   */
+  function renderCachedTokensLineChart(statsData) {
+    // Return early if section not active
+    if (!isChartSectionActive()) return;
+
+    const backendDetails = statsData?.backendDetails || [];
+    if (backendDetails.length === 0) return;
+
+    cleanupChart('cachedTokensLineChart');
+    const canvas = document.getElementById('cachedTokensLineChart');
+    if (!canvas) return;
+
+    // Get backends with token data
+    const backendsWithTokenData = backendDetails.filter(b =>
+      b.performanceStats?.rawSamples?.tokenStats?.promptTokens?.length > 0
+    );
+
+    if (backendsWithTokenData.length === 0) {
+      canvas.parentElement.innerHTML = '<p class="chart-no-data">No token data available yet</p>';
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    // Generate colors for each backend
+    const generateColor = (index) => {
+      const colors = [
+        'rgba(245, 158, 11, 1)',   // amber
+        'rgba(59, 130, 246, 1)',   // blue
+        'rgba(16, 185, 129, 1)',   // green
+        'rgba(239, 68, 68, 1)',    // red
+        'rgba(139, 92, 246, 1)',   // purple
+        'rgba(244, 114, 182, 1)',  // pink
+        'rgba(6, 182, 212, 1)',    // cyan
+        'rgba(168, 85, 247, 1)',   // violet
+      ];
+      return colors[index % colors.length];
+    };
+
+    // Prepare data for each backend with timestamps
+    const datasets = backendsWithTokenData.map((backend, idx) => {
+      const promptTokens = backend.performanceStats.rawSamples.tokenStats.promptTokens || [];
+      const nonCachedTokens = backend.performanceStats.rawSamples.tokenStats.nonCachedPromptTokens || [];
+
+      // Calculate cached tokens per request
+      const cachedTokens = promptTokens.map((pt, i) => pt - (nonCachedTokens[i] || 0));
+
+      // Generate timestamps based on request count
+      // We'll use a time range starting from current time going backwards
+      const baseTime = Date.now();
+      const timestamps = cachedTokens.map((_, i) => {
+        // Spread requests over time - each request ~100ms apart
+        return new Date(baseTime - (cachedTokens.length - 1 - i) * 100);
+      });
+
+      return {
+        label: getBackendName(backend),
+        data: cachedTokens.map((val, i) => ({
+          x: timestamps[i],
+          y: val
+        })),
+        borderColor: generateColor(idx),
+        backgroundColor: generateColor(idx).replace('1)', '0.5)'),
+        tension: 0.1,
+        pointRadius: 2,
+        pointHoverRadius: 4
+      };
+    });
+
+    chartInstances.cachedTokensLineChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              boxWidth: 10,
+              boxHeight: 10
+            }
+          },
+          title: {
+            display: true,
+            text: 'Cached Tokens per Request'
+          },
+          tooltip: {
+            callbacks: {
+              title: (context) => {
+                if (context.length > 0) {
+                  const ts = new Date(context[0].parsed.x);
+                  return ts.toLocaleTimeString();
+                }
+                return '';
+              },
+              label: (context) => {
+                return `${context.dataset.label}: ${context.parsed.y} tokens`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'second',
+              displayFormats: {
+                second: 'HH:mm:ss.SSS'
+              }
+            },
+            title: {
+              display: true,
+              text: 'Time'
+            },
+            adapters: {
+              date: {
+                timezone: 'UTC'
+              }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Cached Tokens'
+            }
+          }
+        }
+      }
+    });
   }
 
   /**

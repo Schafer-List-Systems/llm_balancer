@@ -3383,6 +3383,21 @@ body.dark-mode .chart-title {
   margin-top: 1.5rem;
 }
 
+/* Health Metrics Two-Column Grid */
+.health-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.health-metrics-card {
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
 /* Utilization Gauges Container */
 #utilizationGauges {
   display: flex;
