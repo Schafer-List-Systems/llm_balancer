@@ -1973,10 +1973,12 @@ document.addEventListener('DOMContentLoaded', () => {
         cacheStatusClass = 'error';
       }
 
+      const backendName = getBackendName(backend);
+      const hasCachedPrompts = pc.cachedPrompts && pc.cachedPrompts.length > 0;
       return `
         <div class="backend-stats-card">
           <div class="backend-stats-header">
-            <h3 class="backend-name">${formatUrl(backend.url)}</h3>
+            <h3 class="backend-name">${backendName}</h3>
             <span class="backend-request-count">Requests: ${backend.requestCount || 0}</span>
             <div class="backend-actions">
               <button class="cache-clear-btn-inline button button-secondary button-small" data-backend-url="${backend.url}" data-type="cache">Clear Cache</button>
@@ -2086,18 +2088,26 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
 
           <!-- Cached Prompts -->
-          ${pc.cachedPrompts && pc.cachedPrompts.length > 0 ? `
+          ${hasCachedPrompts ? `
             <div class="prompt-cache-prompts">
-              <h4 class="section-header">Cached Prompts (${pc.cachedPrompts.length})</h4>
-              ${pc.cachedPrompts.map((cp, idx) => `
-                <div class="cached-prompt-item">
-                  <div class="cached-prompt-header">
-                    <span class="cached-prompt-model">${cp.model}</span>
-                    <span class="cached-prompt-info">Accessed: ${new Date(cp.lastAccessed).toLocaleTimeString()} | Hits: ${cp.hitCount}</span>
+              <div class="cached-prompts-header">
+                <h4 class="section-header">Cached Prompts (${pc.cachedPrompts.length})</h4>
+                <button class="button button-secondary button-small toggle-cached-prompts" data-backend-url="${backend.url}" aria-expanded="true">
+                  <span class="toggle-icon">▲</span>
+                  <span class="toggle-text">Hide Cached Prompts</span>
+                </button>
+              </div>
+              <div class="cached-prompts-content" data-backend-url="${backend.url}" style="display: none;">
+                ${pc.cachedPrompts.map((cp, idx) => `
+                  <div class="cached-prompt-item">
+                    <div class="cached-prompt-header">
+                      <span class="cached-prompt-model">${cp.model}</span>
+                      <span class="cached-prompt-info">Accessed: ${new Date(cp.lastAccessed).toLocaleTimeString()} | Hits: ${cp.hitCount}</span>
+                    </div>
+                    <div class="cached-prompt-content">${formatJsonDisplay(cp.prompt)}</div>
                   </div>
-                  <div class="cached-prompt-content">${formatJsonDisplay(cp.prompt)}</div>
-                </div>
-              `).join('')}
+                `).join('')}
+              </div>
             </div>
           ` : ''}
         </div>
@@ -2117,6 +2127,29 @@ document.addEventListener('DOMContentLoaded', () => {
           clearBackendStats(backendUrl);
         } else {
           clearBackendCache(backendUrl);
+        }
+      });
+    });
+
+    // Add event listener for toggle cached prompts buttons
+    container.querySelectorAll('.toggle-cached-prompts').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const backendUrl = btn.dataset.backendUrl;
+        const content = container.querySelector(`.cached-prompts-content[data-backend-url="${backendUrl}"]`);
+        const icon = btn.querySelector('.toggle-icon');
+        const toggleText = btn.querySelector('.toggle-text');
+        const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+        if (isExpanded) {
+          content.style.display = 'none';
+          icon.textContent = '▼';
+          toggleText.textContent = 'Show Cached Prompts';
+          btn.setAttribute('aria-expanded', 'false');
+        } else {
+          content.style.display = 'block';
+          icon.textContent = '▲';
+          toggleText.textContent = 'Hide Cached Prompts';
+          btn.setAttribute('aria-expanded', 'true');
         }
       });
     });
