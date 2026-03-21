@@ -3513,54 +3513,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const ctx = canvas.getContext('2d');
 
-    // Generate colors for each backend
-    const generateColor = (index) => {
-      const colors = [
-        'rgba(245, 158, 11, 1)',   // amber
-        'rgba(59, 130, 246, 1)',   // blue
-        'rgba(16, 185, 129, 1)',   // green
-        'rgba(239, 68, 68, 1)',    // red
-        'rgba(139, 92, 246, 1)',   // purple
-        'rgba(244, 114, 182, 1)',  // pink
-        'rgba(6, 182, 212, 1)',    // cyan
-        'rgba(168, 85, 247, 1)',   // violet
-      ];
-      return colors[index % colors.length];
-    };
+    // Consistent color palette used across all charts
+    const backendColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
 
-    // Prepare data for each backend with timestamps
+    // Find max number of requests across all backends to determine x-axis range
+    const maxRequests = Math.max(...backendsWithTokenData.map(b =>
+      b.performanceStats?.rawSamples?.tokenStats?.promptTokens?.length || 0
+    ));
+
+    // Generate x-axis labels (request numbers)
+    const xLabels = Array.from({ length: maxRequests }, (_, i) => `Req ${i + 1}`);
+
+    // Prepare data for each backend - use request index as x-axis
     const datasets = backendsWithTokenData.map((backend, idx) => {
       const promptTokens = backend.performanceStats.rawSamples.tokenStats.promptTokens || [];
       const nonCachedTokens = backend.performanceStats.rawSamples.tokenStats.nonCachedPromptTokens || [];
 
-      // Calculate cached tokens per request
-      const cachedTokens = promptTokens.map((pt, i) => pt - (nonCachedTokens[i] || 0));
+      // Calculate cached tokens per request (pad with null if backend has fewer requests)
+      const cachedTokens = [];
+      for (let i = 0; i < maxRequests; i++) {
+        if (i < promptTokens.length) {
+          cachedTokens.push(promptTokens[i] - (nonCachedTokens[i] || 0));
+        } else {
+          cachedTokens.push(null);  // No data for this request
+        }
+      }
 
-      // Generate timestamps based on request count
-      // We'll use a time range starting from current time going backwards
-      const baseTime = Date.now();
-      const timestamps = cachedTokens.map((_, i) => {
-        // Spread requests over time - each request ~100ms apart
-        return new Date(baseTime - (cachedTokens.length - 1 - i) * 100);
-      });
-
+      const color = backendColors[idx % backendColors.length];
       return {
         label: getBackendName(backend),
-        data: cachedTokens.map((val, i) => ({
-          x: timestamps[i],
-          y: val
-        })),
-        borderColor: generateColor(idx),
-        backgroundColor: generateColor(idx).replace('1)', '0.5)'),
-        tension: 0.1,
-        pointRadius: 2,
-        pointHoverRadius: 4
+        data: cachedTokens,
+        borderColor: color,
+        backgroundColor: `rgba(${(idx * 60 + 59) % 256}, ${(idx * 40 + 130) % 256}, ${(idx * 30 + 246) % 256}, 0.1)`,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3
       };
     });
 
     chartInstances.cachedTokensLineChart = new Chart(ctx, {
       type: 'line',
       data: {
+        labels: xLabels,
         datasets: datasets
       },
       options: {
@@ -3587,8 +3581,7 @@ document.addEventListener('DOMContentLoaded', () => {
             callbacks: {
               title: (context) => {
                 if (context.length > 0) {
-                  const ts = new Date(context[0].parsed.x);
-                  return ts.toLocaleTimeString();
+                  return `Request #${context[0].parsed.x}`;
                 }
                 return '';
               },
@@ -3600,21 +3593,9 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         scales: {
           x: {
-            type: 'time',
-            time: {
-              unit: 'second',
-              displayFormats: {
-                second: 'HH:mm:ss.SSS'
-              }
-            },
             title: {
               display: true,
-              text: 'Time'
-            },
-            adapters: {
-              date: {
-                timezone: 'UTC'
-              }
+              text: 'Request Number'
             }
           },
           y: {
