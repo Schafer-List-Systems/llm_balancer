@@ -3076,6 +3076,111 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (promptProcessingCanvas) {
       promptProcessingCanvas.parentElement.innerHTML = '<p class="chart-no-data">No prompt processing data available yet</p>';
     }
+
+    // Request Time Breakdown (stacked bar chart)
+    cleanupChart('requestTimeBreakdown');
+    const requestTimeCanvas = document.getElementById('totalTimeBoxPlot');
+    if (requestTimeCanvas && backendDetails.length > 0) {
+      // Filter for backends with streaming time data (network, prompt, generation)
+      const backends = backendDetails.filter(b =>
+        b.performanceStats?.rawSamples?.timeStats?.networkLatencyMs?.length > 0
+      );
+
+      if (backends.length > 0) {
+        const ctx = requestTimeCanvas.getContext('2d');
+
+        // Calculate average time for each component per backend
+        const backendStats = backends.map(backend => {
+          const timeStats = backend.performanceStats.rawSamples.timeStats;
+
+          const networkLatencies = timeStats.networkLatencyMs || [];
+          const promptTimes = timeStats.promptProcessingTimeMs || [];
+          const generationTimes = timeStats.generationTimeMs || [];
+
+          const avgNetwork = networkLatencies.length > 0
+            ? networkLatencies.reduce((a, b) => a + b, 0) / networkLatencies.length
+            : 0;
+          const avgPrompt = promptTimes.length > 0
+            ? promptTimes.reduce((a, b) => a + b, 0) / promptTimes.length
+            : 0;
+          const avgGeneration = generationTimes.length > 0
+            ? generationTimes.reduce((a, b) => a + b, 0) / generationTimes.length
+            : 0;
+
+          return {
+            name: getBackendName(backend),
+            network: avgNetwork,
+            prompt: avgPrompt,
+            generation: avgGeneration,
+            total: avgNetwork + avgPrompt + avgGeneration
+          };
+        });
+
+        chartInstances.requestTimeBreakdown = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: backendStats.map(s => s.name),
+            datasets: [
+              {
+                label: 'Network',
+                data: backendStats.map(s => s.network),
+                backgroundColor: 'rgba(245, 158, 11, 0.8)',
+                borderColor: 'rgba(245, 158, 11, 1)',
+                borderWidth: 1,
+                stack: 'RequestTime'
+              },
+              {
+                label: 'Prompt Processing',
+                data: backendStats.map(s => s.prompt),
+                backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 1,
+                stack: 'RequestTime'
+              },
+              {
+                label: 'Generation',
+                data: backendStats.map(s => s.generation),
+                backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                borderColor: 'rgba(16, 185, 129, 1)',
+                borderWidth: 1,
+                stack: 'RequestTime'
+              }
+            ]
+          },
+          options: {
+            indexAxis: 'x',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: true, position: 'top' },
+              tooltip: {
+                callbacks: {
+                  title: (context) => `Backend: ${context[0].label}`,
+                  label: (context) => {
+                    const stat = backendStats[context.datasetIndex];
+                    if (stat) {
+                      return `${context.dataset.label}: ${Math.round(context.raw)}ms`;
+                    }
+                    return '';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                stacked: true
+              },
+              y: {
+                stacked: true,
+                title: { display: true, text: 'Time (ms)' }
+              }
+            }
+          }
+        });
+      } else {
+        requestTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No streaming data available yet (network/prompt/generation metrics)</p>';
+      }
+    }
   }
 
   /**
