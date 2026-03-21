@@ -3107,12 +3107,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const arr = samples?.completionTokens || [];
         return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
       });
-      const totalTokens = backends.map(b => {
-        const samples = b.performanceStats.rawSamples.tokenStats;
-        const arr = samples?.totalTokens || [];
-        return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-      });
-
       const ctx = tokenComparisonCanvas.getContext('2d');
       chartInstances.tokenComparisonChart = new Chart(ctx, {
         type: 'bar',
@@ -3124,21 +3118,16 @@ document.addEventListener('DOMContentLoaded', () => {
               data: promptTokens,
               backgroundColor: 'rgba(59, 130, 246, 0.8)',
               borderColor: 'rgba(59, 130, 246, 1)',
-              borderWidth: 1
+              borderWidth: 1,
+              yAxisID: 'y'
             },
             {
               label: 'Avg Completion Tokens',
               data: completionTokens,
               backgroundColor: 'rgba(16, 185, 129, 0.8)',
               borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 1
-            },
-            {
-              label: 'Avg Total Tokens',
-              data: totalTokens,
-              backgroundColor: 'rgba(107, 114, 128, 0.8)',
-              borderColor: 'rgba(107, 114, 128, 1)',
-              borderWidth: 1
+              borderWidth: 1,
+              yAxisID: 'y1'
             }
           ]
         },
@@ -3151,7 +3140,16 @@ document.addEventListener('DOMContentLoaded', () => {
           scales: {
             y: {
               beginAtZero: true,
-              title: { display: true, text: 'Average Token Count' }
+              title: { display: true, text: 'Avg Prompt Tokens' },
+              ticks: { color: '#3b82f6' },
+              grid: { color: (ctx) => ctx.tick.value === 0 ? '#4b5563' : '#374151' }
+            },
+            y1: {
+              beginAtZero: true,
+              position: 'right',
+              title: { display: true, text: 'Avg Completion Tokens' },
+              ticks: { color: '#10b981' },
+              grid: { drawOnChartArea: false }
             }
           }
         }
