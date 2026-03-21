@@ -3628,9 +3628,10 @@ body.dark-mode .percentile-table td {
   border-bottom-color: #334155;
 }
 
-/* Token Comparison Charts */
+/* Token Metrics Chart Heights */
+.token-over-time-chart,
 .token-comparison-chart {
-  min-height: 350px;
+  min-height: 300px;
 }
 
 /* Rate Comparison Charts */

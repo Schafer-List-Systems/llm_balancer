@@ -266,13 +266,21 @@ document.addEventListener('DOMContentLoaded', () => {
                   <section id="tokenMetricsSection" class="stats-section">
                     <h3 class="section-title">📊 Token Metrics</h3>
                     <div class="chart-grid">
+                      <div class="chart-container token-over-time-chart">
+                        <div class="chart-title">📝 Prompt Tokens Over Requests</div>
+                        <canvas id="promptTokensLineChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container token-over-time-chart">
+                        <div class="chart-title">✨ Completion Tokens Over Requests</div>
+                        <canvas id="completionTokensLineChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container token-over-time-chart">
+                        <div class="chart-title">📊 Total Tokens Over Requests</div>
+                        <canvas id="totalTokensLineChart" class="chart-canvas"></canvas>
+                      </div>
                       <div class="chart-container token-comparison-chart">
                         <div class="chart-title">🔢 Token Count Comparison (by Backend)</div>
                         <canvas id="tokenComparisonChart" class="chart-canvas"></canvas>
-                      </div>
-                      <div class="chart-container">
-                        <div class="chart-title">🍩 Token Distribution (Per Backend)</div>
-                        <canvas id="tokenDistributionChart" class="chart-canvas"></canvas>
                       </div>
                     </div>
                   </section>
@@ -3156,62 +3164,239 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Token Distribution Chart (Per Backend) - Bar chart comparing all backends
-    cleanupChart('tokenDistributionChart');
-    const tokenDistributionCanvas = document.getElementById('tokenDistributionChart');
-    if (tokenDistributionCanvas && backends.length > 0) {
-      const ctx = tokenDistributionCanvas.getContext('2d');
+    // Prompt Tokens Over Time Chart
+    renderPromptTokensLineChart(backends);
 
-      // Calculate average token counts for each backend
-      const promptTokens = backends.map(b => {
-        const samples = b.performanceStats.rawSamples.tokenStats;
-        const prompt = samples?.promptTokens || [];
-        return prompt.length > 0 ? prompt.reduce((a, b) => a + b, 0) / prompt.length : 0;
-      });
+    // Completion Tokens Over Time Chart
+    renderCompletionTokensLineChart(backends);
 
-      const completionTokens = backends.map(b => {
-        const samples = b.performanceStats.rawSamples.tokenStats;
-        const completion = samples?.completionTokens || [];
-        return completion.length > 0 ? completion.reduce((a, b) => a + b, 0) / completion.length : 0;
-      });
+    // Total Tokens Over Time Chart
+    renderTotalTokensLineChart(backends);
+  }
 
-      chartInstances.tokenDistributionChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: backends.map(b => getBackendName(b)),
-          datasets: [
-            {
-              label: 'Avg Prompt Tokens',
-              data: promptTokens,
-              backgroundColor: 'rgba(59, 130, 246, 0.8)',
-              borderColor: 'rgba(59, 130, 246, 1)',
-              borderWidth: 1
-            },
-            {
-              label: 'Avg Completion Tokens',
-              data: completionTokens,
-              backgroundColor: 'rgba(16, 185, 129, 0.8)',
-              borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 1
-            }
-          ]
+  /**
+   * Render Prompt Tokens Over Time line chart
+   * @param {Array} backends - Filtered backend details
+   */
+  function renderPromptTokensLineChart(backends) {
+    const canvas = document.getElementById('promptTokensLineChart');
+    if (!canvas) return;
+
+    cleanupChart('promptTokensLineChart');
+    const ctx = canvas.getContext('2d');
+
+    // Get request data for all backends
+    const requestData = backends.map(backend => {
+      const samples = backend.performanceStats.rawSamples.tokenStats;
+      const promptTokens = samples?.promptTokens || [];
+
+      // Generate request labels
+      const labels = promptTokens.map((_, i) => `#${i + 1}`);
+
+      return {
+        name: getBackendName(backend),
+        labels,
+        data: promptTokens
+      };
+    }).filter(b => b.data.length > 0);
+
+    if (requestData.length === 0) {
+      canvas.parentElement.innerHTML = '<p class="chart-no-data">No token data available yet</p>';
+      return;
+    }
+
+    // Find max value for scaling
+    const maxData = Math.max(...requestData.flatMap(b => b.data));
+    const yMax = Math.ceil(maxData * 1.1); // Add 10% headroom
+
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+    const datasets = requestData.map((backend, idx) => ({
+      label: backend.name,
+      data: backend.data,
+      borderColor: colors[idx % colors.length],
+      backgroundColor: `rgba(${(idx * 60 + 59) % 256}, ${(idx * 40 + 130) % 256}, ${(idx * 30 + 246) % 256}, 0.1)`,
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3
+    }));
+
+    chartInstances.promptTokensLineChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: requestData[0].labels,
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true, position: 'top' },
-            title: { display: true, text: 'Average Token Counts Comparison (All Backends)' }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: 'Average Token Count' }
-            }
+        plugins: {
+          legend: { display: true, position: 'top' },
+          title: { display: true, text: 'Prompt Tokens per Request' }
+        },
+        scales: {
+          x: { title: { display: true, text: 'Request Number' } },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Prompt Tokens' },
+            max: yMax
           }
         }
-      });
+      }
+    });
+  }
+
+  /**
+   * Render Completion Tokens Over Time line chart
+   * @param {Array} backends - Filtered backend details
+   */
+  function renderCompletionTokensLineChart(backends) {
+    const canvas = document.getElementById('completionTokensLineChart');
+    if (!canvas) return;
+
+    cleanupChart('completionTokensLineChart');
+    const ctx = canvas.getContext('2d');
+
+    // Get request data for all backends
+    const requestData = backends.map(backend => {
+      const samples = backend.performanceStats.rawSamples.tokenStats;
+      const completionTokens = samples?.completionTokens || [];
+
+      // Generate request labels
+      const labels = completionTokens.map((_, i) => `#${i + 1}`);
+
+      return {
+        name: getBackendName(backend),
+        labels,
+        data: completionTokens
+      };
+    }).filter(b => b.data.length > 0);
+
+    if (requestData.length === 0) {
+      canvas.parentElement.innerHTML = '<p class="chart-no-data">No token data available yet</p>';
+      return;
     }
+
+    // Find max value for scaling
+    const maxData = Math.max(...requestData.flatMap(b => b.data));
+    const yMax = maxData > 0 ? Math.ceil(maxData * 1.1) : 500; // Add 10% headroom or default to 500
+
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+    const datasets = requestData.map((backend, idx) => ({
+      label: backend.name,
+      data: backend.data,
+      borderColor: colors[idx % colors.length],
+      backgroundColor: `rgba(${(idx * 60 + 59) % 256}, ${(idx * 40 + 130) % 256}, ${(idx * 30 + 246) % 256}, 0.1)`,
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3
+    }));
+
+    chartInstances.completionTokensLineChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: requestData[0].labels,
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: { display: true, position: 'top' },
+          title: { display: true, text: 'Completion Tokens per Request' }
+        },
+        scales: {
+          x: { title: { display: true, text: 'Request Number' } },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Completion Tokens' },
+            max: yMax
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Render Total Tokens Over Time line chart
+   * @param {Array} backends - Filtered backend details
+   */
+  function renderTotalTokensLineChart(backends) {
+    const canvas = document.getElementById('totalTokensLineChart');
+    if (!canvas) return;
+
+    cleanupChart('totalTokensLineChart');
+    const ctx = canvas.getContext('2d');
+
+    // Get request data for all backends
+    const requestData = backends.map(backend => {
+      const samples = backend.performanceStats.rawSamples.tokenStats;
+      const totalTokens = samples?.totalTokens || [];
+
+      // Generate request labels
+      const labels = totalTokens.map((_, i) => `#${i + 1}`);
+
+      return {
+        name: getBackendName(backend),
+        labels,
+        data: totalTokens
+      };
+    }).filter(b => b.data.length > 0);
+
+    if (requestData.length === 0) {
+      canvas.parentElement.innerHTML = '<p class="chart-no-data">No token data available yet</p>';
+      return;
+    }
+
+    // Find max value for scaling
+    const maxData = Math.max(...requestData.flatMap(b => b.data));
+    const yMax = Math.ceil(maxData * 1.1); // Add 10% headroom
+
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+    const datasets = requestData.map((backend, idx) => ({
+      label: backend.name,
+      data: backend.data,
+      borderColor: colors[idx % colors.length],
+      backgroundColor: `rgba(${(idx * 60 + 59) % 256}, ${(idx * 40 + 130) % 256}, ${(idx * 30 + 246) % 256}, 0.1)`,
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3
+    }));
+
+    chartInstances.totalTokensLineChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: requestData[0].labels,
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: { display: true, position: 'top' },
+          title: { display: true, text: 'Total Tokens per Request' }
+        },
+        scales: {
+          x: { title: { display: true, text: 'Request Number' } },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Total Tokens' },
+            max: yMax
+          }
+        }
+      }
+    });
   }
 
   /**
