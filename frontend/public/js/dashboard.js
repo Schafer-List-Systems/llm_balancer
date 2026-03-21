@@ -3283,7 +3283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalRate = getFilteredSamples(samples?.totalRate || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${getBackendName(backend)} - Total Rate`,
+          label: getBackendName(backend),
           data: totalRate,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 236) % 256}, 72, 153, 0.1)`,
