@@ -3639,6 +3639,11 @@ body.dark-mode .percentile-table td {
   min-height: 300px;
 }
 
+/* Request Time Breakdown Chart */
+.request-time-breakdown-chart {
+  min-height: 300px;
+}
+
 /* Correlation Heatmap */
 .correlation-heatmap {
   min-height: 400px;

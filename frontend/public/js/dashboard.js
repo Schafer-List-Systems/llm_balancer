@@ -259,6 +259,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="chart-title">✍️ Prompt Processing Time Over Requests</div>
                         <canvas id="promptProcessingChart" class="chart-canvas"></canvas>
                       </div>
+                      <div class="chart-container request-time-breakdown-chart">
+                        <div class="chart-title">⏱️ Request Time Breakdown (by Backend)</div>
+                        <canvas id="totalTimeBoxPlot" class="chart-canvas"></canvas>
+                      </div>
                     </div>
                   </section>
 
@@ -323,10 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
                   <section id="distributionSection" class="stats-section">
                     <h3 class="section-title">📈 Distribution & Percentile Charts</h3>
                     <div class="chart-grid">
-                      <div class="chart-container">
-                        <div class="chart-title">⏱️ Request Time Breakdown (by Backend)</div>
-                        <canvas id="totalTimeBoxPlot" class="chart-canvas"></canvas>
-                      </div>
                       <div class="chart-container">
                         <div class="chart-title">⚡ Generation Rate Distribution</div>
                         <canvas id="generationRateHistogram" class="chart-canvas"></canvas>
