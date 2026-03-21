@@ -156,7 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="overview-stats-container">
                 <!-- Overview Cards -->
                 <section class="overview-section">
-                  <h2 class="section-title">Overview <span class="section-subtitle">(System health summary)</span></h2>
                   <div class="overview-cards">
                     <div class="card horizontal">
                       <div class="card-icon">🖥️</div>
@@ -338,9 +337,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Benchmarks Section -->
             <section id="benchmarksSection" class="section-content" data-section="benchmarks">
               <section class="backends-section">
-                <div class="section-header">
-                  <h2 class="section-title">Benchmarks <span class="section-subtitle">(Performance testing for backends)</span></h2>
-                </div>
                 <div id="benchmarkSection" class="benchmark-section">
                   <!-- Single Backend Benchmarks -->
                   <div id="singleBackendBenchmarks" class="benchmark-panel">
@@ -409,9 +405,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Debug Section -->
             <section id="debugSection" class="section-content" data-section="debug">
               <section class="backends-section">
-                <div class="section-header">
-                  <h2 class="section-title">Debug <span class="section-subtitle">(Prompt cache statistics and performance metrics)</span></h2>
-                </div>
                 <div id="debugSectionInner" class="debug-section">
                   <div class="debug-header-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
                     <button id="refreshDebug" class="button button-secondary">Refresh</button>
@@ -450,9 +443,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <!-- Configuration Section -->
             <section id="configurationSection" class="section-content" data-section="configuration">
               <section class="backends-section">
-                <div class="section-header">
-                  <h2 class="section-title">Configuration <span class="section-subtitle">(API endpoint URL for your applications)</span></h2>
-                </div>
                 <div id="configSection" class="config-section">
                   <!-- Configuration will be rendered here -->
                 </div>
