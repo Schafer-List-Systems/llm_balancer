@@ -2092,9 +2092,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="prompt-cache-prompts">
               <div class="cached-prompts-header">
                 <h4 class="section-header">Cached Prompts (${pc.cachedPrompts.length})</h4>
-                <button class="button button-secondary button-small toggle-cached-prompts" data-backend-url="${backend.url}" aria-expanded="true">
-                  <span class="toggle-icon">▲</span>
-                  <span class="toggle-text">Hide Cached Prompts</span>
+                <button class="button button-secondary button-small toggle-cached-prompts" data-backend-url="${backend.url}" aria-expanded="false">
+                  <span class="toggle-icon">▼</span>
+                  <span class="toggle-text">Show Cached Prompts</span>
                 </button>
               </div>
               <div class="cached-prompts-content" data-backend-url="${backend.url}" style="display: none;">
