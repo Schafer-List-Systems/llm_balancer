@@ -3634,8 +3634,9 @@ body.dark-mode .percentile-table td {
   min-height: 300px;
 }
 
-/* Rate Comparison Charts */
-.rate-comparison-chart {
+/* Rate Metrics Chart Heights */
+.rate-comparison-chart,
+.rate-over-time-chart {
   min-height: 300px;
 }
 

@@ -293,13 +293,21 @@ document.addEventListener('DOMContentLoaded', () => {
                   <section id="rateMetricsSection" class="stats-section">
                     <h3 class="section-title">⚡ Rate Metrics</h3>
                     <div class="chart-grid">
-                      <div class="chart-container rate-comparison-chart">
-                        <div class="chart-title">🔄 Generation Rate Comparison (tokens/sec)</div>
-                        <canvas id="generationRateChart" class="chart-canvas"></canvas>
+                      <div class="chart-container rate-over-time-chart">
+                        <div class="chart-title">📝 Prompt Rate Over Requests</div>
+                        <canvas id="promptRateChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container rate-over-time-chart">
+                        <div class="chart-title">✨ Completion Rate Over Requests</div>
+                        <canvas id="completionRateChart" class="chart-canvas"></canvas>
                       </div>
                       <div class="chart-container">
-                        <div class="chart-title">📊 Total Rate Over Time</div>
+                        <div class="chart-title">📊 Total Rate Over Requests</div>
                         <canvas id="totalRateChart" class="chart-canvas"></canvas>
+                      </div>
+                      <div class="chart-container rate-comparison-chart">
+                        <div class="chart-title">🔄 Average Generation Rate (tokens/sec)</div>
+                        <canvas id="generationRateChart" class="chart-canvas"></canvas>
                       </div>
                     </div>
                   </section>
@@ -3456,7 +3464,93 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Total Rate Over Time Chart - Show all filtered backends
+    // Prompt Rate Over Requests Chart
+    cleanupChart('promptRateChart');
+    const promptRateCanvas = document.getElementById('promptRateChart');
+    if (promptRateCanvas && backends.length > 0) {
+      const ctx = promptRateCanvas.getContext('2d');
+      const datasets = backends.map((backend, index) => {
+        const samples = backend.performanceStats.rawSamples.rateStats;
+        const promptRate = getFilteredSamples(samples?.promptRate || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: getBackendName(backend),
+          data: promptRate,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
+      chartInstances.promptRateChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: backends[0].performanceStats?.rawSamples?.rateStats?.promptRate?.map((_, i) => `#${i + 1}`) || [],
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Tokens/Second' }
+            }
+          }
+        }
+      });
+    } else {
+      promptRateCanvas.parentElement.innerHTML = '<p class="chart-no-data">No rate data available yet</p>';
+    }
+
+    // Completion Rate Over Requests Chart
+    cleanupChart('completionRateChart');
+    const completionRateCanvas = document.getElementById('completionRateChart');
+    if (completionRateCanvas && backends.length > 0) {
+      const ctx = completionRateCanvas.getContext('2d');
+      const datasets = backends.map((backend, index) => {
+        const samples = backend.performanceStats.rawSamples.rateStats;
+        const completionRate = getFilteredSamples(samples?.completionRate || []);
+        const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+        return {
+          label: getBackendName(backend),
+          data: completionRate,
+          borderColor: colors[index % colors.length],
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3
+        };
+      });
+      chartInstances.completionRateChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: backends[0].performanceStats?.rawSamples?.rateStats?.completionRate?.map((_, i) => `#${i + 1}`) || [],
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Tokens/Second' }
+            }
+          }
+        }
+      });
+    } else {
+      completionRateCanvas.parentElement.innerHTML = '<p class="chart-no-data">No rate data available yet</p>';
+    }
+
+    // Total Rate Over Requests Chart - Show all filtered backends
     cleanupChart('totalRateChart');
     const totalRateCanvas = document.getElementById('totalRateChart');
     if (totalRateCanvas && backends.length > 0) {
