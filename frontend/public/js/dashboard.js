@@ -3529,6 +3529,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
       });
 
+      const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
       const ctx = generationRateCanvas.getContext('2d');
       chartInstances.generationRateChart = new Chart(ctx, {
         type: 'bar',
@@ -3537,8 +3538,8 @@ document.addEventListener('DOMContentLoaded', () => {
           datasets: [{
             label: 'Avg Generation Rate (tokens/sec)',
             data: rates,
-            backgroundColor: 'rgba(139, 92, 246, 0.8)',
-            borderColor: 'rgba(139, 92, 246, 1)',
+            backgroundColor: backends.map((_, i) => colors[i % colors.length]),
+            borderColor: backends.map((_, i) => colors[i % colors.length]),
             borderWidth: 1
           }]
         },
@@ -3795,6 +3796,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return (cacheStats.hits || 0) + (cacheStats.misses || 0);
       });
 
+      const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+
       chartInstances.cacheEfficiencyChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -3803,22 +3806,8 @@ document.addEventListener('DOMContentLoaded', () => {
             {
               label: 'Cache Hit Rate (%)',
               data: hitRates,
-              backgroundColor: backendDetails.map(b => {
-                const cacheStats = b.promptCacheStats || {};
-                const hits = cacheStats.hits || 0;
-                const misses = cacheStats.misses || 0;
-                const total = hits + misses;
-                const rate = total > 0 ? (hits / total) * 100 : 0;
-                return rate >= 80 ? '#10b981' : (rate >= 50 ? '#f59e0b' : '#ef4444');
-              }),
-              borderColor: backendDetails.map(b => {
-                const cacheStats = b.promptCacheStats || {};
-                const hits = cacheStats.hits || 0;
-                const misses = cacheStats.misses || 0;
-                const total = hits + misses;
-                const rate = total > 0 ? (hits / total) * 100 : 0;
-                return rate >= 80 ? '#059669' : (rate >= 50 ? '#d97706' : '#dc2626');
-              }),
+              backgroundColor: backendDetails.map((_, i) => colors[i % colors.length]),
+              borderColor: backendDetails.map((_, i) => colors[i % colors.length]),
               borderWidth: 1
             }
           ]
