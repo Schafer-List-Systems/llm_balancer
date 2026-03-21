@@ -297,10 +297,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 class="section-title">💚 Health & Cache Metrics</h3>
                     <div class="chart-grid">
                       <div class="chart-container">
-                        <div class="chart-title">📉 Backend Utilization Gauges</div>
-                        <div id="utilizationGauges" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; height: calc(100% - 40px);"></div>
-                      </div>
-                      <div class="chart-container">
                         <div class="chart-title">🎯 Cache Hit/Miss Ratio</div>
                         <canvas id="cacheEfficiencyChart" class="chart-canvas"></canvas>
                       </div>
@@ -319,27 +315,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="chart-title">⚡ Generation Rate Distribution</div>
                         <canvas id="generationRateHistogram" class="chart-canvas"></canvas>
                       </div>
-                      <div class="chart-container">
-                        <div class="chart-title">📋 Percentile Table</div>
-                        <div id="percentileTable"></div>
-                      </div>
                     </div>
                   </section>
 
-                  <!-- Cross-Backend Correlation Analysis -->
-                  <section id="correlationSection" class="stats-section">
-                    <h3 class="section-title">🔗 Cross-Backend Correlation Analysis</h3>
-                    <div class="chart-grid">
-                      <div class="chart-container">
-                        <div class="chart-title">🗺️ Correlation Heatmap</div>
-                        <canvas id="correlationHeatmap" class="chart-canvas"></canvas>
-                      </div>
-                      <div class="chart-container">
-                        <div class="chart-title">🕸️ Backend Performance Radar</div>
-                        <canvas id="backendRadarChart" class="chart-canvas"></canvas>
-                      </div>
-                    </div>
-                  </section>
                 </div>
               </section>
             </section>
@@ -3408,7 +3386,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Render health metrics charts including utilization gauges and cache efficiency
+   * Render health metrics charts including cache efficiency
    * @param {Object} statsData - Statistics data from API
    */
   function renderHealthMetricsCharts(statsData) {
@@ -3417,102 +3395,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const backendDetails = statsData?.backendDetails || [];
     if (backendDetails.length === 0) return;
-
-    // Backend Utilization Gauges - CRITICAL FIX: Update existing gauges instead of recreating
-    const utilizationContainer = document.getElementById('utilizationGauges');
-    if (utilizationContainer && backendDetails.length > 0) {
-      // Build a set of existing backend IDs to track which gauges to update/keep
-      const existingGaugeIds = new Set();
-      utilizationContainer.querySelectorAll('[data-backend-id]').forEach(el => {
-        const backendId = el.getAttribute('data-backend-id');
-        if (backendId) existingGaugeIds.add(backendId);
-      });
-
-      backendDetails.forEach(backend => {
-        const activeRequestCount = backend.activeRequestCount || 0;
-        const maxConcurrency = backend.maxConcurrency || 10;
-        const utilization = maxConcurrency > 0 ? (activeRequestCount / maxConcurrency) * 100 : 0;
-
-        // Determine status based on utilization
-        let statusText;
-        if (utilization < 70) {
-          statusText = 'Normal';
-        } else if (utilization < 90) {
-          statusText = 'Warning';
-        } else {
-          statusText = 'Critical';
-        }
-
-        // Use URL as backend identifier (since backend doesn't have 'name' field)
-        const backendLabel = backend.url || 'Unknown Backend';
-        const backendId = backend.url;
-
-        // Store backend ID for filtering
-        backend.id = backendId;
-        existingGaugeIds.delete(backendId);
-
-        // Check if gauge for this backend already exists
-        const existingGaugeCanvas = utilizationContainer.querySelector(`canvas[data-backend-id="${backendId}"]`);
-
-        if (existingGaugeCanvas) {
-          // Update existing gauge chart data
-          const gaugeChart = chartInstances[`gauge_${backendId}`];
-          if (gaugeChart && gaugeChart.data) {
-            // Update chart with new values
-            const normalizedValue = Math.min(utilization, 100);
-            gaugeChart.data.datasets[0].data = [normalizedValue, 0];
-            gaugeChart.options.plugins.title.text = `${backendLabel}\n${utilization.toFixed(0)}% ${statusText}`;
-            gaugeChart.data.datasets[0].backgroundColor = utilization < 70 ? '#10b981' : (utilization < 90 ? '#f59e0b' : '#ef4444');
-            gaugeChart.update();
-          }
-          // Update label
-          const existingLabel = utilizationContainer.querySelector(`[data-backend-id="${backendId}"] + div`);
-          if (existingLabel) {
-            existingLabel.textContent = `${backendLabel} (${activeRequestCount}/${maxConcurrency})`;
-          }
-        } else {
-          // Create new gauge canvas and chart
-          const gaugeCanvas = document.createElement('canvas');
-          gaugeCanvas.className = 'utilization-gauge-canvas';
-          gaugeCanvas.style.width = '180px';
-          gaugeCanvas.style.height = '140px';
-          gaugeCanvas.setAttribute('data-backend-id', backendId);
-
-          // Create gauge chart and store instance
-          const gaugeChart = createGaugeChart(gaugeCanvas, utilization, backendLabel, statusText);
-          chartInstances[`gauge_${backendId}`] = gaugeChart;
-
-          // Add label below gauge
-          const labelDiv = document.createElement('div');
-          labelDiv.style.textAlign = 'center';
-          labelDiv.style.padding = '5px';
-          labelDiv.style.fontSize = '12px';
-          labelDiv.style.color = '#6b7280';
-          labelDiv.setAttribute('data-backend-id', backendId);
-          labelDiv.textContent = `${backendLabel} (${activeRequestCount}/${maxConcurrency})`;
-
-          utilizationContainer.appendChild(gaugeCanvas);
-          utilizationContainer.appendChild(labelDiv);
-        }
-      });
-
-      // Clean up gauges for backends that no longer exist
-      existingGaugeIds.forEach(gaugeId => {
-        const gaugeToRemove = utilizationContainer.querySelector(`canvas[data-backend-id="${gaugeId}"]`);
-        const labelToRemove = utilizationContainer.querySelector(`div[data-backend-id="${gaugeId}"]`);
-        if (gaugeToRemove) {
-          const chartToRemove = chartInstances[`gauge_${gaugeId}`];
-          if (chartToRemove) {
-            chartToRemove.destroy();
-            delete chartInstances[`gauge_${gaugeId}`];
-          }
-          gaugeToRemove.remove();
-        }
-        if (labelToRemove) {
-          labelToRemove.remove();
-        }
-      });
-    }
 
     // Cache Efficiency Chart (Bar chart showing hit rate per backend)
     cleanupChart('cacheEfficiencyChart');
@@ -3623,44 +3505,11 @@ document.addEventListener('DOMContentLoaded', () => {
       renderRateMetricsCharts(statsData);
       renderHealthMetricsCharts(statsData);
       renderDistributionCharts(statsData);
-      renderCorrelationCharts(statsData);
     }
   }
 
   /**
-   * Calculate percentiles from an array of values
-   * @param {number[]} values - Array of numeric values
-   * @param {number[]} percentiles - Percentiles to calculate (e.g., [50, 90, 95, 99])
-   * @returns {Object} Object with percentile values
-   */
-  function calculatePercentiles(values, percentiles = [50, 90, 95, 99]) {
-    if (!values || values.length === 0) {
-      return percentiles.reduce((acc, p) => ({ ...acc, [p]: 'N/A' }), {});
-    }
-
-    const sorted = [...values].sort((a, b) => a - b);
-    const n = sorted.length;
-
-    return percentiles.reduce((acc, p) => {
-      const index = (p / 100) * (n - 1);
-      const lower = Math.floor(index);
-      const upper = Math.ceil(index);
-      const weight = index - lower;
-
-      let percentileValue;
-      if (lower === upper) {
-        percentileValue = sorted[lower];
-      } else {
-        percentileValue = sorted[lower] * (1 - weight) + sorted[upper] * weight;
-      }
-
-      acc[p] = Math.round(percentileValue * 100) / 100;
-      return acc;
-    }, {});
-  }
-
-  /**
-   * Render distribution and percentile charts
+   * Render distribution charts
    * Uses incremental updates pattern - returns early if DOM doesn't exist
    * @param {Object} statsData - Statistics data from API
    */
@@ -3851,259 +3700,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       } else {
         rateHistogramCanvas.parentElement.innerHTML = '<p class="chart-no-data">No rate data available yet</p>';
-      }
-    }
-
-    // Percentile Table
-    const percentileTableContainer = document.getElementById('percentileTable');
-    if (percentileTableContainer && backendDetails.length > 0) {
-      const backends = backendDetails.filter(b => b.performanceStats?.rawSamples);
-      const allRates = [];
-      backends.forEach(b => {
-        const rates = b.performanceStats?.rawSamples?.rateStats?.generationRate || [];
-        allRates.push(...rates);
-      });
-
-      if (backends.length > 0) {
-        const percentiles = calculatePercentiles(allRates);
-
-        percentileTableContainer.innerHTML = `
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-            <thead>
-              <tr style="background-color: var(--card-bg);">
-                <th style="padding: 0.5rem; text-align: left; border-bottom: 2px solid var(--border-color);">Metric</th>
-                <th style="padding: 0.5rem; text-align: center; border-bottom: 2px solid var(--border-color);">P50</th>
-                <th style="padding: 0.5rem; text-align: center; border-bottom: 2px solid var(--border-color);">P90</th>
-                <th style="padding: 0.5rem; text-align: center; border-bottom: 2px solid var(--border-color);">P95</th>
-                <th style="padding: 0.5rem; text-align: center; border-bottom: 2px solid var(--border-color);">P99</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">Total Time (ms)</td>
-                <td style="padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-color);">
-                  ${Object.values(percentiles)[0] || 'N/A'}
-                </td>
-                <td style="padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-color);">
-                  ${Object.values(percentiles)[1] || 'N/A'}
-                </td>
-                <td style="padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-color);">
-                  ${Object.values(percentiles)[2] || 'N/A'}
-                </td>
-                <td style="padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-color);">
-                  ${Object.values(percentiles)[3] || 'N/A'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        `;
-      } else {
-        percentileTableContainer.innerHTML = '<p class="chart-no-data">No data available yet</p>';
-      }
-    }
-  }
-
-  /**
-   * Calculate correlation coefficient between two arrays
-   * @param {number[]} x - First array of values
-   * @param {number[]} y - Second array of values
-   * @returns {number} Correlation coefficient (-1 to 1)
-   */
-  function calculateCorrelation(x, y) {
-    const n = Math.min(x.length, y.length);
-    if (n < 2) return 0;
-
-    const xSub = x.slice(0, n);
-    const ySub = y.slice(0, n);
-
-    const meanX = xSub.reduce((a, b) => a + b, 0) / n;
-    const meanY = ySub.reduce((a, b) => a + b, 0) / n;
-
-    let numerator = 0;
-    let denomX = 0;
-    let denomY = 0;
-
-    for (let i = 0; i < n; i++) {
-      const dx = xSub[i] - meanX;
-      const dy = ySub[i] - meanY;
-      numerator += dx * dy;
-      denomX += dx * dx;
-      denomY += dy * dy;
-    }
-
-    if (denomX === 0 || denomY === 0) return 0;
-
-    return numerator / Math.sqrt(denomX * denomY);
-  }
-
-  /**
-   * Render correlation heatmap and radar charts for cross-backend analysis
-   * @param {Object} statsData - Statistics data from API
-   */
-  function renderCorrelationCharts(statsData) {
-    if (!isChartSectionActive()) return;
-
-    let backendDetails = statsData?.backendDetails || [];
-    if (backendDetails.length < 2) return;
-
-    // Apply backend filter
-    backendDetails = getFilteredBackends(backendDetails);
-    if (backendDetails.length < 2) return;
-
-    // Correlation Heatmap
-    cleanupChart('correlationHeatmap');
-    const heatmapCanvas = document.getElementById('correlationHeatmap');
-    if (heatmapCanvas) {
-      // Collect metrics per backend
-      const metrics = {
-        totalTime: [],
-        generationTime: [],
-        promptRate: [],
-        genRate: []
-      };
-
-      backendDetails.forEach(backend => {
-        const raw = backend.performanceStats?.rawSamples;
-        if (raw) {
-          metrics.totalTime.push(...(raw.timeStats.totalTimeMs || []));
-          metrics.generationTime.push(...(raw.timeStats.generationTimeMs || []));
-          metrics.promptRate.push(...(raw.rateStats.promptRate || []));
-          metrics.genRate.push(...(raw.rateStats.generationRate || []));
-        }
-      });
-
-      // Calculate correlations between metrics
-      const metricNames = ['Total Time', 'Gen Time', 'Prompt Rate', 'Gen Rate'];
-      const correlations = [
-        [0, calculateCorrelation(metrics.totalTime, metrics.generationTime), calculateCorrelation(metrics.totalTime, metrics.promptRate), calculateCorrelation(metrics.totalTime, metrics.genRate)],
-        [calculateCorrelation(metrics.generationTime, metrics.totalTime), 0, calculateCorrelation(metrics.generationTime, metrics.promptRate), calculateCorrelation(metrics.generationTime, metrics.genRate)],
-        [calculateCorrelation(metrics.promptRate, metrics.totalTime), calculateCorrelation(metrics.promptRate, metrics.generationTime), 0, calculateCorrelation(metrics.promptRate, metrics.genRate)],
-        [calculateCorrelation(metrics.genRate, metrics.totalTime), calculateCorrelation(metrics.genRate, metrics.generationTime), calculateCorrelation(metrics.genRate, metrics.promptRate), 0]
-      ];
-
-      // Create heatmap as a bar chart with colors
-      const ctx = heatmapCanvas.getContext('2d');
-      const heatmapColors = [
-        ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'], // 0 to -1 (blue)
-        ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0'], // 0 to 1 (green)
-        ['#ef4444', '#f87171', '#fca5a5', '#fecaca'], // 0 to -1 (red)
-        ['#f59e0b', '#fbbf24', '#fcd34d', '#fef3c7']  // 0 to 1 (yellow)
-      ];
-
-      function getColor(value, type) {
-        const idx = Math.min(Math.floor(Math.abs(value) * 4), 3);
-        if (value >= 0) return heatmapColors[type === 'blue' ? 1 : 3][idx];
-        return heatmapColors[type === 'blue' ? 0 : 2][idx];
-      }
-
-      // Build heatmap data arrays
-      const heatmapLabels = [];
-      const heatmapData = [];
-      const heatmapColorCodes = [];
-
-      for (let i = 0; i < metricNames.length; i++) {
-        for (let j = i + 1; j < metricNames.length; j++) {
-          heatmapLabels.push(metricNames[i] + '\nvs ' + metricNames[j]);
-          heatmapData.push(correlations[i][j] * 100);
-          heatmapColorCodes.push(correlations[i][j] >= 0 ? '#10b981' : '#ef4444');
-        }
-      }
-
-      chartInstances.correlationHeatmap = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: heatmapLabels,
-          datasets: [{
-            label: 'Correlation',
-            data: heatmapData,
-            backgroundColor: heatmapColorCodes,
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(ctx) {
-                  return 'Correlation: ' + ctx.parsed.y.toFixed(2) + '%';
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              min: -100,
-              title: { display: true, text: 'Correlation %' }
-            },
-            x: {
-              title: { display: true, text: 'Metric Pairs' },
-              ticks: {
-                maxRotation: 45,
-                minRotation: 45
-              }
-            }
-          }
-        }
-      });
-    }
-
-    // Backend Performance Radar Chart
-    cleanupChart('backendRadarChart');
-    const radarCanvas = document.getElementById('backendRadarChart');
-    if (radarCanvas) {
-      const backends = backendDetails.filter(b => b.performanceStats);
-      if (backends.length > 0) {
-        const ctx = radarCanvas.getContext('2d');
-        const datasets = backends.map((backend, idx) => {
-          const stats = backend.performanceStats;
-          const avgTotalTime = stats.avgTimeStats?.avgTotalTimeMs || 0;
-          const avgGenTime = stats.avgTimeStats?.avgGenerationTimeMs || 0;
-          const avgGenRate = stats.avgRateStats?.avgGenerationRate || 0;
-          const cacheHitRate = (stats.promptCacheStats?.totalHits || 0) /
-                               Math.max(1, (stats.promptCacheStats?.totalHits || 0) + (stats.promptCacheStats?.totalMisses || 0));
-
-          return {
-            label: getBackendName(backend),
-            data: [
-              100 - (avgTotalTime / 5000) * 100, // Normalize totalTime (inverted - faster is better)
-              100 - (avgGenTime / 3000) * 100,   // Normalize genTime (inverted - faster is better)
-              avgGenRate / 100 * 100,            // Normalize genRate
-              cacheHitRate * 100
-            ],
-            backgroundColor: `rgba(${50 + idx * 40}, ${100 + idx * 30}, ${200 - idx * 20}, 0.2)`,
-            borderColor: `rgba(${50 + idx * 40}, ${100 + idx * 30}, ${200 - idx * 20}, 1)`,
-            borderWidth: 2
-          };
-        });
-
-        chartInstances.backendRadarChart = new Chart(ctx, {
-          type: 'radar',
-          data: {
-            labels: ['Response Time', 'Gen Time', 'Gen Rate', 'Cache Hit Rate'],
-            datasets
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: 'top' }
-            },
-            scales: {
-              r: {
-                beginAtZero: true,
-                max: 100,
-                ticks: { display: false }
-              }
-            }
-          }
-        });
-      } else {
-        radarCanvas.parentElement.innerHTML = '<p class="chart-no-data">No backend data available</p>';
       }
     }
   }
