@@ -12,9 +12,10 @@ const MAX_STATS_SAMPLES = parseInt(process.env.MAX_STATS_SAMPLES) || 20;
 const { PromptCache } = require('./PromptCache');
 
 class Backend {
-  constructor(url, maxConcurrency = 10) {
+  constructor(url, maxConcurrency = 10, name = null) {
     this.url = url;
     this.maxConcurrency = maxConcurrency;
+    this.name = name;
     this.healthy = false;
     this.failCount = 0;
     this.timeoutCount = 0; // Track timeout failures separately

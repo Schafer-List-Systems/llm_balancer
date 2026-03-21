@@ -900,6 +900,7 @@ class Balancer {
     const backends = this.backendPool.getAll();
     const backendStats = backends.map(b => ({
       url: b.url,
+      name: b.name || null,
       requestCount: b.requestCount || 0,
       performanceStats: b.getPerformanceStats(),
       promptCacheStats: b.getPromptCacheStats()

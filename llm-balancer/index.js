@@ -45,9 +45,7 @@ const backendInfo = new BackendInfo(config.healthCheck.timeout);
 // directly to Backend rather than copied to capabilities.
 // ──────────────────────────────────────────────────────────────────
 const backends = config.backends.map(backendConfig => {
-  const backend = new Backend(backendConfig.url, backendConfig.maxConcurrency);
-  // Store the config name for display in the frontend
-  backend.configName = backendConfig.name || 'Backend';
+  const backend = new Backend(backendConfig.url, backendConfig.maxConcurrency, backendConfig.name || null);
   return backend;
 });
 
