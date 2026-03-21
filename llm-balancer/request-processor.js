@@ -363,7 +363,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
-    releaseBackend(balancer, backend, 'non-streaming');
+    releaseBackend(balancer, backend, 'streaming');
     onRequestComplete();
     // Send error response to client
     res.status(504).json({
@@ -696,7 +696,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
-    releaseBackend(balancer, backend, 'streaming');
+    releaseBackend(balancer, backend, 'non-streaming');
     onRequestComplete();
     // Send error response to client
     res.status(504).json({
