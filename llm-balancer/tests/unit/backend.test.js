@@ -208,6 +208,198 @@ describe('Backend Class - Performance Stats', () => {
       expect(stats.rateStats.totalRate).toBeNull();
       expect(stats.rateStats.promptRate).toBeNull();
       expect(stats.rateStats.generationRate).toBeNull();
+      expect(stats.rateStats.completionRate).toBeNull();
+    });
+  });
+
+  describe('completionRate tracking', () => {
+    it('should compute completionRate for streaming requests', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // completionRate = completionTokens / (generationTimeMs / 1000)
+      // generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs
+      // For this test: 50 tokens / (800ms / 1000) = 50 / 0.8 = 62.5 tokens/second
+      backend.updateStreamingStats(
+        100,            // promptTokens
+        50,             // completionTokens
+        100,            // firstChunkTimeMs
+        900,            // totalCompletionTimeMs
+        null,           // networkLatencyMs
+        800             // correctedGenerationTimeMs
+      );
+
+      const stats = backend.getPerformanceStats();
+      expect(stats.rateStats.completionRate).toEqual({
+        count: 1,
+        avgTokensPerSecond: 62.5
+      });
+    });
+
+    it('should compute completionRate using totalCompletionTimeMs when no correctedGenerationTimeMs', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // generationTimeMs = totalCompletionTimeMs - firstChunkTimeMs = 1000 - 100 = 900ms
+      // completionRate = 90 tokens / (900ms / 1000) = 90 / 0.9 = 100 tokens/second
+      backend.updateStreamingStats(
+        100,            // promptTokens
+        90,             // completionTokens
+        100,            // firstChunkTimeMs
+        1000            // totalCompletionTimeMs
+      );
+
+      const stats = backend.getPerformanceStats();
+      expect(stats.rateStats.completionRate).toEqual({
+        count: 1,
+        avgTokensPerSecond: 100
+      });
+    });
+
+    it('should track completionRate in raw samples for chart visualization', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add multiple streaming requests with varying completion rates
+      backend.updateStreamingStats(10, 20, 100, 500);  // generationTime=400ms, rate=20/0.4=50
+      backend.updateStreamingStats(10, 30, 100, 600);  // generationTime=500ms, rate=30/0.5=60
+      backend.updateStreamingStats(10, 40, 100, 700);  // generationTime=600ms, rate=40/0.6≈66.67
+
+      const statsWithSamples = backend.getPerformanceStatsWithSamples();
+
+      // Verify completionRate is present in raw samples
+      expect(statsWithSamples.rawSamples.rateStats.completionRate).toBeDefined();
+      expect(Array.isArray(statsWithSamples.rawSamples.rateStats.completionRate)).toBe(true);
+      expect(statsWithSamples.rawSamples.rateStats.completionRate.length).toBe(3);
+
+      // Verify raw values
+      expect(statsWithSamples.rawSamples.rateStats.completionRate[0]).toBe(50);    // 20/0.4
+      expect(statsWithSamples.rawSamples.rateStats.completionRate[1]).toBe(60);    // 30/0.5
+      expect(Math.round(statsWithSamples.rawSamples.rateStats.completionRate[2] * 100) / 100).toBe(66.67); // 40/0.6
+    });
+
+    it('should return null for completionRate when no completionTokens', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add streaming request without completionTokens
+      backend.updateStreamingStats(
+        100,            // promptTokens
+        null,           // no completionTokens
+        100,            // firstChunkTimeMs
+        1000            // totalCompletionTimeMs
+      );
+
+      const stats = backend.getPerformanceStats();
+      expect(stats.rateStats.completionRate).toBeNull();
+    });
+
+    it('should return null for completionRate when generationTime is zero', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // generationTimeMs = 100 - 100 = 0, so completionRate should be null (cannot divide by zero)
+      backend.updateStreamingStats(
+        100,            // promptTokens
+        50,             // completionTokens
+        100,            // firstChunkTimeMs
+        100             // totalCompletionTimeMs (generationTime = 0)
+      );
+
+      const stats = backend.getPerformanceStats();
+      expect(stats.rateStats.completionRate).toBeNull();
+    });
+
+    it('should compute average completionRate from multiple requests', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add 5 requests with different completion rates
+      // generationTimeMs = 500 - 100 = 400ms for all
+      // Rates: 20/0.4=50, 40/0.4=100, 60/0.4=150, 80/0.4=200, 100/0.4=250
+      backend.updateStreamingStats(10, 20, 100, 500);  // rate = 50
+      backend.updateStreamingStats(10, 40, 100, 500);  // rate = 100
+      backend.updateStreamingStats(10, 60, 100, 500);  // rate = 150
+      backend.updateStreamingStats(10, 80, 100, 500);  // rate = 200
+      backend.updateStreamingStats(10, 100, 100, 500); // rate = 250
+
+      const stats = backend.getPerformanceStats();
+
+      // Average of [50, 100, 150, 200, 250] = 750/5 = 150 tokens/second
+      expect(stats.rateStats.completionRate).toEqual({
+        count: 5,
+        avgTokensPerSecond: 150
+      });
+    });
+
+    it('should handle mixed streaming and non-streaming requests', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add non-streaming request (should NOT add to completionRate)
+      backend.updateNonStreamingStats(10, 20, 5000, null, null);
+
+      // Add streaming request (should add to completionRate)
+      backend.updateStreamingStats(10, 50, 100, 1000, null, 800);
+
+      const stats = backend.getPerformanceStats();
+
+      // Non-streaming should not add to completionRate array
+      expect(stats.rateStats.completionRate).not.toBeNull();
+      expect(stats.rateStats.completionRate.count).toBe(1);  // Only the streaming request
+    });
+
+    it('should updateNonStreamingStatsFromChunks compute completionRate', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Simulate streaming from chunks: 15 chunks in 1.2 seconds
+      // generationTimeMs = 1200 - 50 = 1150ms
+      // completionRate = 15 / 1.15 ≈ 13.04 tokens/second
+      backend.updateStreamingStatsFromChunks(
+        100,            // estimatedPromptTokens
+        15,             // chunkCount (completion tokens)
+        50,             // firstChunkTimeMs
+        1200            // totalCompletionTimeMs
+      );
+
+      const stats = backend.getPerformanceStats();
+      expect(stats.rateStats.completionRate).not.toBeNull();
+      expect(stats.rateStats.completionRate.count).toBe(1);
+      expect(Math.round(stats.rateStats.completionRate.avgTokensPerSecond * 100) / 100).toBe(13.04);
+    });
+
+    it('should respect sample limiting for completionRate array', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      // Add more than MAX_STATS_SAMPLES (20) requests
+      // Loop i=0 to i=24, so with limit=20, we keep i=5 to i=24
+      for (let i = 0; i < 25; i++) {
+        backend.updateStreamingStats(
+          10 + i,
+          20 + i,
+          100 + i,
+          1000 + i
+        );
+      }
+
+      // Should only have 20 samples
+      expect(backend._performanceStats.completionRate.length).toBe(20);
+
+      // Verify oldest kept sample (first kept is i=5)
+      // i=5: completionTokens=25, firstChunkTimeMs=105, totalCompletionTimeMs=1005
+      // generationTimeMs = 1005 - 105 = 900ms
+      // completionRate = 25 / 0.9 = 27.777...
+      const oldestRate = backend._performanceStats.completionRate[0];
+      const expectedRate = 25 / (900 / 1000);
+      expect(Math.round(oldestRate * 100) / 100).toBe(Math.round(expectedRate * 100) / 100);
+    });
+
+    it('should be present in getPerformanceStatsWithSamples return type', () => {
+      const backend = new Backend('http://localhost:11434');
+
+      backend.updateStreamingStats(10, 50, 100, 1000);
+
+      const statsWithSamples = backend.getPerformanceStatsWithSamples();
+
+      // Verify completionRate is a property of rateStats in returned object
+      expect(statsWithSamples.rateStats.completionRate).toBeDefined();
+      expect(statsWithSamples.rateStats.completionRate.count).toBe(1);
+
+      // Verify it's also in rawSamples
+      expect(statsWithSamples.rawSamples.rateStats.completionRate).toBeDefined();
     });
   });
 });

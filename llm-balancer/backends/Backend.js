@@ -54,7 +54,8 @@ class Backend {
       totalRate: [],                            // totalTokens / totalTime (tokens/second)
       promptRate: [],                           // promptTokens / promptProcessingTime (tokens/second)
       nonCachedPromptRate: [],                  // nonCachedPromptTokens / promptProcessingTime (tokens/second)
-      generationRate: []                        // completionTokens / generationTime (tokens/second)
+      generationRate: [],                       // completionTokens / generationTime (tokens/second)
+      completionRate: []                        // completionTokens / generationTime (tokens/second, same as generationRate)
     };
 
     // Health checker will be assigned based on primary API type
@@ -361,6 +362,7 @@ class Backend {
     // DO NOT compute promptRate (requires promptProcessingTime which is unknown)
     // DO NOT compute nonCachedPromptRate (requires promptProcessingTime which is unknown)
     // DO NOT compute generationRate (requires generationTime which is unknown)
+    // DO NOT compute completionRate (requires generationTime which is unknown, same as generationRate)
   }
 
   /**
@@ -453,6 +455,12 @@ class Backend {
       this._performanceStats.generationRate.push(generationRate);
       this._limitSamples(this._performanceStats.generationRate);
     }
+    // Compute completionRate (same formula as generationRate: completionTokens / generationTime)
+    if (completionTokens > 0 && actualGenerationTime > 0) {
+      const completionRate = completionTokens / (actualGenerationTime / 1000);
+      this._performanceStats.completionRate.push(completionRate);
+      this._limitSamples(this._performanceStats.completionRate);
+    }
   }
 
   /**
@@ -510,7 +518,7 @@ class Backend {
    * Returns comprehensive stats across all request types and capabilities
    * For non-streaming requests, timeStats.avgPromptProcessingTimeMs and timeStats.avgGenerationTimeMs will be null
    * because these metrics cannot be measured (backend is a black box).
-   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number|null, avgGenerationTimeMs: number|null, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}} Statistics object
+   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number|null, avgGenerationTimeMs: number|null, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, nonCachedPromptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null, completionRate: {count: number, avgTokensPerSecond: number}|null}}} Statistics object
    */
   getPerformanceStats() {
     // Compute averages for time metrics that were tracked
@@ -560,7 +568,8 @@ class Backend {
         totalRate: this._getRateStats(this._performanceStats.totalRate),
         promptRate: this._getRateStats(this._performanceStats.promptRate),
         nonCachedPromptRate: this._getRateStats(this._performanceStats.nonCachedPromptRate),
-        generationRate: this._getRateStats(this._performanceStats.generationRate)
+        generationRate: this._getRateStats(this._performanceStats.generationRate),
+        completionRate: this._getRateStats(this._performanceStats.completionRate)
       }
     };
   }
@@ -569,7 +578,7 @@ class Backend {
    * Get performance statistics with raw sample data for chart visualization
    * Returns same structure as getPerformanceStats() plus rawSamples arrays
    * Raw samples contain individual data points for creating time-series charts
-   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number|null, avgGenerationTimeMs: number|null, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null}}, rawSamples: {timeStats: {totalTimeMs: number[], promptProcessingTimeMs: number[], generationTimeMs: number[], networkLatencyMs: number[]}, tokenStats: {promptTokens: number[], completionTokens: number[], totalTokens: number[], nonCachedPromptTokens: number[]}, rateStats: {totalRate: number[], promptRate: number[], nonCachedPromptRate: number[], generationRate: number[]}}} Performance stats with raw samples
+   * @returns {{requestCount: number, timeStats: {avgTotalTimeMs: number, avgPromptProcessingTimeMs: number|null, avgGenerationTimeMs: number|null, avgNetworkLatencyMs: number}, tokenStats: {avgPromptTokens: number|null, avgCompletionTokens: number|null, avgTotalTokens: number|null}, rateStats: {totalRate: {count: number, avgTokensPerSecond: number}|null, promptRate: {count: number, avgTokensPerSecond: number}|null, nonCachedPromptRate: {count: number, avgTokensPerSecond: number}|null, generationRate: {count: number, avgTokensPerSecond: number}|null, completionRate: {count: number, avgTokensPerSecond: number}|null}}, rawSamples: {timeStats: {totalTimeMs: number[], promptProcessingTimeMs: number[], generationTimeMs: number[], networkLatencyMs: number[]}, tokenStats: {promptTokens: number[], completionTokens: number[], totalTokens: number[], nonCachedPromptTokens: number[]}, rateStats: {totalRate: number[], promptRate: number[], nonCachedPromptRate: number[], generationRate: number[], completionRate: number[]}}} Performance stats with raw samples
    */
   getPerformanceStatsWithSamples() {
     const stats = this.getPerformanceStats();
@@ -592,7 +601,8 @@ class Backend {
         totalRate: [...this._performanceStats.totalRate],
         promptRate: [...this._performanceStats.promptRate],
         nonCachedPromptRate: [...this._performanceStats.nonCachedPromptRate],
-        generationRate: [...this._performanceStats.generationRate]
+        generationRate: [...this._performanceStats.generationRate],
+        completionRate: [...this._performanceStats.completionRate]
       }
     };
 
@@ -696,6 +706,7 @@ class Backend {
     this._performanceStats.promptRate = [];
     this._performanceStats.nonCachedPromptRate = [];
     this._performanceStats.generationRate = [];
+    this._performanceStats.completionRate = [];
 
     console.info(`[Backend] ${this.url}: Performance stats reset completed`);
   }

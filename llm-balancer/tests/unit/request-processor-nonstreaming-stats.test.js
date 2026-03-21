@@ -7,7 +7,7 @@
  * - generationTimeMs should NOT be tracked (backend is a black box)
  * - token counts (promptTokens, completionTokens, totalTokens) should be tracked
  * - totalRate should be computed (totalTokens / totalTime)
- * - promptRate and generationRate should NOT be computed (insufficient data)
+ * - promptRate, generationRate, and completionRate should NOT be computed (insufficient data)
  */
 
 const http = require('http');
@@ -189,6 +189,20 @@ describe('Non-Streaming Statistics', () => {
       // generationRate requires generationTime which is not tracked
       expect(stats.rateStats.generationRate).toBeNull();
     });
+
+    it('should return null for completionRate (no generationTime)', () => {
+      mockBackend.updateNonStreamingStats(
+        10,    // promptTokens
+        20,    // completionTokens
+        1000,  // totalTimeMs
+        null,  // promptProcessingTimeMs
+        null   // networkLatencyMs
+      );
+
+      const stats = mockBackend.getPerformanceStats();
+      // completionRate requires generationTime which is not tracked (same as generationRate)
+      expect(stats.rateStats.completionRate).toBeNull();
+    });
   });
 
   describe('Sample limiting', () => {
@@ -246,9 +260,10 @@ describe('Non-Streaming Statistics', () => {
       expect(stats.rateStats.totalRate).not.toBeNull();
       expect(stats.rateStats.totalRate.count).toBe(5);
 
-      // Verify promptRate and generationRate are null (cannot compute)
+      // Verify promptRate, generationRate, and completionRate are null (cannot compute)
       expect(stats.rateStats.promptRate).toBeNull();
       expect(stats.rateStats.generationRate).toBeNull();
+      expect(stats.rateStats.completionRate).toBeNull();
 
       // Verify time stats
       expect(stats.timeStats.avgTotalTimeMs).toBe(1200);  // (1000+1100+1200+1300+1400)/5 = 1200
