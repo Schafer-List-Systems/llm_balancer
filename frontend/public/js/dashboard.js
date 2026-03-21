@@ -2896,7 +2896,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalTimeMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.totalTimeMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${getBackendName(backend)} - Total Time`,
+          label: getBackendName(backend),
           data: totalTimeMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -2942,7 +2942,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const generationTimeMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.generationTimeMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${getBackendName(backend)} - Generation Time`,
+          label: getBackendName(backend),
           data: generationTimeMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -2988,7 +2988,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const networkLatencyMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.networkLatencyMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${getBackendName(backend)} - Network Latency`,
+          label: getBackendName(backend),
           data: networkLatencyMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
@@ -3034,7 +3034,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const promptProcessingMs = getFilteredSamples(backend.performanceStats?.rawSamples?.timeStats?.promptProcessingTimeMs || []);
         const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
         return {
-          label: `${getBackendName(backend)} - Prompt Processing`,
+          label: getBackendName(backend),
           data: promptProcessingMs,
           borderColor: colors[index % colors.length],
           backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
