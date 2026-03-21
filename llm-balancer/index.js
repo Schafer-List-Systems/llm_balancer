@@ -476,7 +476,7 @@ app.get('/backends', (req, res) => {
 
       return {
         url: b.url,
-        name: b.name || 'Backend',  // Add backend name from config
+        name: b.name,  // Add backend name from config (undefined if not set)
         priority: b.priority || 0,
         healthy: b.healthy,
         activeRequestCount: b.activeRequestCount,
