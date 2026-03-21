@@ -1629,8 +1629,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const overallCacheHitRate = backends.length > 0
       ? backends.reduce((sum, b) => {
           const cache = b.promptCacheStats || {};
-          const total = (cache.totalHits || 0) + (cache.totalMisses || 0);
-          return sum + (total > 0 ? (cache.totalHits || 0) / total : 0);
+          const total = (cache.hits || 0) + (cache.misses || 0);
+          return sum + (total > 0 ? (cache.hits || 0) / total : 0);
         }, 0) / backends.length * 100
       : 0;
 
@@ -2807,7 +2807,7 @@ document.addEventListener('DOMContentLoaded', () => {
       generationTimeMs: b.performanceStats?.rawSamples?.generationTimeMs?.length || 0,
       totalTokens: b.performanceStats?.rawSamples?.tokenStats?.totalTokens?.length || 0,
       generationRate: b.performanceStats?.rawSamples?.rateStats?.generationRate?.length || 0,
-      cacheHits: b.promptCacheStats?.totalHits || 0
+      cacheHits: b.promptCacheStats?.hits || 0
     }));
 
     return JSON.stringify(snapshot);
@@ -3413,15 +3413,15 @@ document.addEventListener('DOMContentLoaded', () => {
       // Calculate cache hit rate for each backend
       const hitRates = backendDetails.map(b => {
         const cacheStats = b.promptCacheStats || {};
-        const hits = cacheStats.totalHits || 0;
-        const misses = cacheStats.totalMisses || 0;
+        const hits = cacheStats.hits || 0;
+        const misses = cacheStats.misses || 0;
         const total = hits + misses;
         return total > 0 ? (hits / total) * 100 : 0;
       });
 
       const totalRequests = backendDetails.map(b => {
         const cacheStats = b.promptCacheStats || {};
-        return (cacheStats.totalHits || 0) + (cacheStats.totalMisses || 0);
+        return (cacheStats.hits || 0) + (cacheStats.misses || 0);
       });
 
       chartInstances.cacheEfficiencyChart = new Chart(ctx, {
@@ -3434,16 +3434,16 @@ document.addEventListener('DOMContentLoaded', () => {
               data: hitRates,
               backgroundColor: backendDetails.map(b => {
                 const cacheStats = b.promptCacheStats || {};
-                const hits = cacheStats.totalHits || 0;
-                const misses = cacheStats.totalMisses || 0;
+                const hits = cacheStats.hits || 0;
+                const misses = cacheStats.misses || 0;
                 const total = hits + misses;
                 const rate = total > 0 ? (hits / total) * 100 : 0;
                 return rate >= 80 ? '#10b981' : (rate >= 50 ? '#f59e0b' : '#ef4444');
               }),
               borderColor: backendDetails.map(b => {
                 const cacheStats = b.promptCacheStats || {};
-                const hits = cacheStats.totalHits || 0;
-                const misses = cacheStats.totalMisses || 0;
+                const hits = cacheStats.hits || 0;
+                const misses = cacheStats.misses || 0;
                 const total = hits + misses;
                 const rate = total > 0 ? (hits / total) * 100 : 0;
                 return rate >= 80 ? '#059669' : (rate >= 50 ? '#d97706' : '#dc2626');
