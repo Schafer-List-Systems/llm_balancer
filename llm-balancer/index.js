@@ -439,7 +439,7 @@ app.get('/stats', (req, res) => {
     idleBackends: backends.filter(b => b.activeRequestCount === 0).length,
     backendDetails: backends.map(b => ({
       url: b.url,
-      name: b.configName,
+      name: b.name,
       priority: b.priority || 0,
       healthy: b.healthy,
       activeRequestCount: b.activeRequestCount,
@@ -476,7 +476,7 @@ app.get('/backends', (req, res) => {
 
       return {
         url: b.url,
-        name: b.configName || 'Backend',  // Add backend name from config
+        name: b.name || 'Backend',  // Add backend name from config
         priority: b.priority || 0,
         healthy: b.healthy,
         activeRequestCount: b.activeRequestCount,
