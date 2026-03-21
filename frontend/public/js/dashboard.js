@@ -3124,24 +3124,24 @@ document.addEventListener('DOMContentLoaded', () => {
               {
                 label: 'Network',
                 data: backendStats.map(s => s.network),
-                backgroundColor: 'rgba(139, 92, 246, 0.85)',
-                borderColor: 'rgba(139, 92, 246, 1)',
+                backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                borderColor: 'rgba(99, 102, 241, 0.9)',
                 borderWidth: 1,
                 stack: 'RequestTime'
               },
               {
                 label: 'Prompt Processing',
                 data: backendStats.map(s => s.prompt),
-                backgroundColor: 'rgba(239, 68, 68, 0.85)',
-                borderColor: 'rgba(239, 68, 68, 1)',
+                backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                borderColor: 'rgba(16, 185, 129, 0.9)',
                 borderWidth: 1,
                 stack: 'RequestTime'
               },
               {
                 label: 'Generation',
                 data: backendStats.map(s => s.generation),
-                backgroundColor: 'rgba(6, 182, 212, 0.85)',
-                borderColor: 'rgba(6, 182, 212, 1)',
+                backgroundColor: 'rgba(245, 158, 11, 0.6)',
+                borderColor: 'rgba(245, 158, 11, 0.9)',
                 borderWidth: 1,
                 stack: 'RequestTime'
               }
@@ -3226,16 +3226,16 @@ document.addEventListener('DOMContentLoaded', () => {
             {
               label: 'Avg Prompt Tokens',
               data: promptTokens,
-              backgroundColor: 'rgba(251, 146, 60, 0.85)',
-              borderColor: 'rgba(251, 146, 60, 1)',
+              backgroundColor: 'rgba(59, 130, 246, 0.5)',
+              borderColor: 'rgba(59, 130, 246, 0.8)',
               borderWidth: 1,
               yAxisID: 'y'
             },
             {
               label: 'Avg Completion Tokens',
               data: completionTokens,
-              backgroundColor: 'rgba(147, 51, 234, 0.85)',
-              borderColor: 'rgba(147, 51, 234, 1)',
+              backgroundColor: 'rgba(139, 92, 246, 0.5)',
+              borderColor: 'rgba(139, 92, 246, 0.8)',
               borderWidth: 1,
               yAxisID: 'y1'
             }
@@ -3251,14 +3251,14 @@ document.addEventListener('DOMContentLoaded', () => {
             y: {
               beginAtZero: true,
               title: { display: true, text: 'Avg Prompt Tokens' },
-              ticks: { color: '#fb923c' },
+              ticks: { color: '#6366f1' },
               grid: { color: (ctx) => ctx.tick.value === 0 ? '#4b5563' : '#374151' }
             },
             y1: {
               beginAtZero: true,
               position: 'right',
               title: { display: true, text: 'Avg Completion Tokens' },
-              ticks: { color: '#9333ea' },
+              ticks: { color: '#8b5cf6' },
               grid: { drawOnChartArea: false }
             }
           }
