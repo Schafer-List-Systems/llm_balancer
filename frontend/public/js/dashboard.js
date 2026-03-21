@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 class="section-title">📈 Distribution & Percentile Charts</h3>
                     <div class="chart-grid">
                       <div class="chart-container">
-                        <div class="chart-title">📊 Total Time Box Plot (by Backend)</div>
+                        <div class="chart-title">⏱️ Request Time Breakdown (by Backend)</div>
                         <canvas id="totalTimeBoxPlot" class="chart-canvas"></canvas>
                       </div>
                       <div class="chart-container">
@@ -3524,79 +3524,78 @@ document.addEventListener('DOMContentLoaded', () => {
     backendDetails = getFilteredBackends(backendDetails);
     if (backendDetails.length === 0) return;
 
-    // Total Time Box Plot
-    cleanupChart('totalTimeBoxPlot');
-    const boxPlotCanvas = document.getElementById('totalTimeBoxPlot');
-    if (boxPlotCanvas && backendDetails.length > 0) {
-      // Prepare box plot data for each backend
-      const backends = backendDetails.filter(b => b.performanceStats?.rawSamples?.timeStats?.totalTimeMs);
+    // Request Time Breakdown (stacked bar chart)
+    cleanupChart('requestTimeBreakdown');
+    const requestTimeCanvas = document.getElementById('totalTimeBoxPlot');
+    if (requestTimeCanvas && backendDetails.length > 0) {
+      // Filter for backends with streaming time data (network, prompt, generation)
+      const backends = backendDetails.filter(b =>
+        b.performanceStats?.rawSamples?.timeStats?.networkLatencyMs?.length > 0
+      );
 
       if (backends.length > 0) {
-        const ctx = boxPlotCanvas.getContext('2d');
+        const ctx = requestTimeCanvas.getContext('2d');
 
-        // Calculate quartiles for each backend
+        // Calculate average time for each component per backend
         const backendStats = backends.map(backend => {
-          const totalTimeMs = backend.performanceStats.rawSamples.timeStats.totalTimeMs;
-          const sorted = [...totalTimeMs].sort((a, b) => a - b);
-          const n = sorted.length;
+          const timeStats = backend.performanceStats.rawSamples.timeStats;
+
+          const networkLatencies = timeStats.networkLatencyMs || [];
+          const promptTimes = timeStats.promptProcessingTimeMs || [];
+          const generationTimes = timeStats.generationTimeMs || [];
+
+          const avgNetwork = networkLatencies.length > 0
+            ? networkLatencies.reduce((a, b) => a + b, 0) / networkLatencies.length
+            : 0;
+          const avgPrompt = promptTimes.length > 0
+            ? promptTimes.reduce((a, b) => a + b, 0) / promptTimes.length
+            : 0;
+          const avgGeneration = generationTimes.length > 0
+            ? generationTimes.reduce((a, b) => a + b, 0) / generationTimes.length
+            : 0;
+
           return {
             name: getBackendName(backend),
-            min: sorted[0],
-            q1: sorted[Math.floor(n * 0.25)],
-            median: sorted[Math.floor(n * 0.5)],
-            q3: sorted[Math.floor(n * 0.75)],
-            max: sorted[n - 1],
-            avg: totalTimeMs.reduce((a, b) => a + b, 0) / totalTimeMs.length
+            network: avgNetwork,
+            prompt: avgPrompt,
+            generation: avgGeneration,
+            total: avgNetwork + avgPrompt + avgGeneration
           };
         });
 
-        chartInstances.totalTimeBoxPlot = new Chart(ctx, {
+        chartInstances.requestTimeBreakdown = new Chart(ctx, {
           type: 'bar',
           data: {
             labels: backendStats.map(s => s.name),
             datasets: [
               {
-                label: 'Average',
-                data: backendStats.map(s => s.avg),
+                label: 'Network',
+                data: backendStats.map(s => s.network),
+                backgroundColor: 'rgba(245, 158, 11, 0.8)',
+                borderColor: 'rgba(245, 158, 11, 1)',
+                borderWidth: 1,
+                stack: 'RequestTime'
+              },
+              {
+                label: 'Prompt Processing',
+                data: backendStats.map(s => s.prompt),
                 backgroundColor: 'rgba(59, 130, 246, 0.8)',
                 borderColor: 'rgba(59, 130, 246, 1)',
                 borderWidth: 1,
-                stack: 'Stack 0',
-                order: 2
+                stack: 'RequestTime'
               },
               {
-                label: 'P50 (Median)',
-                data: backendStats.map(s => s.median),
+                label: 'Generation',
+                data: backendStats.map(s => s.generation),
                 backgroundColor: 'rgba(16, 185, 129, 0.8)',
                 borderColor: 'rgba(16, 185, 129, 1)',
                 borderWidth: 1,
-                stack: 'Stack 0',
-                order: 1
-              },
-              {
-                label: 'P25',
-                data: backendStats.map(s => s.q1),
-                backgroundColor: 'rgba(245, 158, 11, 0.5)',
-                borderColor: 'rgba(245, 158, 11, 1)',
-                borderWidth: 1,
-                stack: 'Stack 1',
-                order: 3,
-                pointRadius: 3
-              },
-              {
-                label: 'P75',
-                data: backendStats.map(s => s.q3),
-                backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                borderColor: 'rgba(139, 92, 246, 1)',
-                borderWidth: 1,
-                stack: 'Stack 1',
-                order: 4,
-                pointRadius: 3
+                stack: 'RequestTime'
               }
             ]
           },
           options: {
-            indexAxis: 'y',
+            indexAxis: 'x',
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -3616,17 +3615,17 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             scales: {
               x: {
-                title: { display: true, text: 'Time (ms)' },
                 stacked: true
               },
               y: {
-                stacked: true
+                stacked: true,
+                title: { display: true, text: 'Time (ms)' }
               }
             }
           }
         });
       } else {
-        boxPlotCanvas.parentElement.innerHTML = '<p class="chart-no-data">No time data available yet</p>';
+        requestTimeCanvas.parentElement.innerHTML = '<p class="chart-no-data">No streaming data available yet (network/prompt/generation metrics)</p>';
       }
     }
 
