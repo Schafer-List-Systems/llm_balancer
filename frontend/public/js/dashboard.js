@@ -3681,7 +3681,7 @@ document.addEventListener('DOMContentLoaded', () => {
           label: getBackendName(backend),
           data: totalRate,
           borderColor: colors[index % colors.length],
-          backgroundColor: `rgba(${(index * 60 + 236) % 256}, 72, 153, 0.1)`,
+          backgroundColor: `rgba(${(index * 60 + 59) % 256}, ${(index * 40 + 130) % 256}, ${(index * 30 + 246) % 256}, 0.1)`,
           borderWidth: 2,
           fill: true,
           tension: 0.3
