@@ -1050,9 +1050,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="config-container-table">
         <div class="config-table-header">
           <h2>Configuration</h2>
-          <p class="config-note">
-            Changes are saved to config.json but require server restart to take effect.
-          </p>
         </div>
 
         <div class="config-table-wrapper">
@@ -1061,7 +1058,6 @@ document.addEventListener('DOMContentLoaded', () => {
               <tr>
                 <th class="config-col-name">Setting</th>
                 <th class="config-col-value">Value</th>
-                <th class="config-col-actions"></th>
               </tr>
             </thead>
             <tbody id="configTableBody"></tbody>
@@ -1077,12 +1073,6 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
           <button class="config-array-add-btn" onclick="window.addBackend()">
             + Add Backend
-          </button>
-        </div>
-
-        <div class="config-save-container">
-          <button class="config-save-all-btn" onclick="window.saveAllConfig()">
-            Save Configuration
           </button>
         </div>
       </div>
@@ -1149,10 +1139,6 @@ document.addEventListener('DOMContentLoaded', () => {
               : `<input type="number" class="config-inline-input" value="${value}">`
             }
           </div>
-        </td>
-        <td class="config-cell-actions">
-          <button class="config-btn-save" onclick="window.saveInlineEdit('${path}')" style="display: none;" title="Save">✓</button>
-          <button class="config-btn-cancel" onclick="window.cancelEdit('${path}')" style="display: none;" title="Cancel">✕</button>
         </td>
       </tr>
     `;
@@ -1345,12 +1331,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   /**
-   * Track currently editing row
+   * Track currently editing row and original value
    */
   let currentlyEditingRow = null;
+  let editingOriginalValue = null;
 
   /**
-   * Start inline editing on a table row
+   * Start inline editing on a table row - saves on Enter, cancels on Escape
    */
   window.startEdit = function(path, value, suffix, hasConverter) {
     const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
@@ -1358,13 +1345,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const display = row.querySelector('.config-value-display');
     const inputContainer = row.querySelector('.config-value-input');
-    const saveBtn = row.querySelector('.config-btn-save');
-    const cancelBtn = row.querySelector('.config-btn-cancel');
 
     display.style.display = 'none';
     inputContainer.style.display = 'block';
-    saveBtn.style.display = 'inline-block';
-    cancelBtn.style.display = 'inline-block';
 
     const input = inputContainer.querySelector('input');
     if (input) {
@@ -1374,29 +1357,33 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = value;
       }
       input.focus();
+      input.select();
     }
 
     currentlyEditingRow = row;
+    editingOriginalValue = value;
 
-    // Enter key saves
+    // Enter saves immediately, Escape cancels
     input.onkeydown = (e) => {
       if (e.key === 'Enter') {
-        saveInlineEdit(path);
+        e.preventDefault();
+        saveInlineEdit(path, suffix);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelEdit(path);
       }
     };
   };
 
   /**
-   * Save inline edit
+   * Save inline edit - persists to globalConfig immediately
    */
-  window.saveInlineEdit = function(path) {
+  window.saveInlineEdit = function(path, suffix) {
     const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
     if (!row) return;
 
     const display = row.querySelector('.config-value-display');
     const inputContainer = row.querySelector('.config-value-input');
-    const saveBtn = row.querySelector('.config-btn-save');
-    const cancelBtn = row.querySelector('.config-btn-cancel');
     const input = inputContainer.querySelector('input');
 
     if (!input) return;
@@ -1409,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', () => {
       newValue = isNaN(numVal) ? input.value : numVal;
     }
 
-    // Update globalConfig
+    // Update globalConfig immediately
     setNestedValue(globalConfig, path, newValue);
 
     // Update display based on suffix
@@ -1424,13 +1411,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Hide input, show display
     inputContainer.style.display = 'none';
     display.style.display = 'block';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
     currentlyEditingRow = null;
+    editingOriginalValue = null;
   };
 
   /**
-   * Cancel inline edit
+   * Cancel inline edit - reverts to original value
    */
   window.cancelEdit = function(path) {
     const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
@@ -1438,14 +1424,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const display = row.querySelector('.config-value-display');
     const inputContainer = row.querySelector('.config-value-input');
-    const saveBtn = row.querySelector('.config-btn-save');
-    const cancelBtn = row.querySelector('.config-btn-cancel');
 
+    // Restore original value
+    display.textContent = editingOriginalValue;
+
+    // Hide input, show display
     inputContainer.style.display = 'none';
     display.style.display = 'block';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
     currentlyEditingRow = null;
+    editingOriginalValue = null;
   };
 
   /**

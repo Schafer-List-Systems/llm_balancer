@@ -4053,12 +4053,6 @@ body.dark-mode .condensed-metric-value {
   margin-bottom: 0.5rem;
 }
 
-.config-note {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
 .config-table-wrapper {
   overflow-x: auto;
   margin-bottom: 1.5rem;
@@ -4096,11 +4090,6 @@ body.dark-mode .condensed-metric-value {
   width: 40%;
 }
 
-.config-col-actions {
-  width: 25%;
-  text-align: center;
-}
-
 .config-table tbody tr {
   border-bottom: 1px solid var(--border-color);
   transition: background-color 0.2s;
@@ -4108,10 +4097,6 @@ body.dark-mode .condensed-metric-value {
 
 .config-table tbody tr:hover {
   background: var(--bg-color);
-}
-
-.config-table-row.editing {
-  background: #fef3c7;
 }
 
 .config-cell-name {
@@ -4142,120 +4127,39 @@ body.dark-mode .condensed-metric-value {
   transition: background-color 0.2s;
   font-weight: 500;
   color: var(--text-primary);
+  user-select: none;
 }
 
 .config-value-display:hover {
   background: var(--bg-color);
+  border-radius: 4px;
 }
 
 .config-value-input {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: flex-start;
 }
 
 .config-value-input input[type="number"] {
   width: 120px;
   padding: 0.5rem;
-  border: 1px solid var(--border-color);
+  border: 2px solid var(--primary-color);
   border-radius: 4px;
   font-size: 0.875rem;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .config-value-input input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
-}
-
-.config-cell-actions {
-  padding: 1rem;
-  vertical-align: top;
-  text-align: center;
-}
-
-.config-btn-save,
-.config-btn-cancel {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  font-size: 1rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  margin: 0 0.25rem;
-}
-
-.config-btn-save {
-  background: var(--success-color);
-  color: white;
-}
-
-.config-btn-save:hover {
-  background: #16a34a;
-  transform: scale(1.1);
-}
-
-.config-btn-cancel {
-  background: var(--danger-color);
-  color: white;
-}
-
-.config-btn-cancel:hover {
-  background: #dc2626;
-  transform: scale(1.1);
+  accent-color: var(--success-color);
 }
 
 .config-section-header {
   margin-bottom: 0.5rem;
-}
-
-.config-save-container {
-  text-align: center;
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border-color);
-}
-
-.config-save-all-btn {
-  background: linear-gradient(135deg, var(--primary-color) 0%, #2563eb 100%);
-  color: white;
-  border: none;
-  padding: 1rem 3rem;
-  font-size: 1rem;
-  font-weight: 500;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-  transition: all 0.2s;
-}
-
-.config-save-all-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
-}
-
-.config-save-all-btn:active {
-  transform: translateY(0);
-}
-
-.config-save-all-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* Inline editing highlight */
-.config-table-row:hover .config-btn-save,
-.config-table-row:hover .config-btn-cancel {
-  opacity: 0.5;
-}
-
-.config-table-row:hover {
-  background: var(--bg-color);
 }
 
 /* Dark mode support */
