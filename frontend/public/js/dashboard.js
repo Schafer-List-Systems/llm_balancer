@@ -1005,7 +1005,8 @@ document.addEventListener('DOMContentLoaded', () => {
       failuresValue.style.color = healthCheck.consecutiveFailures > 0 ? 'var(--danger-color)' : 'var(--success-color)';
     }
     if (payloadValue) {
-      payloadValue.textContent = `${config.maxPayloadSizeMB} MB`;
+      const payloadSizeMB = Math.round(config.maxPayloadSize / (1024 * 1024));
+      payloadValue.textContent = `${payloadSizeMB} MB`;
     }
   }
 
@@ -1066,8 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">Performance</h3>
           <div class="config-field-group">
-            ${renderConfigField('maxPayloadSize', config.maxPayloadSize, true, 'Maximum request payload size in bytes')}
-            ${renderConfigField('maxPayloadSizeMB', config.maxPayloadSizeMB, false, 'Maximum payload size in MB (calculated)')}
+            ${renderConfigField('maxPayloadSize', config.maxPayloadSize, true, `Maximum request payload size in bytes (currently ${Math.round(config.maxPayloadSize / (1024 * 1024))} MB)`)}
           </div>
         </div>
 
