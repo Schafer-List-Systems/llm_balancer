@@ -1376,9 +1376,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   /**
-   * Save inline edit - persists to globalConfig immediately
+   * Save inline edit - persists to globalConfig and config.json
    */
-  window.saveInlineEdit = function(path, suffix) {
+  window.saveInlineEdit = async function(path, suffix) {
     const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
     if (!row) return;
 
@@ -1407,6 +1407,9 @@ document.addEventListener('DOMContentLoaded', () => {
       displayValue = newValue ? 'Yes' : 'No';
     }
     display.textContent = displayValue;
+
+    // Save to config.json automatically
+    await window.saveAllConfig();
 
     // Hide input, show display
     inputContainer.style.display = 'none';
