@@ -23,7 +23,6 @@ const path = require('path');
  */
 const DEFAULTS = {
   port: 3001,
-  version: '0.0.0',
   maxRetries: 3,
   maxPayloadSize: 50 * 1024 * 1024, // 50MB
   maxStatsSamples: 20,
@@ -153,7 +152,6 @@ function buildConfigFromEnv(env) {
   // Start with defaults and override with env vars
   const config = {
     port: env.LB_PORT ? parseInt(env.LB_PORT) : DEFAULTS.port,
-    version: env.VERSION || DEFAULTS.version,
     maxRetries: env.MAX_RETRIES ? parseInt(env.MAX_RETRIES) : DEFAULTS.maxRetries,
     maxPayloadSize: env.MAX_PAYLOAD_SIZE ? parseInt(env.MAX_PAYLOAD_SIZE) : DEFAULTS.maxPayloadSize,
     maxStatsSamples: env.MAX_STATS_SAMPLES ? parseInt(env.MAX_STATS_SAMPLES) : DEFAULTS.maxStatsSamples,

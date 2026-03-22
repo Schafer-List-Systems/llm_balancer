@@ -451,7 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </main>
 
           <footer class="footer">
-            <p>LLM Balancer Dashboard • Running on port 3080</p>
+            <p>LLM Balancer Dashboard • Running on port 3080 • Version <span id="appVersion">...</span></p>
           </footer>
         </div>
       </div>
@@ -1056,7 +1056,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">General</h3>
           <div class="config-field-group">
-            ${renderConfigField('version', config.version, false, 'Application version')}
             ${renderConfigField('port', config.port, true, 'Port the balancer listens on')}
             ${renderConfigField('maxRetries', config.maxRetries, true, 'Maximum retry attempts for failed requests')}
             ${renderConfigField('maxStatsSamples', config.maxStatsSamples, true, 'Number of samples to keep for statistics')}
@@ -2422,6 +2421,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (queueViewer) queueViewer.style.display = 'block';
       }
 
+      // Load application version
+      loadAppVersion();
+
       // Start polling for automatic refresh
       apiClient.setUpdateCallback((updatedData) => {
         renderDashboard();
@@ -2429,6 +2431,26 @@ document.addEventListener('DOMContentLoaded', () => {
       apiClient.startPolling();
     } else {
       showNotification('Failed to load dashboard data', 'error');
+    }
+  }
+
+  /**
+   * Load application version from backend API and display in footer
+   */
+  async function loadAppVersion() {
+    const versionEl = document.getElementById('appVersion');
+    if (!versionEl) return;
+
+    try {
+      const result = await apiClient.getVersion();
+      if (result.success && result.data?.version) {
+        versionEl.textContent = result.data.version;
+      } else {
+        versionEl.textContent = 'Unknown';
+      }
+    } catch (error) {
+      console.warn('Failed to load version:', error);
+      versionEl.textContent = 'Unknown';
     }
   }
 

@@ -480,6 +480,19 @@ class ApiClient {
   }
 
   /**
+   * Get application version
+   */
+  async getVersion() {
+    try {
+      const data = await this.request('/version');
+      this.lastUpdateTime = new Date();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Update configuration
    * @param {Object} config - New configuration object
    */
