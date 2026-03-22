@@ -1319,6 +1319,11 @@ document.addEventListener('DOMContentLoaded', () => {
    * Update a simple field value (preview)
    */
   window.updateField = function(name, value) {
+    // Update the actual config object using dot-notation path
+    const numValue = parseFloat(value);
+    setNestedValue(globalConfig, name, isNaN(numValue) ? value : numValue);
+
+    // Update the display preview
     const input = document.getElementById(`input-${name}`);
     if (input) {
       document.getElementById(`value-${name}`).textContent = typeof value === 'number' ? value : `"${value}"`;
