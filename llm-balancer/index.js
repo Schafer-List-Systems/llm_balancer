@@ -681,7 +681,9 @@ if (config.debug.enabled) {
    */
   app.get('/config', (req, res) => {
     console.info(`[${getTimestamp()}] Configuration requested`);
-    res.json(config);
+    // Read fresh from disk to always return current config
+    const freshConfig = configModule.loadConfig();
+    res.json(freshConfig);
   });
 
   /**
