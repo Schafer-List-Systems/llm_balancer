@@ -1055,7 +1055,6 @@ document.addEventListener('DOMContentLoaded', () => {
           </p>
         </div>
 
-        <!-- Compact Table Layout -->
         <div class="config-table-wrapper">
           <table class="config-table">
             <thead>
@@ -1069,7 +1068,6 @@ document.addEventListener('DOMContentLoaded', () => {
           </table>
         </div>
 
-        <!-- Backends Section (separate card for array management) -->
         <div class="config-section">
           <div class="config-section-header">
             <h3 class="config-section-title">Backends</h3>
@@ -1082,7 +1080,6 @@ document.addEventListener('DOMContentLoaded', () => {
           </button>
         </div>
 
-        <!-- Save Button -->
         <div class="config-save-container">
           <button class="config-save-all-btn" onclick="window.saveAllConfig()">
             Save Configuration
@@ -1090,8 +1087,6 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `;
-
-    // Render table rows
     renderConfigTableRows(config);
   }
 
@@ -1103,40 +1098,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!tbody) return;
 
     tbody.innerHTML = `
-      <!-- General -->
       ${renderConfigTableRow('port', config.port, 'Port', 'Port the balancer listens on')}
-      ${renderConfigTableRow('maxRetries', config.maxRetries, 'Max Retries', 'Maximum retry attempts for failed requests')}
-      ${renderConfigTableRow('maxStatsSamples', config.maxStatsSamples, 'Max Stats Samples', 'Number of samples to keep for statistics')}
-
-      <!-- Performance -->
+      ${renderConfigTableRow('maxRetries', config.maxRetries, 'Max Retries', 'Maximum retry attempts')}
+      ${renderConfigTableRow('maxStatsSamples', config.maxStatsSamples, 'Max Stats Samples', 'Number of samples to keep')}
       ${renderConfigTableRow('maxPayloadSize',
         Math.round(config.maxPayloadSize / (1024 * 1024)) + ' MB',
         'Max Payload Size',
         'Maximum request payload size',
         (v) => v * 1024 * 1024)}
-
-      <!-- Health Check -->
-      ${renderConfigTableRow('healthCheck.interval', config.healthCheck?.interval, 'Health Check Interval', 'Interval between health checks in milliseconds', null, 'ms')}
-      ${renderConfigTableRow('healthCheck.timeout', config.healthCheck?.timeout, 'Health Check Timeout', 'Timeout for each health check in milliseconds', null, 'ms')}
-      ${renderConfigTableRow('healthCheck.maxRetries', config.healthCheck?.maxRetries, 'Health Check Max Retries', 'Maximum retry attempts for failed health checks')}
-      ${renderConfigTableRow('healthCheck.retryDelay', config.healthCheck?.retryDelay, 'Retry Delay', 'Delay between health check retries in milliseconds', null, 'ms')}
-      ${renderConfigTableRow('healthCheck.staggerDelay', config.healthCheck?.staggerDelay, 'Stagger Delay', 'Delay between health checks for different backends in milliseconds', null, 'ms')}
-
-      <!-- Queue -->
-      ${renderConfigTableRow('queue.timeout', config.queue?.timeout, 'Queue Timeout', 'Maximum time a request can wait in queue in milliseconds', null, 'ms')}
-      ${renderConfigTableRow('queue.depthHistorySize', config.queue?.depthHistorySize, 'Queue Depth History Size', 'Number of queue depth samples to retain for history')}
-
-      <!-- Request -->
-      ${renderConfigTableRow('request.timeout', config.request?.timeout, 'Request Timeout', 'Maximum time for backend requests in milliseconds', null, 'ms')}
-
-      <!-- Debug -->
-      ${renderConfigTableRow('debug.enabled', config.debug?.enabled, 'Debug Enabled', 'Enable debug logging and request history', null, 'boolean')}
-      ${renderConfigTableRow('debug.requestHistorySize', config.debug?.requestHistorySize, 'Request History Size', 'Number of recent requests to retain in history')}
-
-      <!-- Prompt Cache -->
-      ${renderConfigTableRow('prompt.cache.maxSize', config.prompt?.cache?.maxSize, 'Prompt Cache Max Size', 'Maximum number of cached prompts to retain')}
-      ${renderConfigTableRow('prompt.cache.similarityThreshold', config.prompt?.cache?.similarityThreshold, 'Prompt Cache Similarity Threshold', 'Similarity threshold for cache hits (0-1)', (v) => parseFloat(v).toFixed(2))}
-      ${renderConfigTableRow('prompt.cache.minHitThreshold', config.prompt?.cache?.minHitThreshold, 'Prompt Cache Min Hit Threshold', 'Minimum token count threshold for cache consideration')}
+      ${renderConfigTableRow('healthCheck.interval', config.healthCheck?.interval, 'Health Check Interval', 'Interval between health checks', null, 'ms')}
+      ${renderConfigTableRow('healthCheck.timeout', config.healthCheck?.timeout, 'Health Check Timeout', 'Timeout for health checks', null, 'ms')}
+      ${renderConfigTableRow('healthCheck.maxRetries', config.healthCheck?.maxRetries, 'Health Check Max Retries', 'Max retry attempts')}
+      ${renderConfigTableRow('healthCheck.retryDelay', config.healthCheck?.retryDelay, 'Retry Delay', 'Delay between retries', null, 'ms')}
+      ${renderConfigTableRow('healthCheck.staggerDelay', config.healthCheck?.staggerDelay, 'Stagger Delay', 'Delay between backend checks', null, 'ms')}
+      ${renderConfigTableRow('queue.timeout', config.queue?.timeout, 'Queue Timeout', 'Max time requests wait in queue', null, 'ms')}
+      ${renderConfigTableRow('queue.depthHistorySize', config.queue?.depthHistorySize, 'Queue Depth History Size', 'Queue depth samples to retain')}
+      ${renderConfigTableRow('request.timeout', config.request?.timeout, 'Request Timeout', 'Max time for backend requests', null, 'ms')}
+      ${renderConfigTableRow('debug.enabled', config.debug?.enabled, 'Debug Enabled', 'Enable debug logging', null, 'boolean')}
+      ${renderConfigTableRow('debug.requestHistorySize', config.debug?.requestHistorySize, 'Request History Size', 'Requests to retain in history')}
+      ${renderConfigTableRow('prompt.cache.maxSize', config.prompt?.cache?.maxSize, 'Prompt Cache Max Size', 'Max cached prompts to retain')}
+      ${renderConfigTableRow('prompt.cache.similarityThreshold', config.prompt?.cache?.similarityThreshold, 'Prompt Cache Similarity Threshold', 'Similarity threshold (0-1)', (v) => parseFloat(v).toFixed(2))}
+      ${renderConfigTableRow('prompt.cache.minHitThreshold', config.prompt?.cache?.minHitThreshold, 'Prompt Cache Min Hit Threshold', 'Min tokens for cache consideration')}
     `;
   }
 
@@ -1152,13 +1134,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     return `
-      <tr class="config-table-row" data-path="${path}">
+      <tr class="config-table-row" data-path="${path}" data-suffix="${suffix || ''}">
         <td class="config-cell-name">
           <div class="config-label">${label}</div>
           <div class="config-description">${description}</div>
         </td>
         <td class="config-cell-value">
-          <div class="config-value-display" onclick="window.startEdit('${path}', ${JSON.stringify(value).replace(/"/g, '&quot;')}, '${suffix || ''}', ${converter !== null})">
+          <div class="config-value-display" onclick="window.startEdit('${path}', ${JSON.stringify(value)}, '${suffix || ''}', ${converter !== null})">
             ${displayValue}
           </div>
           <div class="config-value-input" style="display: none;">
@@ -1354,15 +1336,116 @@ document.addEventListener('DOMContentLoaded', () => {
    * Update a simple field value (preview)
    */
   window.updateField = function(name, value) {
-    // Update the actual config object using dot-notation path
     const numValue = parseFloat(value);
     setNestedValue(globalConfig, name, isNaN(numValue) ? value : numValue);
-
-    // Update the display preview
     const input = document.getElementById(`input-${name}`);
     if (input) {
       document.getElementById(`value-${name}`).textContent = typeof value === 'number' ? value : `"${value}"`;
     }
+  };
+
+  /**
+   * Track currently editing row
+   */
+  let currentlyEditingRow = null;
+
+  /**
+   * Start inline editing on a table row
+   */
+  window.startEdit = function(path, value, suffix, hasConverter) {
+    const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
+    if (!row) return;
+
+    const display = row.querySelector('.config-value-display');
+    const inputContainer = row.querySelector('.config-value-input');
+    const saveBtn = row.querySelector('.config-btn-save');
+    const cancelBtn = row.querySelector('.config-btn-cancel');
+
+    display.style.display = 'none';
+    inputContainer.style.display = 'block';
+    saveBtn.style.display = 'inline-block';
+    cancelBtn.style.display = 'inline-block';
+
+    const input = inputContainer.querySelector('input');
+    if (input) {
+      if (input.type === 'checkbox') {
+        input.checked = value;
+      } else {
+        input.value = value;
+      }
+      input.focus();
+    }
+
+    currentlyEditingRow = row;
+
+    // Enter key saves
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        saveInlineEdit(path);
+      }
+    };
+  };
+
+  /**
+   * Save inline edit
+   */
+  window.saveInlineEdit = function(path) {
+    const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
+    if (!row) return;
+
+    const display = row.querySelector('.config-value-display');
+    const inputContainer = row.querySelector('.config-value-input');
+    const saveBtn = row.querySelector('.config-btn-save');
+    const cancelBtn = row.querySelector('.config-btn-cancel');
+    const input = inputContainer.querySelector('input');
+
+    if (!input) return;
+
+    let newValue;
+    if (input.type === 'checkbox') {
+      newValue = input.checked;
+    } else {
+      const numVal = parseFloat(input.value);
+      newValue = isNaN(numVal) ? input.value : numVal;
+    }
+
+    // Update globalConfig
+    setNestedValue(globalConfig, path, newValue);
+
+    // Update display based on suffix
+    let displayValue = newValue;
+    if (row.dataset.suffix === 'ms' && typeof newValue === 'number') {
+      displayValue = newValue + ' ms';
+    } else if (row.dataset.suffix === 'boolean') {
+      displayValue = newValue ? 'Yes' : 'No';
+    }
+    display.textContent = displayValue;
+
+    // Hide input, show display
+    inputContainer.style.display = 'none';
+    display.style.display = 'block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    currentlyEditingRow = null;
+  };
+
+  /**
+   * Cancel inline edit
+   */
+  window.cancelEdit = function(path) {
+    const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
+    if (!row) return;
+
+    const display = row.querySelector('.config-value-display');
+    const inputContainer = row.querySelector('.config-value-input');
+    const saveBtn = row.querySelector('.config-btn-save');
+    const cancelBtn = row.querySelector('.config-btn-cancel');
+
+    inputContainer.style.display = 'none';
+    display.style.display = 'block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    currentlyEditingRow = null;
   };
 
   /**
