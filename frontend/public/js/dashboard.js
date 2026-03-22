@@ -1130,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="config-description">${description}</div>
         </td>
         <td class="config-cell-value">
-          <div class="config-value-display" onclick="window.startEdit('${path}', ${JSON.stringify(value)}, '${suffix || ''}', ${converter !== null})">
+          <div class="config-value-display" onclick="window.startEdit('${path}')">
             ${displayValue}
           </div>
           <div class="config-value-input" style="display: none;">
@@ -1339,7 +1339,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * Start inline editing on a table row - saves on Enter, cancels on Escape
    */
-  window.startEdit = function(path, value, suffix, hasConverter) {
+  window.startEdit = function(path) {
     const row = document.querySelector(`.config-table-row[data-path="${path}"]`);
     if (!row) return;
 
@@ -1349,19 +1349,23 @@ document.addEventListener('DOMContentLoaded', () => {
     display.style.display = 'none';
     inputContainer.style.display = 'block';
 
+    // Read current value from globalConfig instead of using embedded HTML value
+    const currentValue = getNestedValue(globalConfig, path);
+    const suffix = row.dataset.suffix || '';
+
     const input = inputContainer.querySelector('input');
-    if (input) {
-      if (input.type === 'checkbox') {
-        input.checked = value;
-      } else {
-        input.value = value;
-      }
-      input.focus();
-      input.select();
+    if (!input) return;
+
+    if (input.type === 'checkbox') {
+      input.checked = currentValue;
+    } else {
+      input.value = currentValue;
     }
+    input.focus();
+    input.select();
 
     currentlyEditingRow = row;
-    editingOriginalValue = value;
+    editingOriginalValue = currentValue;
 
     // Enter saves immediately, Escape cancels
     input.onkeydown = (e) => {
@@ -1567,30 +1571,17 @@ document.addEventListener('DOMContentLoaded', () => {
    * Save all configuration changes
    */
   window.saveAllConfig = async function() {
-    const btn = document.querySelector('button[onclick="window.saveAllConfig()"]');
-    const originalText = btn.textContent;
-    btn.textContent = 'Saving...';
-    btn.disabled = true;
-
     try {
       const result = await window.apiClient.updateConfig(globalConfig);
 
       if (result.success) {
-        alert('Configuration saved successfully! Remember to restart the server for changes to take effect.');
-        btn.textContent = 'Saved!';
-        setTimeout(() => {
-          btn.textContent = originalText;
-          btn.disabled = false;
-        }, 2000);
+        // Value was saved inline immediately, just show confirmation
+        console.log('[Dashboard] Configuration saved successfully');
       } else {
         alert('Failed to save configuration: ' + result.error);
-        btn.textContent = originalText;
-        btn.disabled = false;
       }
     } catch (error) {
       alert('Error saving configuration: ' + error.message);
-      btn.textContent = originalText;
-      btn.disabled = false;
     }
   };
 
