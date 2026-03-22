@@ -89,10 +89,30 @@ describe('Request Processor', () => {
         url: 'http://localhost:3000',
         busy: true,
         activeRequestCount: 2,
-        maxConcurrency: 2
+        activeStreamingRequests: 2,  // Needed for releaseBackend to work
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 2,
+        decrementStreamingRequest: function(callback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        },
+        decrementNonStreamingRequest: function(callback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        }
       };
 
-      requestProcessor.releaseBackend(mockBalancer, backend);
+      requestProcessor.releaseBackend(mockBalancer, backend, 'streaming');
 
       expect(backend.activeRequestCount).toBe(1);
       expect(mockBalancer.notifyBackendAvailable).toHaveBeenCalled();
@@ -107,10 +127,31 @@ describe('Request Processor', () => {
         id: 'test-backend',
         url: 'http://localhost:3000',
         busy: false,
-        activeRequestCount: 0
+        activeRequestCount: 0,
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 10,
+        decrementStreamingRequest: function(callback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        },
+        decrementNonStreamingRequest: function(callback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        }
       };
 
-      requestProcessor.releaseBackend(mockBalancer, backend);
+      requestProcessor.releaseBackend(mockBalancer, backend, 'streaming');
 
       expect(backend.activeRequestCount).toBe(0);
       expect(mockBalancer.notifyBackendAvailable).not.toHaveBeenCalled();
@@ -125,10 +166,30 @@ describe('Request Processor', () => {
         url: 'http://localhost:3000',
         busy: true,
         activeRequestCount: 1,
-        maxConcurrency: 2
+        activeStreamingRequests: 1,
+        activeNonStreamingRequests: 0,
+        maxConcurrency: 2,
+        decrementStreamingRequest: function(callback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        },
+        decrementNonStreamingRequest: function(callback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        }
       };
 
-      requestProcessor.releaseBackend(mockBalancer, backend);
+      requestProcessor.releaseBackend(mockBalancer, backend, 'streaming');
 
       expect(backend.activeRequestCount).toBe(0);
       expect(mockBalancer.notifyBackendAvailable).toHaveBeenCalled();
@@ -214,7 +275,7 @@ describe('Request Processor', () => {
         trackDebugRequest: jest.fn()
       };
 
-      // Create mock backend
+      // Create mock backend with full Backend API implementation
       mockBackend = {
         id: 'test-backend',
         url: 'http://localhost:3000',
@@ -224,10 +285,38 @@ describe('Request Processor', () => {
         activeStreamingRequests: 0,
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        incrementStreamingRequest: jest.fn(),
-        decrementStreamingRequest: jest.fn(),
-        incrementNonStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        incrementStreamingRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementStreamingRequest: function(notifyCallback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        },
+        incrementNonStreamingRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeNonStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementNonStreamingRequest: function(notifyCallback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        }
       };
 
       // Create mock config
@@ -287,14 +376,48 @@ describe('Request Processor', () => {
     });
 
     it('should release backend after request completes', () => {
-      // Create a fresh backend for this test
+      // Create a fresh backend for this test with full Backend API implementation
       const testBackend = {
         id: 'test-backend',
         url: 'http://localhost:3000',
         busy: false,
         priority: 5,
         activeRequestCount: 1,
-        maxConcurrency: 10
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 1,
+        maxConcurrency: 10,
+        incrementStreamingRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementStreamingRequest: function(notifyCallback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        },
+        incrementNonStreamingRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeNonStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementNonStreamingRequest: function(notifyCallback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        }
       };
 
       requestProcessor.processRequest(mockBalancer, testBackend, mockReq, mockRes, jest.fn(), mockConfig);
@@ -355,10 +478,38 @@ describe('Request Processor', () => {
         activeStreamingRequests: 0,
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        incrementStreamingRequest: jest.fn(),
-        decrementStreamingRequest: jest.fn(),
-        incrementNonStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        incrementStreamingRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementStreamingRequest: function(notifyCallback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        },
+        incrementNonStreamingRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeNonStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementNonStreamingRequest: function(notifyCallback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        }
       };
 
       mockReq = {
@@ -398,14 +549,30 @@ describe('Request Processor', () => {
       const testBackend = {
         id: 'test',
         activeRequestCount: 5,
-        activeStreamingRequests: 0,
+        activeStreamingRequests: 5,  // Match activeRequestCount for streaming
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        decrementStreamingRequest: function(callback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        },
+        decrementNonStreamingRequest: function(callback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        }
       };
 
-      requestProcessor.releaseBackend(mockBalancer, testBackend);
+      requestProcessor.releaseBackend(mockBalancer, testBackend, 'streaming');
 
       expect(testBackend.activeRequestCount).toBe(4);
       expect(mockBalancer.notifyBackendAvailable).toHaveBeenCalled();
@@ -419,14 +586,30 @@ describe('Request Processor', () => {
       const testBackend = {
         id: 'test',
         activeRequestCount: 10,
-        activeStreamingRequests: 0,
+        activeStreamingRequests: 10,  // At max concurrency
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        decrementStreamingRequest: function(callback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        },
+        decrementNonStreamingRequest: function(callback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            if (this.activeRequestCount < this.maxConcurrency && callback) {
+              callback();
+            }
+          }
+        }
       };
 
-      requestProcessor.releaseBackend(mockBalancer2, testBackend);
+      requestProcessor.releaseBackend(mockBalancer2, testBackend, 'streaming');
 
       expect(testBackend.activeRequestCount).toBe(9);
       // Balancer should be notified since we went from max to below max
@@ -441,18 +624,30 @@ describe('Request Processor', () => {
       const testBackend = {
         id: 'test',
         activeRequestCount: 2,
-        activeStreamingRequests: 0,
+        activeStreamingRequests: 2,  // Already below max
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        decrementStreamingRequest: function(callback) {
+          if (this.activeStreamingRequests > 0) {
+            this.activeStreamingRequests--;
+            this.activeRequestCount--;
+            // No callback since still below max concurrency
+          }
+        },
+        decrementNonStreamingRequest: function(callback) {
+          if (this.activeNonStreamingRequests > 0) {
+            this.activeNonStreamingRequests--;
+            this.activeRequestCount--;
+            // No callback since still below max concurrency
+          }
+        }
       };
 
-      requestProcessor.releaseBackend(mockBalancer3, testBackend);
+      requestProcessor.releaseBackend(mockBalancer3, testBackend, 'streaming');
 
       expect(testBackend.activeRequestCount).toBe(1);
-      // Balancer should still be notified since we decremented
-      expect(mockBalancer3.notifyBackendAvailable).toHaveBeenCalled();
+      // Balancer should NOT be notified since we're already below max
+      expect(mockBalancer3.notifyBackendAvailable).not.toHaveBeenCalled();
     });
   });
 });

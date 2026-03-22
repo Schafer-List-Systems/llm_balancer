@@ -711,10 +711,14 @@ describe('Backend Class', () => {
         healthy: true,
         failCount: 0,
         activeRequestCount: 5,
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
         requestCount: 100,
         errorCount: 2,
         apiTypes: ['ollama', 'openai'],
-        primaryApiType: 'ollama'
+        primaryApiType: 'ollama',
+        hasStreamingMode: false,
+        hasNonStreamingMode: false
       });
     });
   });
