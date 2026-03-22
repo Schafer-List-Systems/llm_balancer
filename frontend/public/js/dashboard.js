@@ -1043,85 +1043,37 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Render the full configuration UI
+   * Render the full configuration UI as compact table
    */
   function renderFullConfigUI(container, config) {
     container.innerHTML = `
-      <div class="config-container-full">
-        <div class="config-section-info">
-          <strong>Note:</strong> Configuration changes are saved to config.json but require server restart to take effect.
-          After making changes, click "Save Configuration" then restart the backend.
+      <div class="config-container-table">
+        <div class="config-table-header">
+          <h2>Configuration</h2>
+          <p class="config-note">
+            Changes are saved to config.json but require server restart to take effect.
+          </p>
         </div>
 
-        <!-- General Section -->
+        <!-- Compact Table Layout -->
+        <div class="config-table-wrapper">
+          <table class="config-table">
+            <thead>
+              <tr>
+                <th class="config-col-name">Setting</th>
+                <th class="config-col-value">Value</th>
+                <th class="config-col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="configTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Backends Section (separate card for array management) -->
         <div class="config-section">
-          <h3 class="config-section-title">General</h3>
-          <div class="config-field-group">
-            ${renderConfigField('port', config.port, true, 'Port the balancer listens on')}
-            ${renderConfigField('maxRetries', config.maxRetries, true, 'Maximum retry attempts for failed requests')}
-            ${renderConfigField('maxStatsSamples', config.maxStatsSamples, true, 'Number of samples to keep for statistics')}
+          <div class="config-section-header">
+            <h3 class="config-section-title">Backends</h3>
           </div>
-        </div>
-
-        <!-- Performance Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Performance</h3>
-          <div class="config-field-group">
-            ${renderConfigField('maxPayloadSize', config.maxPayloadSize, true, `Maximum request payload size in bytes (currently ${Math.round(config.maxPayloadSize / (1024 * 1024))} MB)`)}
-          </div>
-        </div>
-
-        <!-- Health Check Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Health Check</h3>
-          <div class="config-field-group">
-            ${renderConfigField('healthCheck.interval', config.healthCheck?.interval, true, 'Interval between health checks in milliseconds')}
-            ${renderConfigField('healthCheck.timeout', config.healthCheck?.timeout, true, 'Timeout for each health check in milliseconds')}
-            ${renderConfigField('healthCheck.maxRetries', config.healthCheck?.maxRetries, true, 'Maximum retry attempts for failed health checks')}
-            ${renderConfigField('healthCheck.retryDelay', config.healthCheck?.retryDelay, true, 'Delay between health check retries in milliseconds')}
-            ${renderConfigField('healthCheck.staggerDelay', config.healthCheck?.staggerDelay, true, 'Delay between health checks for different backends in milliseconds')}
-          </div>
-        </div>
-
-        <!-- Queue Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Queue</h3>
-          <div class="config-field-group">
-            ${renderConfigField('queue.timeout', config.queue?.timeout, true, 'Maximum time a request can wait in queue in milliseconds')}
-            ${renderConfigField('queue.depthHistorySize', config.queue?.depthHistorySize, true, 'Number of queue depth samples to retain for history')}
-          </div>
-        </div>
-
-        <!-- Request Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Request</h3>
-          <div class="config-field-group">
-            ${renderConfigField('request.timeout', config.request?.timeout, true, 'Maximum time for backend requests in milliseconds')}
-          </div>
-        </div>
-
-        <!-- Debug Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Debug</h3>
-          <div class="config-field-group">
-            ${renderConfigField('debug.enabled', config.debug?.enabled, true, 'Enable debug logging and request history')}
-            ${renderConfigField('debug.requestHistorySize', config.debug?.requestHistorySize, true, 'Number of recent requests to retain in history')}
-          </div>
-        </div>
-
-        <!-- Prompt Cache Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Prompt Cache</h3>
-          <div class="config-field-group">
-            ${renderConfigField('prompt.cache.maxSize', config.prompt?.cache?.maxSize, true, 'Maximum number of cached prompts to retain')}
-            ${renderConfigField('prompt.cache.similarityThreshold', config.prompt?.cache?.similarityThreshold, true, 'Similarity threshold for cache hits (0-1)')}
-            ${renderConfigField('prompt.cache.minHitThreshold', config.prompt?.cache?.minHitThreshold, true, 'Minimum token count threshold for cache consideration')}
-          </div>
-        </div>
-
-        <!-- Backends Section -->
-        <div class="config-section">
-          <h3 class="config-section-title">Backends</h3>
           <div id="backendsConfigContainer" style="margin-bottom: 1rem;">
             ${renderBackendsList(config.backends || [])}
           </div>
@@ -1131,13 +1083,96 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
 
         <!-- Save Button -->
-        <div style="margin-top: 2rem; text-align: center;">
-          <button class="config-field-btn save" style="width: 200px; padding: 1rem; font-size: 1rem;"
-            onclick="window.saveAllConfig()">
+        <div class="config-save-container">
+          <button class="config-save-all-btn" onclick="window.saveAllConfig()">
             Save Configuration
           </button>
         </div>
       </div>
+    `;
+
+    // Render table rows
+    renderConfigTableRows(config);
+  }
+
+  /**
+   * Render all config table rows
+   */
+  function renderConfigTableRows(config) {
+    const tbody = document.getElementById('configTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+      <!-- General -->
+      ${renderConfigTableRow('port', config.port, 'Port', 'Port the balancer listens on')}
+      ${renderConfigTableRow('maxRetries', config.maxRetries, 'Max Retries', 'Maximum retry attempts for failed requests')}
+      ${renderConfigTableRow('maxStatsSamples', config.maxStatsSamples, 'Max Stats Samples', 'Number of samples to keep for statistics')}
+
+      <!-- Performance -->
+      ${renderConfigTableRow('maxPayloadSize',
+        Math.round(config.maxPayloadSize / (1024 * 1024)) + ' MB',
+        'Max Payload Size',
+        'Maximum request payload size',
+        (v) => v * 1024 * 1024)}
+
+      <!-- Health Check -->
+      ${renderConfigTableRow('healthCheck.interval', config.healthCheck?.interval, 'Health Check Interval', 'Interval between health checks in milliseconds', null, 'ms')}
+      ${renderConfigTableRow('healthCheck.timeout', config.healthCheck?.timeout, 'Health Check Timeout', 'Timeout for each health check in milliseconds', null, 'ms')}
+      ${renderConfigTableRow('healthCheck.maxRetries', config.healthCheck?.maxRetries, 'Health Check Max Retries', 'Maximum retry attempts for failed health checks')}
+      ${renderConfigTableRow('healthCheck.retryDelay', config.healthCheck?.retryDelay, 'Retry Delay', 'Delay between health check retries in milliseconds', null, 'ms')}
+      ${renderConfigTableRow('healthCheck.staggerDelay', config.healthCheck?.staggerDelay, 'Stagger Delay', 'Delay between health checks for different backends in milliseconds', null, 'ms')}
+
+      <!-- Queue -->
+      ${renderConfigTableRow('queue.timeout', config.queue?.timeout, 'Queue Timeout', 'Maximum time a request can wait in queue in milliseconds', null, 'ms')}
+      ${renderConfigTableRow('queue.depthHistorySize', config.queue?.depthHistorySize, 'Queue Depth History Size', 'Number of queue depth samples to retain for history')}
+
+      <!-- Request -->
+      ${renderConfigTableRow('request.timeout', config.request?.timeout, 'Request Timeout', 'Maximum time for backend requests in milliseconds', null, 'ms')}
+
+      <!-- Debug -->
+      ${renderConfigTableRow('debug.enabled', config.debug?.enabled, 'Debug Enabled', 'Enable debug logging and request history', null, 'boolean')}
+      ${renderConfigTableRow('debug.requestHistorySize', config.debug?.requestHistorySize, 'Request History Size', 'Number of recent requests to retain in history')}
+
+      <!-- Prompt Cache -->
+      ${renderConfigTableRow('prompt.cache.maxSize', config.prompt?.cache?.maxSize, 'Prompt Cache Max Size', 'Maximum number of cached prompts to retain')}
+      ${renderConfigTableRow('prompt.cache.similarityThreshold', config.prompt?.cache?.similarityThreshold, 'Prompt Cache Similarity Threshold', 'Similarity threshold for cache hits (0-1)', (v) => parseFloat(v).toFixed(2))}
+      ${renderConfigTableRow('prompt.cache.minHitThreshold', config.prompt?.cache?.minHitThreshold, 'Prompt Cache Min Hit Threshold', 'Minimum token count threshold for cache consideration')}
+    `;
+  }
+
+  /**
+   * Render a single config table row with inline editing
+   */
+  function renderConfigTableRow(path, value, label, description, converter = null, suffix = null) {
+    let displayValue = value;
+    if (suffix === 'ms' && typeof value === 'number') {
+      displayValue = value + ' ms';
+    } else if (suffix === 'boolean') {
+      displayValue = value ? 'Yes' : 'No';
+    }
+
+    return `
+      <tr class="config-table-row" data-path="${path}">
+        <td class="config-cell-name">
+          <div class="config-label">${label}</div>
+          <div class="config-description">${description}</div>
+        </td>
+        <td class="config-cell-value">
+          <div class="config-value-display" onclick="window.startEdit('${path}', ${JSON.stringify(value).replace(/"/g, '&quot;')}, '${suffix || ''}', ${converter !== null})">
+            ${displayValue}
+          </div>
+          <div class="config-value-input" style="display: none;">
+            ${value === true || value === false
+              ? `<input type="checkbox" class="config-inline-input" ${value ? 'checked' : ''}>`
+              : `<input type="number" class="config-inline-input" value="${value}">`
+            }
+          </div>
+        </td>
+        <td class="config-cell-actions">
+          <button class="config-btn-save" onclick="window.saveInlineEdit('${path}')" style="display: none;" title="Save">✓</button>
+          <button class="config-btn-cancel" onclick="window.cancelEdit('${path}')" style="display: none;" title="Cancel">✕</button>
+        </td>
+      </tr>
     `;
   }
 
