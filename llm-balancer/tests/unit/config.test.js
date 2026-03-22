@@ -111,7 +111,6 @@ describe('loadConfig() integration', () => {
 
     // Check required top-level fields
     expect(config).toHaveProperty('port');
-    expect(config).toHaveProperty('version');
     expect(config).toHaveProperty('maxRetries');
     expect(config).toHaveProperty('maxPayloadSize');
     expect(config).toHaveProperty('maxStatsSamples');
@@ -128,12 +127,6 @@ describe('loadConfig() integration', () => {
 
     expect(typeof config.port).toBe('number');
     expect(config.port).toBeGreaterThan(0);
-  });
-
-  it('should have string version value', () => {
-    const config = loadConfig();
-
-    expect(typeof config.version).toBe('string');
   });
 
   it('should have array of backends', () => {

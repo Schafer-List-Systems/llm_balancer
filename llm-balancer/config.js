@@ -133,9 +133,6 @@ function mergeConfig(configJson, env) {
   // and defaults fill any remaining gaps
   const config = deepMergeWithDefaults(configJson, env, DEFAULTS);
 
-  // Calculate derived values
-  config.maxPayloadSizeMB = Math.round(config.maxPayloadSize / (1024 * 1024));
-
   return config;
 }
 

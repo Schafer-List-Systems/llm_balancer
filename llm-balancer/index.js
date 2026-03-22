@@ -390,7 +390,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     port: config.port,
     maxPayloadSize: config.maxPayloadSize,
-    maxPayloadSizeMB: config.maxPayloadSizeMB,
+    maxPayloadSizeMB: Math.round(config.maxPayloadSize / (1024 * 1024)),
     healthyBackends: healthStats.healthyBackends,
     totalBackends: healthStats.totalBackends,
     backends: healthStats.backends.map(b => ({
@@ -424,7 +424,7 @@ app.get('/stats', (req, res) => {
       healthCheck: config.healthCheck,
       maxRetries: config.maxRetries,
       maxPayloadSize: config.maxPayloadSize,
-      maxPayloadSizeMB: config.maxPayloadSizeMB,
+      maxPayloadSizeMB: Math.round(config.maxPayloadSize / (1024 * 1024)),
       maxQueueSize: config.maxQueueSize,
       queue: config.queue,
       prompt: config.prompt

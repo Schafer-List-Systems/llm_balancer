@@ -17,7 +17,6 @@ const mockConfig = {
   maxRetries: 3,
   maxPayloadSize: 104857600,
   maxStatsSamples: 20,
-  maxPayloadSizeMB: 100,
   debug: {
     enabled: true,
     requestHistorySize: 100
