@@ -1075,13 +1075,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">Health Check</h3>
           <div class="config-field-group">
-            ${renderConfigNestedField('healthCheck', config.healthCheck, {
-              interval: { editable: true, label: 'Check Interval (ms)', type: 'number' },
-              timeout: { editable: true, label: 'Timeout (ms)', type: 'number' },
-              maxRetries: { editable: true, label: 'Max Retries', type: 'number' },
-              retryDelay: { editable: true, label: 'Retry Delay (ms)', type: 'number' },
-              staggerDelay: { editable: true, label: 'Stagger Delay (ms)', type: 'number' }
-            })}
+            ${renderConfigField('healthCheck.interval', config.healthCheck?.interval, true, 'Interval between health checks in milliseconds')}
+            ${renderConfigField('healthCheck.timeout', config.healthCheck?.timeout, true, 'Timeout for each health check in milliseconds')}
+            ${renderConfigField('healthCheck.maxRetries', config.healthCheck?.maxRetries, true, 'Maximum retry attempts for failed health checks')}
+            ${renderConfigField('healthCheck.retryDelay', config.healthCheck?.retryDelay, true, 'Delay between health check retries in milliseconds')}
+            ${renderConfigField('healthCheck.staggerDelay', config.healthCheck?.staggerDelay, true, 'Delay between health checks for different backends in milliseconds')}
           </div>
         </div>
 
@@ -1089,10 +1087,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">Queue</h3>
           <div class="config-field-group">
-            ${renderConfigNestedField('queue', config.queue, {
-              timeout: { editable: true, label: 'Queue Timeout (ms)', type: 'number' },
-              depthHistorySize: { editable: true, label: 'Depth History Size', type: 'number' }
-            })}
+            ${renderConfigField('queue.timeout', config.queue?.timeout, true, 'Maximum time a request can wait in queue in milliseconds')}
+            ${renderConfigField('queue.depthHistorySize', config.queue?.depthHistorySize, true, 'Number of queue depth samples to retain for history')}
           </div>
         </div>
 
@@ -1100,9 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">Request</h3>
           <div class="config-field-group">
-            ${renderConfigNestedField('request', config.request, {
-              timeout: { editable: true, label: 'Request Timeout (ms)', type: 'number' }
-            })}
+            ${renderConfigField('request.timeout', config.request?.timeout, true, 'Maximum time for backend requests in milliseconds')}
           </div>
         </div>
 
@@ -1110,10 +1104,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">Debug</h3>
           <div class="config-field-group">
-            ${renderConfigNestedField('debug', config.debug, {
-              enabled: { editable: true, label: 'Enable Debug Mode', type: 'boolean' },
-              requestHistorySize: { editable: true, label: 'Request History Size', type: 'number' }
-            })}
+            ${renderConfigField('debug.enabled', config.debug?.enabled, true, 'Enable debug logging and request history')}
+            ${renderConfigField('debug.requestHistorySize', config.debug?.requestHistorySize, true, 'Number of recent requests to retain in history')}
           </div>
         </div>
 
@@ -1121,11 +1113,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="config-section">
           <h3 class="config-section-title">Prompt Cache</h3>
           <div class="config-field-group">
-            ${renderConfigNestedField('prompt.cache', config.prompt?.cache || {}, {
-              maxSize: { editable: true, label: 'Cache Max Size', type: 'number' },
-              similarityThreshold: { editable: true, label: 'Similarity Threshold', type: 'number', step: 0.01 },
-              minHitThreshold: { editable: true, label: 'Min Hit Threshold (tokens)', type: 'number' }
-            })}
+            ${renderConfigField('prompt.cache.maxSize', config.prompt?.cache?.maxSize, true, 'Maximum number of cached prompts to retain')}
+            ${renderConfigField('prompt.cache.similarityThreshold', config.prompt?.cache?.similarityThreshold, true, 'Similarity threshold for cache hits (0-1)')}
+            ${renderConfigField('prompt.cache.minHitThreshold', config.prompt?.cache?.minHitThreshold, true, 'Minimum token count threshold for cache consideration')}
           </div>
         </div>
 
