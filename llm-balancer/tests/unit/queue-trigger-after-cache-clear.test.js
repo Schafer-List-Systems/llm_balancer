@@ -117,7 +117,7 @@ describe('triggerQueueProcessing', () => {
       balancer.queue = originalQueue;
     });
 
-    it('should not process more than one request per call', () => {
+    it('should process ALL eligible requests per call', () => {
       // Add multiple requests to queue
       for (let i = 0; i < 3; i++) {
         balancer.queue.push({
@@ -133,9 +133,9 @@ describe('triggerQueueProcessing', () => {
 
       const result = balancer.triggerQueueProcessing();
 
-      // Should only process one request
-      expect(balancer.queue.length).toBe(2);
-      expect(balancer.triggerRequestProcessing).toHaveBeenCalledTimes(1);
+      // Should process ALL 3 requests (new behavior after fix)
+      expect(balancer.queue.length).toBe(0);
+      expect(balancer.triggerRequestProcessing).toHaveBeenCalledTimes(3);
     });
 
     it('should handle timed out requests correctly', () => {

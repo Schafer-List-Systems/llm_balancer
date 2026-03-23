@@ -177,7 +177,8 @@ class Backend {
   incrementStreamingRequest(notifyCallback) {
     this.activeRequestCount++;
     this.activeStreamingRequests++;
-    if (this.activeRequestCount >= (this.maxConcurrency || 1) && notifyCallback) {
+    // Only notify when transitioning TO max concurrency (not exceeding it)
+    if (this.activeRequestCount === (this.maxConcurrency || 1) && notifyCallback) {
       notifyCallback();
     }
   }
@@ -204,7 +205,8 @@ class Backend {
   incrementNonStreamingRequest(notifyCallback) {
     this.activeRequestCount++;
     this.activeNonStreamingRequests++;
-    if (this.activeRequestCount >= (this.maxConcurrency || 1) && notifyCallback) {
+    // Only notify when transitioning TO max concurrency (not exceeding it)
+    if (this.activeRequestCount === (this.maxConcurrency || 1) && notifyCallback) {
       notifyCallback();
     }
   }

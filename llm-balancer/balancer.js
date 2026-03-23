@@ -409,6 +409,8 @@ class Balancer {
         // Remove from queue and resolve
         queue.splice(i, 1);
         this.requestCount.set('queued', (this.requestCount.get('queued') || 0) - 1);
+        // Adjust index since we removed an element (don't skip next element)
+        i--;
 
         // Debug: Log successful backend selection
         if (this.debug) {
@@ -427,8 +429,9 @@ class Balancer {
 
         // Trigger the actual request processing
         this.triggerRequestProcessing(request, result.backend, null);
-        // Done - only process one request per call
-        return;
+        // Continue processing other queued requests that have available backends
+        // Don't return - let the loop continue to find more eligible requests
+        continue;
       }
 
       if (result.status === 'none') {
