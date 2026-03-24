@@ -127,6 +127,15 @@ See [Installation Guide](docs/user/INSTALLATION.md) for manual installation with
 
 ---
 
+## Known Issues
+
+The following issues are currently being worked on:
+
+- **Benchmarks**: Benchmark functionality is not working properly and requires fixes
+- **Frontend Configuration**: Configuration management in the frontend interface has issues that need to be resolved
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
