@@ -4,9 +4,11 @@ A load balancer for LLM servers with health checking and automatic failover. Sup
 
 ## About This Project
 
-We built and use this balancer internally to improve computation speed for agentic clients with fixed endpoints and to enhance hardware utilization for our in-house LLM backends.
-This project is actively used in production and has proven effective for our needs.
-We share it with the community as a way to give back something in return.
+Schäfer List Systems GmbH built and uses this balancer internally to improve computation speed for agentic clients with fixed endpoints and to enhance hardware utilization for our in-house LLM backends.
+
+This project is actively used in production and has proven effective for our needs. We share it with the community as a way to give back something in return.
+
+**Provider:** [Schäfer List Systems GmbH](https://www.schaeferlist.com/de/blog/balancer_overview)
 
 ---
 

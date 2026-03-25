@@ -307,3 +307,7 @@ Debug endpoints:
 - **Current Version**: 2.3
 - **API Version**: Compatible with Ollama API 0.1.x and later
 - **Last Updated**: 2026-03-09
+
+---
+
+*LLM Balancer is an open source project by [Schäfer List Systems GmbH](https://www.schaeferlist.com/de/blog/balancer_overview).*
