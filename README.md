@@ -12,18 +12,37 @@ We share it with the community as a way to give back something in return.
 
 ## Screenshots
 
-*coming up soon*
+### Overview Dashboard
 
-<!-- TODO: Add dashboard screenshots -->
-<!-- Placeholder for dashboard screenshot -->
-<!-- ```
-[Dashboard Screenshot - Shows real-time backend health, statistics, and model availability]
-``` -->
+Main dashboard showing real-time backend health, request statistics, and system status.
 
-<!-- Placeholder for backend status visualization -->
-<!-- ```
-[Backend Status Visualization - Shows healthy/unhealthy backends with API badges]
-``` -->
+> **Visual Indicators**: Blue flashing frames = active streaming | Green flashing = active non-streaming | Solid green = inactive but available | Red = unhealthy
+
+![Overview Dashboard](docs/images/screenshot_overview.png)
+
+### Statistics
+
+Performance metrics including time tracking, token usage, rate analysis, and cache statistics.
+
+![Statistics](docs/images/screenshot_statistics.png)
+
+### Benchmarks
+
+Performance testing interface for single backend and multi-backend benchmark tests (under construction).
+
+![Benchmarks](docs/images/screenshot_benchmarks.png)
+
+### Debug
+
+Debug panel with detailed request/response tracking, prompt caching analysis, and performance metrics. CAUTION! Contains sensitive information in debug mode.
+
+![Debug](docs/images/screenshot_debug.png)
+
+### Configuration
+
+Configuration page displaying system settings and backend parameters.
+
+![Configuration](docs/images/screenshot_configuration.png)
 
 ---
 
