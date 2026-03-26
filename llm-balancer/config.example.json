@@ -32,7 +32,9 @@
   },
   "maxRetries": 3,
   "maxPayloadSize": 104857600,
-  "debug": true,
-  "debugRequestHistorySize": 100,
+  "debug": {
+    "enabled": false,
+    "requestHistorySize": 100
+  },
   "maxStatsSamples": 20
 }
