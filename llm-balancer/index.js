@@ -503,20 +503,31 @@ app.get('/backends', (req, res) => {
 });
 
 /**
+ * Queue statistics endpoint - available in both debug and non-debug modes
+ * Returns basic, non-sensitive queue information
+ */
+app.get('/queue/stats', (req, res) => {
+  res.json({
+    maxQueueSize: config.maxQueueSize,
+    queueTimeout: config.queue.timeout,
+    queues: [balancer.getQueueStats()]  // Wrap in array for frontend compatibility
+  });
+});
+
+/**
+ * Route: Get application version - available in both debug and non-debug modes
+ * GET /version - Returns the application version from package.json
+ */
+app.get('/version', (req, res) => {
+  console.info(`[${getTimestamp()}] Version requested`);
+  const pkg = require('./package.json');
+  res.json({ version: pkg.version });
+});
+
+/**
  * Debug endpoints - only available when debug mode is enabled (config.debug.enabled === true)
  */
 if (config.debug.enabled) {
-  /**
-   * Route: Queue statistics
-   */
-  app.get('/queue/stats', (req, res) => {
-    res.json({
-      maxQueueSize: config.maxQueueSize,
-      queueTimeout: config.queue.timeout,
-      queues: [balancer.getQueueStats()]  // Wrap in array for frontend compatibility
-    });
-  });
-
   /**
    * Route: View queue contents
    */
@@ -663,16 +674,6 @@ if (config.debug.enabled) {
       message: `Stats reset for ${backendUrl}`,
       backendUrl
     });
-  });
-
-  /**
-   * Route: Get application version
-   * GET /version - Returns the application version from package.json
-   */
-  app.get('/version', (req, res) => {
-    console.info(`[${getTimestamp()}] Version requested`);
-    const pkg = require('./package.json');
-    res.json({ version: pkg.version });
   });
 
   /**
