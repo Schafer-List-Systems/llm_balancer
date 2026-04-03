@@ -11,7 +11,8 @@
       "url": "http://10.0.0.2:11434",
       "name": "Backend 2",
       "priority": 5,
-      "maxConcurrency": 1
+      "maxConcurrency": 1,
+      "maxInputTokens": 32000
     },
     {
       "url": "http://10.0.0.3:11434",
