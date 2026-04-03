@@ -8,22 +8,26 @@ describe('Queue Request - Hanging Request Bug', () => {
    * instead of staying in the queue forever.
    */
   it('request with non-matching model should be rejected immediately', async () => {
-    const backend1 = createTestBackendWithPriority('http://backend1:11434', 'openai', ['llama-3'], 1, 10);
+    // Use a real model name from running backends - 'qwen3.5-35b-a3b' is commonly available
+    const REALISTIC_MODEL = 'qwen3.5-35b-a3b';
+    const NON_MATCHING_MODEL = 'nonexistent-model-that-does-not-exist-xyz123';
+
+    const backend1 = createTestBackendWithPriority('http://backend1:11434', 'openai', [REALISTIC_MODEL], 1, 10);
 
     const balancer = new Balancer([backend1], 100, 30000, true);
 
     const requestData = {
-      req: { is: () => false, body: { model: 'gpt-4', messages: [] } },
+      req: { is: () => false, body: { model: NON_MATCHING_MODEL, messages: [] } },
       res: {},
       config: { primaryApiType: 'openai', request: { timeout: 30000 } },
-      criterion: { modelString: 'gpt-4', apiType: 'openai' },
+      criterion: { modelString: NON_MATCHING_MODEL, apiType: 'openai' },
       resolve: () => {},
       reject: (err) => { throw err; }  // Propagate rejection as error
     };
 
     console.log('\n=== NON-MATCHING MODEL TEST ===');
-    console.log('1. Backend available, supports: llama-3');
-    console.log('2. Request for: gpt-4 (NOT supported)');
+    console.log(`1. Backend available, supports: ${REALISTIC_MODEL}`);
+    console.log(`2. Request for: ${NON_MATCHING_MODEL} (NOT supported)`);
 
     let rejectionError;
 
@@ -44,7 +48,8 @@ describe('Queue Request - Hanging Request Bug', () => {
     // With the fix: request rejected immediately, queue stays empty
     expect(balancer.getQueueStats().depth).toBe(0);
     expect(rejectionError).toBeTruthy();
-    expect(rejectionError.message).toBe('No backend supports this model');
+    // Message now includes the model name: "No backend supports this model: <model>"
+    expect(rejectionError.message).toContain('No backend supports this model');
 
     console.log('\n*** PASS: Request rejected immediately for non-matching model ***');
     console.log('*** FIX VERIFIED: No hanging requests in queue ***');

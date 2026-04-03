@@ -42,15 +42,16 @@ describe('Pending Request Bug (FIXED)', () => {
     const balancer = new Balancer(backends, 100, 2000, true);
 
     // Request for model that doesn't exist on any backend
+    const NON_MATCHING_MODEL = 'nonexistent-model-xyz123';
     const requestData = {
-      req: { is: () => false, body: { model: 'gpt-4', messages: [] } },
+      req: { is: () => false, body: { model: NON_MATCHING_MODEL, messages: [] } },
       res: {},
       config: { primaryApiType: 'openai' },
-      criterion: { modelString: 'gpt-4', apiType: 'openai' }
+      criterion: { modelString: NON_MATCHING_MODEL, apiType: 'openai' }
     };
 
     console.log('1. Backends: backend1=[llama-3], backend2=[mistral]');
-    console.log('2. Request model: gpt-4 (NO MATCH!)');
+    console.log(`2. Request model: ${NON_MATCHING_MODEL} (NO MATCH!)`);
     console.log('3. Queuing request...\n');
 
     const requestDataWithPromise = {
@@ -77,7 +78,7 @@ describe('Pending Request Bug (FIXED)', () => {
 
     // The promise should be rejected immediately with "No backend supports this model"
     expect(rejectionError).toBeTruthy();
-    expect(rejectionError.message).toBe('No backend supports this model');
+    expect(rejectionError.message).toContain('No backend supports this model');
 
     console.log('\n*** BUG FIXED ***');
     console.log('Requests for non-existent models are rejected immediately.');
