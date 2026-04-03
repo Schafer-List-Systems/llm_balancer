@@ -166,14 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
 
                     <div class="card horizontal">
-                      <div class="card-icon" style="background-color: #dcfce7; color: #166534;">💚</div>
-                      <div class="card-content">
-                        <span class="card-title" id="healthyBackends">-</span>
-                        <span class="card-subtitle">Healthy</span>
-                      </div>
-                    </div>
-
-                    <div class="card horizontal">
                       <div class="card-icon" style="background-color: #fee2e2; color: #991b1b;">💔</div>
                       <div class="card-content">
                         <span class="card-title" id="unhealthyBackends">-</span>
@@ -194,6 +186,14 @@ document.addEventListener('DOMContentLoaded', () => {
                       <div class="card-content">
                         <span class="card-title" id="availableBackends">-</span>
                         <span class="card-subtitle">Ready for Requests</span>
+                      </div>
+                    </div>
+
+                    <div class="card horizontal">
+                      <div class="card-icon" style="background-color: #e0e7ff; color: #3730a3;">📋</div>
+                      <div class="card-content">
+                        <span class="card-title" id="queueSize">-</span>
+                        <span class="card-subtitle">Pending Requests</span>
                       </div>
                     </div>
                   </div>
@@ -439,10 +439,15 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
+  // Render queue size
+  function renderQueueSize(queueStats) {
+    const queueSize = queueStats?.queues?.reduce((sum, q) => sum + (q.depth || 0), 0) || 0;
+    document.getElementById('queueSize').textContent = queueSize;
+  }
+
   // Render overview statistics
-  function renderOverview(healthData) {
+  function renderOverviewFull(healthData) {
     document.getElementById('totalBackends').textContent = healthData.totalBackends || 0;
-    document.getElementById('healthyBackends').textContent = healthData.healthyBackends || 0;
     document.getElementById('unhealthyBackends').textContent = healthData.totalBackends - (healthData.healthyBackends || 0);
     document.getElementById('busyBackends').textContent = healthData.busyBackends || 0;
     // Available = healthy backends that can still take requests (not at max concurrency)
@@ -2255,7 +2260,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Only render overview content (5 cards) - this is always visible
-    renderOverview(data.health);
+    renderOverviewFull(data.health);
+    renderQueueSize(data.queueStats);
 
     // Always update LEDs regardless of which section is active
     if (data.backends && data.backends.backends) {

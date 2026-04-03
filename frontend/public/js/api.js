@@ -146,14 +146,34 @@ class ApiClient {
 
   /**
    * Get queue statistics
+   * Note: This endpoint is only available when debug mode is enabled.
+   * When debug is disabled, returns { success: false, data: null } silently.
    */
   async getQueueStats() {
+    const url = `${this.apiBaseUrl}/queue/stats`;
     try {
-      const data = await this.request('/queue/stats');
+      const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        signal: this.abortController.signal
+      });
+
+      if (!response.ok) {
+        // 404 is expected when debug mode is disabled
+        if (response.status === 404) {
+          return { success: false, data: null };
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
       this.lastUpdateTime = new Date();
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: error.message };
+      if (error.name === 'AbortError') {
+        return { success: false, error: 'Request was cancelled' };
+      }
+      // Return null data for all errors (debug mode may be disabled)
+      return { success: false, data: null };
     }
   }
 
@@ -349,12 +369,19 @@ class ApiClient {
     this.stopPolling();
 
     try {
-      const [healthData, statsData, backendsData, queueStatsData] = await Promise.all([
+      const [healthData, statsData, backendsData] = await Promise.all([
         this.getHealth(),
         this.getStats(),
-        this.getBackends(),
-        this.getQueueStats()
+        this.getBackends()
       ]);
+
+      // Get queue stats separately since it may fail when debug mode is disabled
+      let queueStatsData = { success: false, data: null };
+      try {
+        queueStatsData = await this.getQueueStats();
+      } catch (e) {
+        queueStatsData = { success: false, data: null };
+      }
 
       this.dataCache = {
         health: healthData.data,

@@ -3765,36 +3765,6 @@ body.dark-mode .time-range-selector {
   gap: 0.25rem;
 }
 
-/* Export Buttons */
-.export-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.export-btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
-  background-color: var(--bg-color);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 0.875rem;
-}
-
-.export-btn:hover {
-  background-color: var(--border-color);
-}
-
-body.dark-mode .export-btn {
-  background-color: #0f172a;
-  border-color: #334155;
-  color: #f1f5f9;
-}
-
-body.dark-mode .export-btn:hover {
-  border-color: #475569;
-}
-
 /* No Data Message */
 .chart-no-data {
   display: flex;
