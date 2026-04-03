@@ -262,7 +262,7 @@ class BackendSelector {
     // If no backend supports the model, return 'none' immediately
     const modelMatch = ModelMatcher.findBestMatchAcrossBackends(modelString, healthyBackends);
     if (!modelMatch.matched && modelString) {
-      return { status: 'none', backend: null, actualModel: modelString, message: 'No backend supports this model' };
+      return { status: 'none', backend: null, actualModel: modelString, message: `No backend supports this model: ${modelString}` };
     }
 
     // === GROUP 2: ACCEPT/QUEUE FILTERS ===
