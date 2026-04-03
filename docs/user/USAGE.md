@@ -200,6 +200,65 @@ BACKEND_CONCURRENCY_1=2
 
 ---
 
+### Input Token Limits
+
+Configure maximum input token limits per backend to prevent oversized prompts:
+
+#### JSON Configuration
+
+```json
+{
+  "backends": [
+    {
+      "url": "http://fast-server:11434",
+      "name": "Fast Server",
+      "priority": 100,
+      "maxConcurrency": 10,
+      "maxInputTokens": 32000
+    },
+    {
+      "url": "http://large-context:11434",
+      "name": "Large Context Server",
+      "priority": 50,
+      "maxConcurrency": 5,
+      "maxInputTokens": 128000
+    },
+    {
+      "url": "http://unlimited-server:11434",
+      "name": "Unlimited Server",
+      "priority": 10,
+      "maxConcurrency": 3
+      // No maxInputTokens - accepts prompts of any size
+    }
+  ]
+}
+```
+
+#### Environment Variables (Legacy)
+
+```bash
+# Fast server - max 32k input tokens
+BACKEND_CONCURRENCY_0=5
+BACKEND_MAX_INPUT_TOKENS_0=32000
+
+# Large context server - max 128k input tokens
+BACKEND_CONCURRENCY_1=10
+BACKEND_MAX_INPUT_TOKENS_1=128000
+
+# Unlimited server - no token limit
+# BACKEND_MAX_INPUT_TOKENS_2 not set
+```
+
+**How Input Token Limits Work:**
+
+- The balancer counts tokens in the prompt using model-specific tokenizers (e.g., `cl100k_base` for GPT-4 family)
+- During backend selection, backends where `promptTokens > maxInputTokens` are filtered out
+- Backends without `maxInputTokens` configured accept prompts of any size
+- If all backends are filtered by token limit, the balancer falls back to health/availability-based selection
+- Useful for routing large-context models to appropriate backends
+
+---
+
 ### Health Check Configuration
 
 #### JSON Configuration

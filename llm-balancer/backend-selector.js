@@ -153,26 +153,33 @@ class BackendSelector {
    * Select a backend based on multiple criteria:
    * 1. Health status (must be healthy)
    * 2. Availability (activeRequestCount < maxConcurrency)
-   * 3. Model support (optional - filters by requested models using priority-first regex matching)
-   * 4. Priority sorting (highest priority first among matched backends)
+   * 3. Max input tokens (optional - filters out backends that cannot handle the prompt size)
+   * 4. Model support (optional - filters by requested models using priority-first regex matching)
+   * 5. Priority sorting (highest priority first among matched backends)
    *
    * @param {Array} backends - Array of backend objects
    * @param {Object} options - Selection options
    * @param {string|string[]} [options.models] - Requested model(s) to filter by
+   * @param {number} [options.promptTokens] - Token count of the prompt (for max input filtering)
    * @returns {Object|null} Selected backend or null if none available
    */
   selectBackend(backends, options = {}) {
-    const { models } = options;
+    const { models, promptTokens } = options;
 
     // Step 1: Filter by health and availability
     let candidates = this._filterByHealthAndAvailability(backends);
 
-    // Step 2: Use priority-first regex matching if models specified
+    // Step 2: Filter by max input tokens if provided
+    if (promptTokens !== undefined) {
+      candidates = this._filterByMaxInputTokens(candidates, promptTokens);
+    }
+
+    // Step 3: Use priority-first regex matching if models specified
     if (models && models.length > 0) {
       return this._selectBackendByPriorityFirst(candidates, models);
     }
 
-    // Step 3: Sort by priority and select best candidate (no model filtering)
+    // Step 4: Sort by priority and select best candidate (no model filtering)
     return this._selectByPriority(candidates);
   }
 
@@ -244,9 +251,10 @@ class BackendSelector {
    * @param {Array} backends - Array of backend objects
    * @param {Object} criterion - Selection criterion with modelString and apiType
    * @param {string} promptBody - Request body/prompt for cache matching
+   * @param {number} [promptTokens] - Token count of the prompt (for max input filtering)
    * @returns {{ status: string, backend: Object|null, actualModel: string|null, message: string }}
    */
-  selectBackendWithCache(backends, criterion, promptBody) {
+  selectBackendWithCache(backends, criterion, promptBody, promptTokens = undefined) {
     // Extract model from criterion
     const modelString = criterion?.modelString;
 
@@ -271,6 +279,17 @@ class BackendSelector {
     if (!promptBody || !modelString) {
       // No cache data, fallback to standard selection based on availability
       const availableBackends = this._filterByHealthAndAvailability(backends);
+
+      // Apply max input tokens filter if provided
+      if (promptTokens !== undefined) {
+        const filteredBackends = this._filterByMaxInputTokens(availableBackends, promptTokens);
+        if (filteredBackends.length > 0) {
+          // Use filtered backends
+        } else {
+          // All filtered out - return busy status (will fall back)
+          return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends filtered by token limit' };
+        }
+      }
 
       // Sort by priority and select highest priority backend
       if (availableBackends.length === 0) {
@@ -343,9 +362,24 @@ class BackendSelector {
           return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
         });
 
-        const selected = availableCacheHits[0];
-        console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)})`);
-        return { status: 'found', backend: selected.backend, actualModel: modelString, message: null, cacheMatch: { similarity: selected.similarity, matchType: selected.matchType } };
+        // Filter cache hits by max input tokens if provided
+        let selectedCacheHit = availableCacheHits[0];
+        if (promptTokens !== undefined) {
+          const validCacheHits = availableCacheHits.filter(
+            m => m.backend.maxInputTokens === undefined ||
+                 m.backend.maxInputTokens === 0 ||
+                 promptTokens <= m.backend.maxInputTokens
+          );
+          if (validCacheHits.length > 0) {
+            selectedCacheHit = validCacheHits[0];
+          } else {
+            // No available cache-hit backend can handle this prompt
+            // Fall through to standard availability selection
+          }
+        }
+
+        console.debug(`[BackendSelector] Selected backend ${selectedCacheHit.backend.url} for prompt cache (similarity: ${selectedCacheHit.similarity.toFixed(3)})`);
+        return { status: 'found', backend: selectedCacheHit.backend, actualModel: modelString, message: null, cacheMatch: { similarity: selectedCacheHit.similarity, matchType: selectedCacheHit.matchType } };
       }
 
       // All cache-hit backends are busy - return the highest priority cache-hit backend
@@ -360,15 +394,36 @@ class BackendSelector {
         return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
       });
 
-      const selected = allCacheMatches[0];
-      console.debug(`[BackendSelector] Selected backend ${selected.backend.url} for prompt cache (similarity: ${selected.similarity.toFixed(3)}) - backend is busy, will queue`);
-      return { status: 'busy', backend: selected.backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend', cacheMatch: { similarity: selected.similarity, matchType: selected.matchType } };
+      // Filter by max input tokens if provided
+      let selectedBusy = allCacheMatches[0];
+      if (promptTokens !== undefined) {
+        const validBusyBackends = allCacheMatches.filter(
+          m => m.backend.maxInputTokens === undefined ||
+               m.backend.maxInputTokens === 0 ||
+               promptTokens <= m.backend.maxInputTokens
+        );
+        if (validBusyBackends.length > 0) {
+          selectedBusy = validBusyBackends[0];
+        }
+      }
+
+      console.debug(`[BackendSelector] Selected backend ${selectedBusy.backend.url} for prompt cache (similarity: ${selectedBusy.similarity.toFixed(3)}) - backend is busy, will queue`);
+      return { status: 'busy', backend: selectedBusy.backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend', cacheMatch: { similarity: selectedBusy.similarity, matchType: selectedBusy.matchType } };
       // End of cache-hit preference block (only executed when prompt exceeds threshold)
       }
     }
 
     // 2.4 No cache matches (or below threshold) - fallback to availability-based selection
     const availableBackends = this._filterByHealthAndAvailability(backends);
+
+    // Apply max input tokens filter if provided
+    if (promptTokens !== undefined) {
+      const filteredBackends = this._filterByMaxInputTokens(availableBackends, promptTokens);
+      if (filteredBackends.length === 0) {
+        return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends filtered by token limit' };
+      }
+      // Continue with filtered backends
+    }
 
     if (availableBackends.length === 0) {
       return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends supporting this model are currently busy' };
@@ -424,6 +479,28 @@ class BackendSelector {
       b.healthy === true &&
       (b.activeRequestCount || 0) < (b.maxConcurrency || 1)
     );
+  }
+
+  /**
+   * Private: Filter backends by max input tokens
+   * Removes backends that have a maxInputTokens limit that is lower than the prompt size
+   * @param {Array} backends - Array of backend objects
+   * @param {number} promptTokens - Token count of the prompt
+   * @returns {Array} Filtered array of backends
+   */
+  _filterByMaxInputTokens(backends, promptTokens) {
+    return backends.filter(b => {
+      // If backend has no maxInputTokens defined, accept any prompt size
+      if (b.maxInputTokens === undefined || b.maxInputTokens === null) {
+        return true;
+      }
+      // If maxInputTokens is 0, treat as no limit
+      if (b.maxInputTokens === 0) {
+        return true;
+      }
+      // Filter out backends that cannot handle this prompt size
+      return promptTokens <= b.maxInputTokens;
+    });
   }
 
   /**

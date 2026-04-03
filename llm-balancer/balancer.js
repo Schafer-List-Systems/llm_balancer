@@ -389,12 +389,24 @@ class Balancer {
       // Extract prompt body from request data for cache lookup
       const promptBody = this._extractPromptBody(request);
 
+      // Count tokens in prompt body for max input tokens filtering
+      let promptTokens = undefined;
+      if (promptBody && request.criterion?.modelString) {
+        const { countTokens } = require('./utils/token-utils');
+        try {
+          promptTokens = countTokens(promptBody, request.criterion.modelString);
+        } catch (e) {
+          console.warn(`[Balancer] Failed to count prompt tokens: ${e.message}`);
+        }
+      }
+
       // Use selector with cache awareness
       // Returns: { status: 'found'|'busy'|'none', backend, actualModel, message }
       const result = this.selector.selectBackendWithCache(
         this.backendPool.getAll(),
         request.criterion,
-        promptBody
+        promptBody,
+        promptTokens
       );
 
       const model = request.criterion?.modelString || 'unknown';

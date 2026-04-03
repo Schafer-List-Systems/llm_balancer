@@ -58,7 +58,8 @@ const DEFAULTS = {
       url: 'http://localhost:11434',
       name: 'Backend 1',
       priority: 1,
-      maxConcurrency: 10
+      maxConcurrency: 10,
+      maxInputTokens: undefined
     }
   ]
 };
@@ -197,12 +198,21 @@ function buildBackendsFromEnv(env) {
     const concurrencyEnv = env[`BACKEND_CONCURRENCY_${index}`];
     const maxConcurrency = concurrencyEnv ? Math.max(1, parseInt(concurrencyEnv)) : 1;
 
-    return {
+    const maxInputTokensEnv = env[`BACKEND_MAX_INPUT_TOKENS_${index}`];
+    const maxInputTokens = maxInputTokensEnv ? parseInt(maxInputTokensEnv) : undefined;
+
+    const backend = {
       url,
       name: `Backend ${index + 1}`,
       priority,
       maxConcurrency
     };
+
+    if (maxInputTokens !== undefined) {
+      backend.maxInputTokens = maxInputTokens;
+    }
+
+    return backend;
   });
 }
 

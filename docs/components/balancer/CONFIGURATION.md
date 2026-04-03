@@ -11,6 +11,7 @@ Configuration options specific to the balancer component.
 | `BACKENDS` | None | Comma-separated backend URLs |
 | `BACKEND_PRIORITY_N` | 1 | Priority for backend at index N |
 | `BACKEND_CONCURRENCY_N` | 1 | Max concurrency for backend at index N |
+| `BACKEND_MAX_INPUT_TOKENS_N` | undefined | Max input tokens for backend at index N (optional) |
 
 ### Balancer Settings
 
@@ -74,6 +75,50 @@ BACKEND_CONCURRENCY_1=2
 - Limits max parallel requests per backend
 - Utilization = `activeRequestCount / maxConcurrency * 100`
 - Backends at capacity trigger fallback to other backends
+
+### Input Token Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKEND_MAX_INPUT_TOKENS_N` | undefined | Max input tokens for backend at index N (optional) |
+
+#### Token Limit Behavior
+
+- When `maxInputTokens` is defined, backends are filtered during selection if prompt exceeds the limit
+- Backends without `maxInputTokens` accept prompts of any size
+- Token counting uses the model-specific tokenizer (e.g., `cl100k_base` for GPT-4 family)
+- If all backends are filtered by token limit, falls back to health/availability-based selection
+
+```bash
+# Backend 0 - Max 128k input tokens
+BACKEND_MAX_INPUT_TOKENS_0=128000
+
+# Backend 1 - Max 32k input tokens
+BACKEND_MAX_INPUT_TOKENS_1=32000
+
+# Backend 2 - No limit (accept any prompt size)
+# BACKEND_MAX_INPUT_TOKENS_2 not set
+```
+
+#### Example Configuration with Token Limits
+
+```bash
+BACKENDS="http://fast-1:11434,http://fast-2:11434,http://large-context:11434"
+BACKEND_PRIORITY_0=100
+BACKEND_PRIORITY_1=100
+BACKEND_PRIORITY_2=50
+
+# Small models - limited context
+BACKEND_MAX_INPUT_TOKENS_0=32000
+BACKEND_MAX_INPUT_TOKENS_1=32000
+
+# Large context model
+BACKEND_MAX_INPUT_TOKENS_2=128000
+
+BACKEND_CONCURRENCY_0=10
+BACKEND_CONCURRENCY_1=10
+BACKEND_CONCURRENCY_2=5
+```
 
 ## Queue Configuration
 
