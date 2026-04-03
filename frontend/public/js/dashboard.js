@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let sidebarCollapsed = false;
 
   // Section configuration
-  const sectionConfig = {
+  let sectionConfig = {
     'overview': {
       label: 'Overview',
       icon: '📊',
@@ -218,25 +218,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
               <!-- Chart Visualization Section -->
               <div id="statsVisualizationSection" class="page-section">
-
-                  <!-- Filter Controls -->
-                  <div id="chartFilters" class="filter-container" style="display: none;">
-                    <div class="filter-item">
-                      <label for="timeRangeSelect">Time Range:</label>
-                      <select id="timeRangeSelect" class="time-range-selector">
-                        <option value="all">All Data</option>
-                        <option value="20">Last 20 Requests</option>
-                        <option value="10">Last 10 Requests</option>
-                      </select>
-                    </div>
-                    <div class="filter-item backend-filter" id="backendFilter">
-                      <!-- Backend checkboxes rendered dynamically -->
-                    </div>
-                    <div class="export-buttons">
-                      <button class="export-btn" id="exportChartsBtn">📷 Export All Charts</button>
-                      <button class="export-btn" id="exportDataBtn">📄 Export Data</button>
-                    </div>
-                  </div>
 
                   <!-- Time Metrics Charts -->
                   <section id="timeMetricsSection" class="stats-section" style="margin-top: 2rem;">
@@ -1690,7 +1671,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const statsGrid = statsSection.querySelector('.stats-grid');
 
-    if (!queueStats || !statsGrid) return;
+    if (!queueStats || !statsGrid) {
+      // Debug mode disabled - hide queue stats section
+      const existingCard = statsGrid.querySelector('.queue-stats-card');
+      if (existingCard) {
+        existingCard.remove();
+      }
+      return;
+    }
 
     // Aggregate queue stats from per-priority queues
     const pendingRequests = queueStats.queues?.reduce((sum, queue) => sum + (queue.depth || 0), 0) || 0;
@@ -1929,16 +1917,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load queue contents
   async function loadQueueContents() {
-    const [statsResult, contentsResult] = await Promise.all([
-      apiClient.getQueueStats(),
-      apiClient.getQueueContents()
-    ]);
+    // Check if debug mode is enabled first
+    const debugResult = await apiClient.getDebugStats();
+    const showSensitiveData = debugResult.success && debugResult.data?.enabled;
 
-    // Display stats summary
+    // Get queue stats regardless of debug mode (for monitoring)
+    const queueStatsResult = await apiClient.getQueueStats();
+
+    // Display queue stats summary
     const statsSummary = document.getElementById('queueStatsSummary');
-    if (statsResult.success && statsResult.data) {
-      const { maxQueueSize, queueTimeout, queues } = statsResult.data;
-      const totalQueued = contentsResult.data?.totalQueued || 0;
+    if (queueStatsResult.success && queueStatsResult.data) {
+      const { maxQueueSize, queueTimeout, queues } = queueStatsResult.data;
+      const totalQueued = queues?.reduce((sum, q) => sum + (q.depth || 0), 0) || 0;
 
       statsSummary.innerHTML = `
         <div class="queue-stat-item">
@@ -1956,42 +1946,48 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     }
 
-    // Display queue contents
+    // Only fetch and display queue contents (sensitive data) if debug mode is enabled
     const queueContents = document.getElementById('queueContents');
-    if (contentsResult.success && contentsResult.data) {
-      const { contents, totalQueued, maxQueueSize } = contentsResult.data;
+    if (showSensitiveData) {
+      // Fetch sensitive contents
+      const contentsResult = await apiClient.getQueueContents();
+      if (contentsResult.success && contentsResult.data) {
+        const { contents } = contentsResult.data;
 
-      if (contents.length === 0) {
-        queueContents.innerHTML = '<p class="debug-empty">Queue is empty</p>';
-        return;
+        if (contents.length === 0) {
+          queueContents.innerHTML = '<p class="debug-empty">Queue is empty</p>';
+          return;
+        }
+
+        queueContents.innerHTML = contents.map(req => `
+          <div class="queue-item">
+            <div class="queue-item-header">
+              <span class="queue-index">#${req.index}</span>
+              <span class="queue-age">${formatAge(req.age)} old</span>
+            </div>
+            <div class="queue-item-info">
+              <div class="queue-info-row">
+                <span class="queue-label">Criterion</span>
+                <span class="queue-value">${typeof req.criterion === 'string' ? req.criterion : JSON.stringify(req.criterion)}</span>
+              </div>
+              <div class="queue-info-row">
+                <span class="queue-label">Client IP</span>
+                <span class="queue-value">${req.clientIp || 'unknown'}</span>
+              </div>
+              <div class="queue-info-row">
+                <span class="queue-label">API Type</span>
+                <span class="queue-value">${req.requestData?.apiType || 'unknown'}</span>
+              </div>
+              <div class="queue-info-row">
+                <span class="queue-label">Timed Out</span>
+                <span class="queue-value">${req.timedOut ? 'Yes' : 'No'}</span>
+              </div>
+            </div>
+          </div>
+        `).join('');
       }
-
-      queueContents.innerHTML = contents.map(req => `
-        <div class="queue-item">
-          <div class="queue-item-header">
-            <span class="queue-index">#${req.index}</span>
-            <span class="queue-age">${formatAge(req.age)} old</span>
-          </div>
-          <div class="queue-item-info">
-            <div class="queue-info-row">
-              <span class="queue-label">Criterion</span>
-              <span class="queue-value">${typeof req.criterion === 'string' ? req.criterion : JSON.stringify(req.criterion)}</span>
-            </div>
-            <div class="queue-info-row">
-              <span class="queue-label">Client IP</span>
-              <span class="queue-value">${req.clientIp || 'unknown'}</span>
-            </div>
-            <div class="queue-info-row">
-              <span class="queue-label">API Type</span>
-              <span class="queue-value">${req.requestData?.apiType || 'unknown'}</span>
-            </div>
-            <div class="queue-info-row">
-              <span class="queue-label">Timed Out</span>
-              <span class="queue-value">${req.timedOut ? 'Yes' : 'No'}</span>
-            </div>
-          </div>
-        </div>
-      `).join('');
+    } else {
+      queueContents.innerHTML = '<p class="debug-empty">Queue contents hidden (debug mode disabled)</p>';
     }
   }
 
@@ -2291,7 +2287,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const collapseBtn = document.getElementById('collapseSidebarBtn');
     const sidebar = document.getElementById('sidebar');
 
-    if (!collapseBtn) return;
+    if (!collapseBtn) {
+      return;
+    }
 
     // Load saved sidebar state
     const savedCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
@@ -2364,9 +2362,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Handle URL path-based navigation on initial load (without history changes)
     const path = window.location.pathname.replace(/^\//, '');
     const validSections = ['overview', 'statistics', 'benchmarks', 'debug', 'configuration'];
-    console.log('[Dashboard] Initial path:', path);
     if (path && validSections.includes(path) && path !== 'overview') {
-      console.log('[Dashboard] Navigating to:', path);
       // Don't set currentSection before calling navigateToSection or it will return early
       navigateToSection(path);
     }
@@ -2486,14 +2482,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start polling
 
     // Initial data fetch
-    const [healthData, statsData, backendsData, queueStatsData] = await Promise.all([
+    const [healthData, statsData, backendsData] = await Promise.all([
       apiClient.getHealth(),
       apiClient.getStats(),
-      apiClient.getBackends(),
-      apiClient.getQueueStats()
+      apiClient.getBackends()
     ]);
 
-    if (healthData.success && statsData.success && backendsData.success && queueStatsData.success) {
+    // Get queue stats separately since it may fail when debug mode is disabled
+    let queueStatsData = { success: false, data: null };
+    try {
+      queueStatsData = await apiClient.getQueueStats();
+    } catch (e) {
+      // Queue stats not available - expected when debug mode is disabled
+      queueStatsData = { success: false, data: null };
+    }
+
+    if (healthData.success && statsData.success && backendsData.success) {
       const data = {
         health: healthData.data,
         stats: statsData.data,
@@ -2503,9 +2507,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       apiClient.dataCache = data;
 
-      renderDashboard();
-
       loadingContainer.style.display = 'none';
+
+      // Update section config to hide debug menu if not available
+      if (!debugCheck.debugAvailable) {
+        sectionConfig = Object.fromEntries(
+          Object.entries(sectionConfig).filter(([key]) => key !== 'debug')
+        );
+        createDashboard();
+        initSidebar();
+        initNavigation();
+        // Refresh current section
+        navigateToSection(currentSection);
+      }
+
+      renderDashboard();
 
       // Show/hide debug controls based on availability
       const cacheControls = document.getElementById('cacheControls');
@@ -4255,101 +4271,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const numSamples = Math.min(parseInt(chartFilterState.timeRange, 10), samples.length);
     return samples.slice(-numSamples);
   }
-
-  /**
-   * Initialize filter controls
-   */
-  function initFilterControls() {
-    const timeRangeSelect = document.getElementById('timeRangeSelect');
-    const backendFilterContainer = document.getElementById('backendFilter');
-    const exportChartsBtn = document.getElementById('exportChartsBtn');
-    const exportDataBtn = document.getElementById('exportDataBtn');
-    const chartFilters = document.getElementById('chartFilters');
-
-    // Show filters when chart section is active
-    if (chartFilters) {
-      chartFilters.style.display = 'flex';
-    }
-
-    // Time range change handler
-    if (timeRangeSelect) {
-      timeRangeSelect.addEventListener('change', (e) => {
-        const selectedRange = e.target.value;
-        chartFilterState.timeRange = selectedRange;
-        localStorage.setItem('chartTimeRange', selectedRange);
-        console.log(`[Filter] Time range changed to: ${selectedRange} requests`);
-        refreshChartsWithFilters();
-      });
-    }
-
-    // Backend filter checkboxes - populated dynamically when data is available
-    if (backendFilterContainer) {
-      console.log('[Filter] Backend filter container ready');
-    }
-
-    // Export charts as PNG
-    if (exportChartsBtn) {
-      exportChartsBtn.addEventListener('click', () => {
-        console.log('[Export] Exporting all charts as PNG...');
-        // Export each chart canvas as PNG
-        Object.entries(chartInstances).forEach(([name, chart]) => {
-          const canvas = chart.canvas;
-          if (canvas) {
-            const imageUrl = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = imageUrl;
-            link.download = `chart-${name}-${Date.now()}.png`;
-            link.click();
-          }
-        });
-        alert('Charts exported to your downloads folder!');
-      });
-    }
-
-    // Export data as JSON
-    if (exportDataBtn) {
-      exportDataBtn.addEventListener('click', () => {
-        console.log('[Export] Exporting statistics data as JSON...');
-        fetch('/api/v1/stats')
-          .then(res => res.json())
-          .then(data => {
-            const jsonStr = JSON.stringify(data, null, 2);
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `stats-export-${Date.now()}.json`;
-            link.click();
-            URL.revokeObjectURL(url);
-          })
-          .catch(err => {
-            console.error('[Export] Failed to fetch stats:', err);
-            alert('Failed to export data: ' + err.message);
-          });
-      });
-    }
-
-    // Restore saved time range
-    const savedRange = localStorage.getItem('chartTimeRange');
-    if (savedRange && timeRangeSelect) {
-      timeRangeSelect.value = savedRange;
-      chartFilterState.timeRange = savedRange;
-    }
-  }
-
-  // Add filter controls initialization to init function
-  const originalInit = init;
-  init = function() {
-    originalInit();
-    // Initialize filter controls when chart section becomes active
-    const observer = new MutationObserver(() => {
-      if (document.getElementById('statsVisualizationSection')) {
-        initFilterControls();
-        observer.disconnect();
-      }
-    });
-    observer.observe(document.getElementById('root'), { childList: true });
-  };
 
   // Start the dashboard
   init();
