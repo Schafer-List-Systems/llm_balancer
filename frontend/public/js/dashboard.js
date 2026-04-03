@@ -1231,6 +1231,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ${renderBackendField('url', backend.url, index)}
           ${renderBackendField('priority', backend.priority, index)}
           ${renderBackendField('maxConcurrency', backend.maxConcurrency, index)}
+          ${renderBackendField('maxInputTokens', backend.maxInputTokens, index)}
         </div>
       </div>
     `).join('');
@@ -1541,6 +1542,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <label style="font-size: 0.75rem; color: var(--text-secondary);">Max Concurrency</label>
             <input type="number" class="config-field-input" id="backend-${index}-maxConcurrency"
               value="${backend.maxConcurrency}" onchange="window.updateBackendField(${index}, 'maxConcurrency', this.value)"
+              style="width: 100%; margin-top: 0.25rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--text-secondary);">Max Input Tokens</label>
+            <input type="number" class="config-field-input" id="backend-${index}-maxInputTokens"
+              value="${backend.maxInputTokens}" onchange="window.updateBackendField(${index}, 'maxInputTokens', this.value)"
               style="width: 100%; margin-top: 0.25rem;">
           </div>
         </div>
