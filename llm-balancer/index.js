@@ -203,8 +203,26 @@ app.all('/api/*', async (req, res) => {
     let backend;
     let matchedModel = null;
 
+    // Count tokens in prompt body for maxInputTokens filtering
+    let promptTokens = undefined;
+    try {
+      const { countTokens } = require('./utils/token-utils');
+      if (req.body && req.body.prompt) {
+        promptTokens = countTokens(req.body.prompt);
+      } else if (req.body && req.body.messages) {
+        // For chat-style requests, count all message content
+        const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
+        const combined = messages.map(m => m.content || '').join('\n');
+        if (combined) {
+          promptTokens = countTokens(combined);
+        }
+      }
+    } catch (e) {
+      console.warn('[Gateway] Failed to count tokens, skipping maxInputTokens filter:', e.message);
+    }
+
     // Get backend using normal selection with model matching
-    const result = balancer.getNextBackendForModelWithMatch(models);
+    const result = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
     backend = result.backend;
     matchedModel = result.actualModel;
 
@@ -262,9 +280,26 @@ app.all('/models*', async (req, res) => {
     let backend;
     let matchedModel = null;
 
+    // Count tokens in prompt body for maxInputTokens filtering
+    let promptTokens = undefined;
+    try {
+      const { countTokens } = require('./utils/token-utils');
+      if (req.body && req.body.prompt) {
+        promptTokens = countTokens(req.body.prompt);
+      } else if (req.body && req.body.messages) {
+        const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
+        const combined = messages.map(m => m.content || '').join('\n');
+        if (combined) {
+          promptTokens = countTokens(combined);
+        }
+      }
+    } catch (e) {
+      console.warn('[Gateway] Failed to count tokens, skipping maxInputTokens filter:', e.message);
+    }
+
     if (models) {
       // Get backend using normal selection with model matching
-      const result = balancer.getNextBackendForModelWithMatch(models);
+      const result = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
       backend = result.backend;
       matchedModel = result.actualModel;
 
