@@ -20,7 +20,7 @@ describe('maxInputTokens Enforcement Bug', () => {
       // REAL-WORLD: AIbox has maxInputTokens=20000 in config
       // but the system is forwarding 90000 token prompts to it
 
-      const backend = new Backend('http://aibox:1234', 1);
+      const backend = new Backend('http://backend1:1234', 1);
       backend.healthy = true;
       backend.maxInputTokens = 20000; // Config: max 20k tokens
       backend.priority = 20;

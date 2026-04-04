@@ -312,10 +312,18 @@ class Balancer {
    * Get the next backend with regex model matching and return matched model info
    * Uses priority-first regex matching to find suitable backends
    * @param {string|string[]} models - Model(s) required for the request (can include comma-separated regex patterns)
+   * @param {Object} options - Additional options
+   * @param {number} [options.promptTokens] - Token count of the prompt (for max input filtering)
    * @returns {{backend: Object|null, actualModel: string|null}} Backend and matched actual model name or null if none available
    */
-  getNextBackendForModelWithMatch(models) {
-    const candidates = this.selector._filterByHealthAndAvailability(this.backendPool.getAll());
+  getNextBackendForModelWithMatch(models, options = {}) {
+    const { promptTokens } = options;
+    let candidates = this.selector._filterByHealthAndAvailability(this.backendPool.getAll());
+
+    // Filter by max input tokens if promptTokens provided
+    if (promptTokens !== undefined) {
+      candidates = this.selector._filterByMaxInputTokens(candidates, promptTokens);
+    }
 
     // Use priority-first regex matching
     const result = ModelMatcher.findBestMatchAcrossBackends(models, candidates);
