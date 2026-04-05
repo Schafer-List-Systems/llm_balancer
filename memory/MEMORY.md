@@ -1,0 +1,1 @@
+- [Test Before Committing](test_before_commit.md) - Always verify tests pass before committing
