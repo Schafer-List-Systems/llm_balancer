@@ -8,7 +8,7 @@ Schäfer List Systems GmbH built and uses this balancer internally to improve co
 
 This project is actively used in production and has proven effective for our needs. We share it with the community as a way to give back something in return.
 
-**Provider:** [Schäfer List Systems GmbH](https://www.schaeferlist.com/de/blog/balancer_overview)
+**Provider:** [Schäfer List Systems GmbH](https://www.schaeferlist.de/de/blog/2026/03-19-balancer_overview/)
 
 ---
 
