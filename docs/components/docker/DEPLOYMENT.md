@@ -14,25 +14,15 @@ This guide covers deploying the LLM Balancer using Docker and Docker Compose.
 
 ## Deployment Steps
 
-### 1. Configure Environment
+### 1. Configure the Balancer
 
-Edit the `.env` file in the root directory:
+Copy and edit the configuration template:
 
 ```bash
-# Backend URLs
-BACKENDS="http://host1:11434,http://host2:11434"
-
-# Server port
-LB_PORT=3001
-
-# Health check settings
-HEALTH_CHECK_INTERVAL=30000
-HEALTH_CHECK_TIMEOUT=5000
-
-# Frontend settings
-FRONTEND_PORT=3080
-API_BASE_URL=http://llm-balancer:3001
+cp llm-balancer/config.example.json llm-balancer/config.json
 ```
+
+Edit `config.json` with your backend settings. The Docker mount requires write access to this file.
 
 ### 2. Build and Start
 

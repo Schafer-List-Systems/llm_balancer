@@ -29,19 +29,21 @@ Docker provides isolated environments and simplifies deployment.
    cd llm_balancer
    ```
 
-2. **Configure environment variables**:
+2. **Copy the configuration template**:
    ```bash
-   # The docker-compose.yml reads from the root .env file
-   # Edit the BACKENDS variable:
-   BACKENDS="http://host1:11434,http://host2:11434"
+   cp llm-balancer/config.example.json llm-balancer/config.json
    ```
 
-3. **Build and start services**:
+3. **Edit the `config.json` file** to configure your backends:
+   - The file must be writable by the Docker daemon (volume mount requires write access)
+   - Adjust backend URLs, priorities, and other settings as needed
+
+4. **Build and start services**:
    ```bash
    docker compose up --build
    ```
 
-4. **Access the services**:
+5. **Access the services**:
    - Backend API: http://localhost:3001
    - Frontend Dashboard: http://localhost:3080
 
