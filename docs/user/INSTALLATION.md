@@ -72,6 +72,8 @@ docker compose logs -f llm-balancer-frontend
 
 ### Option 2: Manual Installation
 
+> **⚠️ Untested** - This installation method is not currently tested. Docker installation (Option 1) is recommended.
+
 Install directly on your development or production system.
 
 #### Backend Installation
@@ -150,6 +152,8 @@ Install directly on your development or production system.
 ---
 
 ### Option 3: Development Installation
+
+> **⚠️ Untested** - This installation method is not currently tested.
 
 For development and testing purposes.
 
