@@ -328,10 +328,17 @@ class BackendSelector {
     // 2.3 If cache matches found, check if prompt exceeds threshold before preferring cache hits
     if (allCacheMatches.length > 0) {
       // Count tokens in the prompt to determine if we should enforce cache-hit preference
-      const { countTokens } = require('./utils/token-utils');
-      const promptTokens = countTokens(promptBody);
+      let promptTokens;
+      try {
+        const { countTokens } = require('./utils/token-utils');
+        promptTokens = countTokens(promptBody);
+      } catch (e) {
+        console.warn(`[BackendSelector] Failed to count prompt tokens for cache threshold: ${e.message}`);
+        promptTokens = undefined;
+      }
+
       const minCacheHitThreshold = this.config?.prompt?.cache?.minHitThreshold ?? DEFAULTS.prompt.cache.minHitThreshold;
-      const shouldEnforceCacheHit = promptTokens >= minCacheHitThreshold;
+      const shouldEnforceCacheHit = promptTokens !== undefined && promptTokens >= minCacheHitThreshold;
 
       if (!shouldEnforceCacheHit) {
         console.debug(
