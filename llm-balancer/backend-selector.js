@@ -258,61 +258,67 @@ class BackendSelector {
     // Extract model from criterion
     const modelString = criterion?.modelString;
 
-    // === GROUP 1: REJECTION FILTERS (regardless of health/availability) ===
+    // === STAGE 1: HARD FILTERS (determine applicable backends) ===
+    // These filters remove backends that CANNOT handle this request at all
 
-    // 1.1 Check if ANY backend supports this model (health check only)
-    // Check if any healthy backend supports the requested model using priority-first matching
+    // 1.1 Start with healthy backends
     const healthyBackends = this._filterByHealth(backends);
     if (!healthyBackends.length) {
       return { status: 'none', backend: null, actualModel: modelString, message: 'No healthy backends available' };
     }
 
-    // If no backend supports the model, return 'none' immediately
+    // 1.2 Check if any backend supports the model
     const modelMatch = ModelMatcher.findBestMatchAcrossBackends(modelString, healthyBackends);
     if (!modelMatch.matched && modelString) {
       return { status: 'none', backend: null, actualModel: modelString, message: `No backend supports this model: ${modelString}` };
     }
 
-    // === GROUP 2: ACCEPT/QUEUE FILTERS ===
+    // 1.3 Apply maxInputTokens filter to get applicable backends
+    let applicableBackends = healthyBackends;
+    if (promptTokens !== undefined) {
+      applicableBackends = this._filterByMaxInputTokens(healthyBackends, promptTokens);
+      if (applicableBackends.length === 0) {
+        // All backends filtered by token limit - none can handle this request
+        return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends filtered by token limit' };
+      }
+    }
+
+    // === STAGE 2: SOFT FILTERS (preference within applicable backends) ===
+    // These filters determine preference but don't disqualify backends
 
     // 2.1 Handle case where no cache data is available
     if (!promptBody || !modelString) {
-      // No cache data, fallback to standard selection based on availability
-      const availableBackends = this._filterByHealthAndAvailability(backends);
+      // No cache data, select from applicable backends based on availability and priority
+      const availableBackends = this._filterByHealthAndAvailability(applicableBackends);
 
-      // Apply max input tokens filter if provided
-      if (promptTokens !== undefined) {
-        const filteredBackends = this._filterByMaxInputTokens(availableBackends, promptTokens);
-        if (filteredBackends.length > 0) {
-          // Use filtered backends
-        } else {
-          // All filtered out - return busy status (will fall back)
-          return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends filtered by token limit' };
-        }
-      }
-
-      // Sort by priority and select highest priority backend
       if (availableBackends.length === 0) {
-        return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends are currently busy' };
+        // All applicable backends are busy - return highest priority applicable backend for queuing
+        const sorted = [...applicableBackends].sort((a, b) => {
+          const priorityB = b.priority || 0;
+          const priorityA = a.priority || 0;
+          if (priorityB !== priorityA) return priorityB - priorityA;
+          return applicableBackends.indexOf(a) - applicableBackends.indexOf(b);
+        });
+        return { status: 'busy', backend: sorted[0], actualModel: modelString, message: 'All backends supporting this model are currently busy' };
       }
 
-      // Sort backends by priority (highest first)
+      // Sort by priority and select highest priority available backend
       const sorted = [...availableBackends].sort((a, b) => {
-        const priorityA = a.priority || 0;
         const priorityB = b.priority || 0;
+        const priorityA = a.priority || 0;
         if (priorityB !== priorityA) return priorityB - priorityA;
-        return availableBackends.indexOf(a) - availableBackends.indexOf(b);
+        return applicableBackends.indexOf(a) - applicableBackends.indexOf(b);
       });
 
       return { status: 'found', backend: sorted[0], actualModel: modelString, message: null };
     }
 
-    // 2.2 Check for prompt cache matches across ALL healthy backends (even if busy)
-    // This is the critical fix: we need to check cache on healthy backends regardless of availability
+    // 2.2 Check for prompt cache matches across ALL healthy backends (even if not applicable)
+    // Cache hits are a soft filter - we check them regardless of maxInputTokens
     const allCacheMatches = [];
     for (const backend of healthyBackends) {
       if (!backend.getApiTypes || !backend.getModels || !backend.findCacheMatch) {
-        continue; // Backend doesn't support cache lookup
+        continue;
       }
 
       const cacheMatch = backend.findCacheMatch(promptBody, modelString, null);
@@ -327,124 +333,114 @@ class BackendSelector {
 
     // 2.3 If cache matches found, check if prompt exceeds threshold before preferring cache hits
     if (allCacheMatches.length > 0) {
-      // Count tokens in the prompt to determine if we should enforce cache-hit preference
-      let promptTokens;
-      try {
-        const { countTokens } = require('./utils/token-utils');
-        promptTokens = countTokens(promptBody);
-      } catch (e) {
-        console.warn(`[BackendSelector] Failed to count prompt tokens for cache threshold: ${e.message}`);
-        promptTokens = undefined;
+      // Use passed promptTokens if provided, otherwise count tokens from promptBody
+      let thresholdTokens = promptTokens;
+      if (thresholdTokens === undefined && promptBody) {
+        try {
+          const { countTokens } = require('./utils/token-utils');
+          thresholdTokens = countTokens(promptBody);
+        } catch (e) {
+          console.warn(`[BackendSelector] Failed to count prompt tokens for cache threshold: ${e.message}`);
+        }
       }
 
       const minCacheHitThreshold = this.config?.prompt?.cache?.minHitThreshold ?? DEFAULTS.prompt.cache.minHitThreshold;
-      const shouldEnforceCacheHit = promptTokens !== undefined && promptTokens >= minCacheHitThreshold;
+      const shouldEnforceCacheHit = thresholdTokens !== undefined && thresholdTokens >= minCacheHitThreshold;
 
       if (!shouldEnforceCacheHit) {
         console.debug(
-          `[BackendSelector] Prompt (${promptTokens} tokens) below cache-hit threshold ` +
-          `(${minCacheHitThreshold} tokens) - ignoring cache hits, using available backends`
+          `[BackendSelector] Prompt (${thresholdTokens} tokens) below cache-hit threshold ` +
+          `(${minCacheHitThreshold} tokens) - ignoring cache hits, using applicable backends`
         );
-        // Fall through to standard availability-based selection (2.4)
+        // Fall through to standard selection within applicable backends (2.4)
       } else {
         console.debug(
           `[BackendSelector] ${allCacheMatches.length} backends with prompt cache hits ` +
-          `(prompt: ${promptTokens} tokens >= threshold: ${minCacheHitThreshold} tokens)`
+          `(prompt: ${thresholdTokens} tokens >= threshold: ${minCacheHitThreshold} tokens)`
         );
 
-        // Check if any cache-hit backend is available
-      const availableCacheHits = allCacheMatches.filter(
-        m => (m.backend.activeRequestCount || 0) < (m.backend.maxConcurrency || 1)
-      );
+        // Check if any cache-hit backend is both available AND applicable (passes hard filters)
+        const availableCacheHits = allCacheMatches.filter(
+          m => (m.backend.activeRequestCount || 0) < (m.backend.maxConcurrency || 1)
+        );
 
-      if (availableCacheHits.length > 0) {
-        // Sort by priority, select best available cache-hit backend
-        availableCacheHits.sort((a, b) => {
-          const priorityB = b.backend.priority || 0;
-          const priorityA = a.backend.priority || 0;
-          if (priorityB !== priorityA) return priorityB - priorityA;
-
-          // Tie-breaker: maintain original order
-          const backendsArray = Array.isArray(backends) ? backends : [];
-          return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
-        });
-
-        // Filter cache hits by max input tokens if provided
-        let selectedCacheHit = availableCacheHits[0];
-        if (promptTokens !== undefined) {
-          const validCacheHits = availableCacheHits.filter(
+        // Filter to only applicable cache hits (those that pass maxInputTokens)
+        let applicableCacheHits = availableCacheHits;
+        if (thresholdTokens !== undefined) {
+          applicableCacheHits = availableCacheHits.filter(
             m => m.backend.maxInputTokens === undefined ||
                  m.backend.maxInputTokens === 0 ||
-                 promptTokens <= m.backend.maxInputTokens
+                 thresholdTokens <= m.backend.maxInputTokens
           );
-          if (validCacheHits.length > 0) {
-            selectedCacheHit = validCacheHits[0];
-          } else {
-            // No available cache-hit backend can handle this prompt
-            // Fall through to standard availability selection
-          }
         }
 
-        console.debug(`[BackendSelector] Selected backend ${selectedCacheHit.backend.url} for prompt cache (similarity: ${selectedCacheHit.similarity.toFixed(3)})`);
-        return { status: 'found', backend: selectedCacheHit.backend, actualModel: modelString, message: null, cacheMatch: { similarity: selectedCacheHit.similarity, matchType: selectedCacheHit.matchType } };
-      }
+        if (applicableCacheHits.length > 0) {
+          // Sort by priority, select best applicable available cache-hit backend
+          applicableCacheHits.sort((a, b) => {
+            const priorityB = b.backend.priority || 0;
+            const priorityA = a.backend.priority || 0;
+            if (priorityB !== priorityA) return priorityB - priorityA;
+            const backendsArray = Array.isArray(backends) ? backends : [];
+            return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
+          });
 
-      // All cache-hit backends are busy - return the highest priority cache-hit backend
-      // The caller (Balancer) should queue for this backend
-      allCacheMatches.sort((a, b) => {
-        const priorityB = b.backend.priority || 0;
-        const priorityA = a.backend.priority || 0;
-        if (priorityB !== priorityA) return priorityB - priorityA;
+          console.debug(`[BackendSelector] Selected backend ${applicableCacheHits[0].backend.url} for prompt cache (similarity: ${applicableCacheHits[0].similarity.toFixed(3)})`);
+          return { status: 'found', backend: applicableCacheHits[0].backend, actualModel: modelString, message: null, cacheMatch: { similarity: applicableCacheHits[0].similarity, matchType: applicableCacheHits[0].matchType } };
+        }
 
-        // Tie-breaker: maintain original order
-        const backendsArray = Array.isArray(backends) ? backends : [];
-        return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
-      });
-
-      // Filter by max input tokens if provided
-      let selectedBusy = allCacheMatches[0];
-      if (promptTokens !== undefined) {
-        const validBusyBackends = allCacheMatches.filter(
+        // No applicable cache-hit backends available - check if any cache-hit backends are busy (for queuing)
+        // Filter cache hits by maxInputTokens to get applicable ones
+        const applicableCacheHitsBusy = allCacheMatches.filter(
           m => m.backend.maxInputTokens === undefined ||
                m.backend.maxInputTokens === 0 ||
-               promptTokens <= m.backend.maxInputTokens
+               thresholdTokens <= m.backend.maxInputTokens
         );
-        if (validBusyBackends.length > 0) {
-          selectedBusy = validBusyBackends[0];
+
+        if (applicableCacheHitsBusy.length > 0) {
+          // All applicable cache-hit backends are busy - return highest priority one for queuing
+          applicableCacheHitsBusy.sort((a, b) => {
+            const priorityB = b.backend.priority || 0;
+            const priorityA = a.backend.priority || 0;
+            if (priorityB !== priorityA) return priorityB - priorityA;
+            const backendsArray = Array.isArray(backends) ? backends : [];
+            return backendsArray.indexOf(a.backend) - backendsArray.indexOf(b.backend);
+          });
+
+          console.debug(`[BackendSelector] Selected backend ${applicableCacheHitsBusy[0].backend.url} for prompt cache (similarity: ${applicableCacheHitsBusy[0].similarity.toFixed(3)}) - backend is busy, will queue`);
+          return { status: 'busy', backend: applicableCacheHitsBusy[0].backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend', cacheMatch: { similarity: applicableCacheHitsBusy[0].similarity, matchType: applicableCacheHitsBusy[0].matchType } };
         }
-      }
 
-      console.debug(`[BackendSelector] Selected backend ${selectedBusy.backend.url} for prompt cache (similarity: ${selectedBusy.similarity.toFixed(3)}) - backend is busy, will queue`);
-      return { status: 'busy', backend: selectedBusy.backend, actualModel: modelString, message: 'Backend with cache hit is busy - queuing for same backend', cacheMatch: { similarity: selectedBusy.similarity, matchType: selectedBusy.matchType } };
-      // End of cache-hit preference block (only executed when prompt exceeds threshold)
+        // No applicable backends with cache hits at all - fall through to standard selection
+        console.debug(
+          `[BackendSelector] No applicable backends with cache hits, ` +
+          `falling through to applicable backends without cache hits`
+        );
       }
     }
 
-    // 2.4 No cache matches (or below threshold) - fallback to availability-based selection
-    const availableBackends = this._filterByHealthAndAvailability(backends);
-
-    // Apply max input tokens filter if provided
-    if (promptTokens !== undefined) {
-      const filteredBackends = this._filterByMaxInputTokens(availableBackends, promptTokens);
-      if (filteredBackends.length === 0) {
-        return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends filtered by token limit' };
-      }
-      // Continue with filtered backends
-    }
+    // 2.4 No cache matches (or below threshold) - select from applicable backends
+    const availableBackends = this._filterByHealthAndAvailability(applicableBackends);
 
     if (availableBackends.length === 0) {
-      return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends supporting this model are currently busy' };
+      // All applicable backends are busy - return highest priority applicable backend for queuing
+      const sorted = [...applicableBackends].sort((a, b) => {
+        const priorityB = b.priority || 0;
+        const priorityA = a.priority || 0;
+        if (priorityB !== priorityA) return priorityB - priorityA;
+        return applicableBackends.indexOf(a) - applicableBackends.indexOf(b);
+      });
+      return { status: 'busy', backend: sorted[0], actualModel: modelString, message: 'All backends supporting this model are currently busy' };
     }
 
-    const backend = this._selectBackendByPriorityFirst(availableBackends, modelString);
+    // Sort by priority and select highest priority available backend
+    const sorted = [...availableBackends].sort((a, b) => {
+      const priorityB = b.priority || 0;
+      const priorityA = a.priority || 0;
+      if (priorityB !== priorityA) return priorityB - priorityA;
+      return applicableBackends.indexOf(a) - applicableBackends.indexOf(b);
+    });
 
-    if (backend) {
-      let cacheMatchInfo = { hasCacheHit: false };
-      return { status: 'found', backend, actualModel: modelString, message: null, cacheMatchInfo };
-    }
-
-    // No available backend for this model
-    return { status: 'busy', backend: null, actualModel: modelString, message: 'All backends supporting this model are currently busy' };
+    return { status: 'found', backend: sorted[0], actualModel: modelString, message: null, cacheMatchInfo: { hasCacheHit: false } };
   }
 
   /**
