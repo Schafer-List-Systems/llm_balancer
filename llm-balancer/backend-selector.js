@@ -291,7 +291,23 @@ class BackendSelector {
       // No cache data, select from applicable backends based on availability and priority
       const availableBackends = this._filterByHealthAndAvailability(applicableBackends);
 
-      if (availableBackends.length === 0) {
+      // Filter by model support if modelString is provided
+      let modelFilteredBackends = availableBackends;
+      if (modelString) {
+        modelFilteredBackends = availableBackends.filter(backend => {
+          if (!backend.getApiTypes || !backend.getModels) return false;
+          const apiTypes = backend.getApiTypes();
+          for (const apiType of apiTypes) {
+            const backendModels = backend.getModels(apiType);
+            if (ModelMatcher.matches(modelString, backendModels)) {
+              return true;
+            }
+          }
+          return false;
+        });
+      }
+
+      if (modelFilteredBackends.length === 0) {
         // All applicable backends are busy - return highest priority applicable backend for queuing
         const sorted = [...applicableBackends].sort((a, b) => {
           const priorityB = b.priority || 0;
@@ -302,8 +318,8 @@ class BackendSelector {
         return { status: 'busy', backend: sorted[0], actualModel: modelString, message: 'All backends supporting this model are currently busy' };
       }
 
-      // Sort by priority and select highest priority available backend
-      const sorted = [...availableBackends].sort((a, b) => {
+      // Sort by priority and select highest priority available backend (model-filtered)
+      const sorted = [...modelFilteredBackends].sort((a, b) => {
         const priorityB = b.priority || 0;
         const priorityA = a.priority || 0;
         if (priorityB !== priorityA) return priorityB - priorityA;
@@ -315,9 +331,15 @@ class BackendSelector {
 
     // 2.2 Check for prompt cache matches across ALL healthy backends (even if not applicable)
     // Cache hits are a soft filter - we check them regardless of maxInputTokens
+    // BUT cache matches must still be from backends that support the requested model
     const allCacheMatches = [];
     for (const backend of healthyBackends) {
       if (!backend.getApiTypes || !backend.getModels || !backend.findCacheMatch) {
+        continue;
+      }
+
+      // Check if this backend supports the requested model before attempting cache lookup
+      if (modelString && !ModelMatcher.matches(modelString, this._getAllBackendModels(backend))) {
         continue;
       }
 
@@ -419,9 +441,23 @@ class BackendSelector {
     }
 
     // 2.4 No cache matches (or below threshold) - select from applicable backends
-    const availableBackends = this._filterByHealthAndAvailability(applicableBackends);
+    // Filter by model support if modelString is provided
+    let modelFilteredAvailableBackends = this._filterByHealthAndAvailability(applicableBackends);
+    if (modelString) {
+      modelFilteredAvailableBackends = modelFilteredAvailableBackends.filter(backend => {
+        if (!backend.getApiTypes || !backend.getModels) return false;
+        const apiTypes = backend.getApiTypes();
+        for (const apiType of apiTypes) {
+          const backendModels = backend.getModels(apiType);
+          if (ModelMatcher.matches(modelString, backendModels)) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
 
-    if (availableBackends.length === 0) {
+    if (modelFilteredAvailableBackends.length === 0) {
       // All applicable backends are busy - return highest priority applicable backend for queuing
       const sorted = [...applicableBackends].sort((a, b) => {
         const priorityB = b.priority || 0;
@@ -432,8 +468,8 @@ class BackendSelector {
       return { status: 'busy', backend: sorted[0], actualModel: modelString, message: 'All backends supporting this model are currently busy' };
     }
 
-    // Sort by priority and select highest priority available backend
-    const sorted = [...availableBackends].sort((a, b) => {
+    // Sort by priority and select highest priority available backend (model-filtered)
+    const sorted = [...modelFilteredAvailableBackends].sort((a, b) => {
       const priorityB = b.priority || 0;
       const priorityA = a.priority || 0;
       if (priorityB !== priorityA) return priorityB - priorityA;
@@ -472,6 +508,23 @@ class BackendSelector {
 
     stats.uniqueHealthyModels = Array.from(stats.healthyModels);
     return stats;
+  }
+
+  /**
+   * Private: Get all models from a backend across all API types
+   * @param {Object} backend - Backend object
+   * @returns {string[]} Array of all model names
+   */
+  _getAllBackendModels(backend) {
+    const allModels = [];
+    const apiTypes = backend.getApiTypes();
+    for (const apiType of apiTypes) {
+      const models = backend.getModels(apiType);
+      if (models) {
+        allModels.push(...models);
+      }
+    }
+    return allModels;
   }
 
   /**
