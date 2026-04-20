@@ -44,8 +44,10 @@ const backendInfo = new BackendInfo(config.healthCheck.timeout);
 // This follows composition over duplication - BackendInfo is attached
 // directly to Backend rather than copied to capabilities.
 // ──────────────────────────────────────────────────────────────────
-const backends = config.backends.map(backendConfig => {
+const backends = config.backends.map((backendConfig) => {
   const backend = new Backend(backendConfig.url, backendConfig.maxConcurrency, backendConfig.name || null);
+  backend.priority = backendConfig.priority;
+  backend.maxInputTokens = backendConfig.maxInputTokens;
   return backend;
 });
 
