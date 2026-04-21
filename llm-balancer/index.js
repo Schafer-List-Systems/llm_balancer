@@ -48,6 +48,7 @@ const backends = config.backends.map((backendConfig) => {
   const backend = new Backend(backendConfig.url, backendConfig.maxConcurrency, backendConfig.name || null);
   backend.priority = backendConfig.priority;
   backend.maxInputTokens = backendConfig.maxInputTokens;
+  backend.active = backendConfig.active !== undefined ? backendConfig.active : true;
   return backend;
 });
 
@@ -430,8 +431,9 @@ app.get('/health', (req, res) => {
     maxPayloadSizeMB: Math.round(config.maxPayloadSize / (1024 * 1024)),
     healthyBackends: healthStats.healthyBackends,
     totalBackends: healthStats.totalBackends,
-    backends: healthStats.backends.map(b => ({
+    backends: healthStats.backends.map((b, i) => ({
       ...b,
+      active: backends[i] !== undefined ? backends[i].active !== false : true,
       activeStreamingRequests: b.activeStreamingRequests || 0,
       activeNonStreamingRequests: b.activeNonStreamingRequests || 0
     })),
@@ -479,6 +481,7 @@ app.get('/stats', (req, res) => {
       url: b.url,
       name: b.name,
       priority: b.priority || 0,
+      active: b.active !== false,
       healthy: b.healthy,
       activeRequestCount: b.activeRequestCount,
       activeStreamingRequests: b.activeStreamingRequests || 0,
@@ -516,6 +519,7 @@ app.get('/backends', (req, res) => {
         url: b.url,
         name: b.name,  // Add backend name from config (undefined if not set)
         priority: b.priority || 0,
+        active: b.active !== false,
         healthy: b.healthy,
         activeRequestCount: b.activeRequestCount,
         activeStreamingRequests: b.activeStreamingRequests || 0,

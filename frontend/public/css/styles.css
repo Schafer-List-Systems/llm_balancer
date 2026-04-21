@@ -1379,6 +1379,36 @@ body.dark-mode body {
   border-color: #ef4444;
 }
 
+.backend-card.inactive {
+  border-color: var(--border-color);
+  opacity: 0.65;
+}
+
+/* Gray overlay for inactive cards */
+.backend-card.inactive::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 0.5rem;
+  pointer-events: none;
+}
+
+body.dark-mode .backend-card.inactive::before {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.inactive-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  background-color: var(--muted-color);
+  color: var(--text-secondary);
+  border-radius: 0.25rem;
+  margin-left: 0.5rem;
+  font-weight: 500;
+}
+
 /* Pulsing glow for healthy backends with active requests */
 .backend-card.healthy.busy {
   animation: pulsing-glow 2.5s ease-in-out infinite;

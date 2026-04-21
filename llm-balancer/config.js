@@ -59,7 +59,8 @@ const DEFAULTS = {
       name: 'Backend 1',
       priority: 1,
       maxConcurrency: 10,
-      maxInputTokens: undefined
+      maxInputTokens: undefined,
+      active: true
     }
   ]
 };
@@ -98,7 +99,27 @@ function deepMergeWithDefaults(target, source, defaults) {
   // Start with defaults, then apply source, then target (target wins)
   for (const key in result) {
     if (target && target.hasOwnProperty(key)) {
-      if (typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key])) {
+      if (Array.isArray(target[key]) && Array.isArray(defaults[key])) {
+        // Merge array element-by-element with defaults.
+        // For indices beyond the defaults array, fill only fields that are absent from target
+        // (e.g. active: true for existing config files).
+        result[key] = target[key].map((item, i) => {
+          if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+            const defaultItem = defaults[key][i] || {};
+            const sourceItem = source && source[key] ? (source[key][i] || {}) : {};
+            const merged = deepMergeWithDefaults(item, sourceItem, defaultItem);
+            // Fill any missing fields from the first default (e.g. active: true)
+            const fallback = defaults[key][0] || {};
+            for (const fKey in fallback) {
+              if (!(fKey in merged)) {
+                merged[fKey] = fallback[fKey];
+              }
+            }
+            return merged;
+          }
+          return item;
+        });
+      } else if (typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key])) {
         result[key] = deepMergeWithDefaults(target[key], source && source[key] ? source[key] : {}, defaults[key] || {});
       } else {
         result[key] = target[key];
@@ -109,6 +130,13 @@ function deepMergeWithDefaults(target, source, defaults) {
       } else {
         result[key] = source[key];
       }
+    }
+  }
+
+  // Also copy keys that exist in target but not in defaults
+  for (const key in target) {
+    if (target.hasOwnProperty(key) && !(key in result)) {
+      result[key] = target[key];
     }
   }
 
@@ -205,7 +233,8 @@ function buildBackendsFromEnv(env) {
       url,
       name: `Backend ${index + 1}`,
       priority,
-      maxConcurrency
+      maxConcurrency,
+      active: true
     };
 
     if (maxInputTokens !== undefined) {

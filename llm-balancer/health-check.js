@@ -164,6 +164,8 @@ class HealthChecker {
     // Health-only backend info with enhanced stats
     const backendsWithStats = this.backends.map(b => ({
       url: b.url,
+      name: b.name || null,
+      active: b.active !== false,
       healthy: b.healthy,
       activeRequestCount: b.activeRequestCount,
       maxConcurrency: b.maxConcurrency,

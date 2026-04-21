@@ -43,7 +43,7 @@ const mockConfig = {
     timeout: 300000
   },
   backends: [
-    { url: 'http://localhost:11434', name: 'Test Backend', priority: 1, maxConcurrency: 10 }
+    { url: 'http://localhost:11434', name: 'Test Backend', priority: 1, maxConcurrency: 10, active: true }
   ]
 };
 

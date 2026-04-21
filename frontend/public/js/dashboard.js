@@ -532,11 +532,21 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Sort: active backends first, inactive last
+    const sortedBackends = [...backendsData.backends].sort((a, b) => {
+      const aActive = a.active !== false;
+      const bActive = b.active !== false;
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      return 0;
+    });
+
     // Initialize cards if they don't exist
     if (!backendsGrid.querySelector('.backend-card')) {
-      backendsGrid.innerHTML = backendsData.backends.map((backend, index) => `
+      backendsGrid.innerHTML = sortedBackends.map((backend, index) => `
         <div class="backend-card" data-backend-url="${encodeURIComponent(backend.url)}">
           <div class="backend-name">${backend.name || 'Backend ' + (index + 1)}</div>
+          ${!backend.active ? '<span class="inactive-badge">Inactive</span>' : ''}
           <div class="backend-url">${backend.url}</div>
           <div class="api-badges"></div>
           <div class="backend-info">
@@ -581,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Incremental updates - update existing cards without destroying DOM
-    backendsData.backends.forEach((backend, index) => {
+    sortedBackends.forEach((backend) => {
       const healthClass = backend.healthy ? 'healthy' : 'unhealthy';
       const healthText = backend.healthy ? 'Healthy' : 'Unhealthy';
       const isBusy = backend.activeRequestCount > 0;
@@ -593,6 +603,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update health class on card
       card.classList.remove('healthy', 'unhealthy');
       card.classList.add(healthClass);
+
+      // Update inactive class on card
+      const isActive = backend.active !== false;
+      card.classList.toggle('inactive', !isActive);
+      card.dataset.active = isActive;
 
       // Remove all status classes before adding new ones
       card.classList.remove('busy', 'streaming-active', 'non-streaming-active');
@@ -1448,8 +1463,14 @@ document.addEventListener('DOMContentLoaded', () => {
   window.updateBackendField = function(index, field, value) {
     const backends = globalConfig.backends || [];
     if (backends[index]) {
-      backends[index][field] = field === 'priority' || field === 'maxConcurrency' ? parseInt(value) : value;
-      document.getElementById(`value-${field}`).textContent = backends[index][field];
+      if (field === 'active') {
+        backends[index][field] = value === 'true' || value === true ? true : false;
+      } else {
+        backends[index][field] = field === 'priority' || field === 'maxConcurrency' ? parseInt(value) : value;
+      }
+      const displayVal = backends[index][field];
+      const el = document.getElementById(`value-${field}`);
+      if (el) el.textContent = displayVal;
     }
   };
 
@@ -1554,6 +1575,16 @@ document.addEventListener('DOMContentLoaded', () => {
             <input type="number" class="config-field-input" id="backend-${index}-maxInputTokens"
               value="${backend.maxInputTokens}" onchange="window.updateBackendField(${index}, 'maxInputTokens', this.value)"
               style="width: 100%; margin-top: 0.25rem;">
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--text-secondary);">Active</label>
+            <label style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; margin-top: 0.25rem;">
+              <input type="checkbox" class="config-field-input" id="backend-${index}-active"
+                ${backend.active !== false ? 'checked' : ''}
+                onchange="window.updateBackendField(${index}, 'active', this.checked)"
+                style="width: 1.25rem; height: 1.25rem; cursor: pointer;">
+              <span style="font-size: 0.875rem; color: var(--text-primary);">Yes</span>
+            </label>
           </div>
         </div>
       </div>

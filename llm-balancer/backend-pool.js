@@ -46,13 +46,18 @@ class BackendPool {
    * @returns {BackendPool} New BackendPool with filtered backends
    */
   filter(criteria = {}) {
-    const { healthy, available, models, custom } = criteria;
+    const { healthy, available, models, custom, active } = criteria;
 
     let filtered = [...this._backends];
 
     // Apply health filter
     if (healthy !== undefined) {
       filtered = filtered.filter(b => b.healthy === healthy);
+    }
+
+    // Apply active filter
+    if (active !== undefined) {
+      filtered = filtered.filter(b => b.active === active);
     }
 
     // Apply availability (concurrency) filter
@@ -97,6 +102,14 @@ class BackendPool {
    */
   healthy() {
     return this.filter({ healthy: true });
+  }
+
+  /**
+   * Convenience: Get only active backends
+   * @returns {BackendPool} Filtered pool
+   */
+  active() {
+    return this.filter({ active: true });
   }
 
   /**

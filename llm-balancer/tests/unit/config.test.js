@@ -144,6 +144,8 @@ describe('loadConfig() integration', () => {
     expect(backend).toHaveProperty('name');
     expect(backend).toHaveProperty('priority');
     expect(backend).toHaveProperty('maxConcurrency');
+    expect(backend).toHaveProperty('active');
+    expect(backend.active).toBe(true);
   });
 
   it('should have healthCheck object with required fields', () => {

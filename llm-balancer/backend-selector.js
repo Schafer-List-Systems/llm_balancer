@@ -107,7 +107,7 @@ class ModelMatcher {
 
         // Check ALL backends with this pattern before moving to next pattern
         for (const backend of allBackends) {
-          if (!backend.healthy || !backend.getApiTypes || !backend.getModels) continue;
+          if (!backend.healthy || !backend.getApiTypes || !backend.getModels || backend.active === false) continue;
 
           const apiTypes = backend.getApiTypes();
           for (const apiType of apiTypes) {
@@ -232,7 +232,7 @@ class BackendSelector {
    * Private: Filter backends by health only (not availability)
    */
   _filterByHealth(backends) {
-    return backends.filter(b => b.healthy === true);
+    return backends.filter(b => b.healthy === true && b.active !== false);
   }
 
   /**
@@ -527,6 +527,7 @@ class BackendSelector {
   _filterByHealthAndAvailability(backends) {
     return backends.filter(b =>
       b.healthy === true &&
+      b.active !== false &&
       (b.activeRequestCount || 0) < (b.maxConcurrency || 1)
     );
   }
@@ -578,7 +579,7 @@ class BackendSelector {
       // Find all backends that match this pattern
       const patternMatches = [];
       for (const backend of candidates) {
-        if (!backend.healthy || !backend.getApiTypes || !backend.getModels) continue;
+        if (!backend.healthy || !backend.getApiTypes || !backend.getModels || backend.active === false) continue;
 
         const apiTypes = backend.getApiTypes();
         for (const apiType of apiTypes) {
