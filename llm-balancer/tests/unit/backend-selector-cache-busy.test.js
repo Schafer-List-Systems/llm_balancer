@@ -300,7 +300,7 @@ describe('BackendSelector - Cache Hit with Busy Backend', () => {
         findCacheMatch: () => null // No cache
       };
 
-      const balancer = new Balancer([backend1, backend2], 10, 5000);
+      const balancer = new Balancer([backend1, backend2], { maxQueueSize: 10, queue: { timeout: 5000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Mark both backends as busy initially
       backend1.activeRequestCount = 1;

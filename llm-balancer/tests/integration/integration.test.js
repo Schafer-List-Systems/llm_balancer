@@ -40,7 +40,7 @@ describe('Integration Tests - Requires Real Backends', () => {
       maxConcurrency: 1
     }));
 
-    balancer = new Balancer(backends);
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 
   it('should select healthy backends', () => {

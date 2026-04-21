@@ -39,7 +39,7 @@ describe('Pending Request Bug (FIXED)', () => {
       }
     ];
 
-    const balancer = new Balancer(backends, 100, 2000, true);
+    const balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 2000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
     // Request for model that doesn't exist on any backend
     const NON_MATCHING_MODEL = 'nonexistent-model-xyz123';
@@ -99,7 +99,7 @@ describe('Pending Request Bug (FIXED)', () => {
       }
     ];
 
-    const balancer = new Balancer(backends, 100, 1000, true);
+    const balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 1000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
     console.log('\n=== TIMEOUT FLAG TEST ===\n');
 

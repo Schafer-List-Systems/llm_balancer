@@ -56,7 +56,7 @@ const BackendPool = require('./backend-pool');
 const backendPool = new BackendPool(backends);
 
 // Initialize load balancer and health checker with Backend instances
-const balancer = new Balancer(backends, config.maxQueueSize, config.queue.timeout, config.debug.enabled, config.debug.requestHistorySize);
+const balancer = new Balancer(backends, config);
 const healthChecker = new HealthChecker(backends, config);
 
 // Middleware to parse JSON bodies

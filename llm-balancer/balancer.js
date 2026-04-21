@@ -10,7 +10,6 @@
 
 const BackendPool = require('./backend-pool');
 const { BackendSelector, ModelMatcher } = require('./backend-selector');
-const configModule = require('./config');
 
 // Helper function to get formatted timestamp
 function getTimestamp() {
@@ -18,30 +17,31 @@ function getTimestamp() {
 }
 
 class Balancer {
-  constructor(backends, maxQueueSize = 100, queueTimeout = 30000, debug = false, debugRequestHistorySize = 100) {
+  constructor(backends, config) {
+    if (!config) throw new Error('Balancer requires config');
     // BackendPool owns the backend collection (source of truth)
     this.backendPool = new BackendPool(backends);
     this.requestCount = new Map();
     this.healthCheckCount = new Map();
 
     // Queue management
-    this.maxQueueSize = maxQueueSize;
-    this.queueTimeout = queueTimeout;
+    this.maxQueueSize = config.maxQueueSize;
+    this.queueTimeout = config.queue.timeout;
     this.queue = []; // Single global queue
 
     // Queue history for visualization (tracks depth snapshots)
     this._queueDepthHistory = [];
-    this.maxQueueHistory = configModule.loadConfig().queue.depthHistorySize;
+    this.maxQueueHistory = config.queue.depthHistorySize;
 
     // Debug request ID counter (internal, separate from user-provided IDs)
     this._internalRequestIdCounter = 0;
 
     // Debug configuration
-    this.debug = debug;
-    this.debugRequestHistorySize = debugRequestHistorySize;
+    this.debug = config.debug.enabled;
+    this.debugRequestHistorySize = config.debug.requestHistorySize;
 
     // Initialize backend selector for decoupled selection logic
-    this.selector = new BackendSelector();
+    this.selector = new BackendSelector(config);
   }
 
   /**

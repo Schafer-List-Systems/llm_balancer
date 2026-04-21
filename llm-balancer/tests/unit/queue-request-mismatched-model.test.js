@@ -8,13 +8,13 @@ describe('Queue Request - Hanging Request Bug', () => {
    * instead of staying in the queue forever.
    */
   it('request with non-matching model should be rejected immediately', async () => {
-    // Use a real model name from running backends - 'qwen3.5-35b-a3b' is commonly available
-    const REALISTIC_MODEL = 'qwen3.5-35b-a3b';
+    // Use a real model name from running backends - 'test-model' is commonly available
+    const REALISTIC_MODEL = 'test-model';
     const NON_MATCHING_MODEL = 'nonexistent-model-that-does-not-exist-xyz123';
 
     const backend1 = createTestBackendWithPriority('http://backend1:11434', 'openai', [REALISTIC_MODEL], 1, 10);
 
-    const balancer = new Balancer([backend1], 100, 30000, true);
+    const balancer = new Balancer([backend1], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
     const requestData = {
       req: { is: () => false, body: { model: NON_MATCHING_MODEL, messages: [] } },
@@ -66,7 +66,7 @@ describe('Queue Request - Hanging Request Bug', () => {
     backend1.activeRequestCount = 1;
     backend2.activeRequestCount = 1;
 
-    const balancer = new Balancer([backend1, backend2], 100, 2000, true);
+    const balancer = new Balancer([backend1, backend2], { maxQueueSize: 100, queue: { timeout: 2000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
     let requestProcessed = false;
 

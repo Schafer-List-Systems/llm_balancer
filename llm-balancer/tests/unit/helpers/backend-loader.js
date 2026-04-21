@@ -27,7 +27,7 @@ async function getAvailableModels() {
 
   // Fallback to common model names
   console.log('Using fallback model names');
-  return ['qwen3.5-35b-a3b', 'llama3'];
+  return ['test-model', 'llama3'];
 }
 
 /**
@@ -84,8 +84,8 @@ function getAvailableModelsSync() {
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       // Use models that are likely to exist based on common deployments
-      // Default to qwen3.5-35b-a3b which is common in this setup
-      return ['qwen3.5-35b-a3b'];
+      // Default to test-model which is common in this setup
+      return ['test-model'];
     }
   } catch (err) {
     console.error('Failed to load models:', err.message);

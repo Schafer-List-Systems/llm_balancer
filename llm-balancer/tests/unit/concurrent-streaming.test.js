@@ -25,7 +25,7 @@ describe('Concurrent Streaming Requests', () => {
     backend1.healthy = true;
     backend1.backendInfo = {
       apis: { openai: { supported: true } },
-      models: { openai: ['qwen3.5-35b-a3b'] },
+      models: { openai: ['test-model'] },
       endpoints: { openai: '/v1/chat/completions' },
       healthy: true,
       detectedAt: Date.now()
@@ -35,14 +35,14 @@ describe('Concurrent Streaming Requests', () => {
     backend2.healthy = true;
     backend2.backendInfo = {
       apis: { openai: { supported: true } },
-      models: { openai: ['qwen3.5-35b-a3b'] },
+      models: { openai: ['test-model'] },
       endpoints: { openai: '/v1/chat/completions' },
       healthy: true,
       detectedAt: Date.now()
     };
 
     // Initialize balancer
-    balancer = new Balancer([backend1, backend2], 100, 30000, true, 100);
+    balancer = new Balancer([backend1, backend2], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
   });
 
   describe('processQueueWhenBackendAvailable() with different priorities', () => {
@@ -53,7 +53,7 @@ describe('Concurrent Streaming Requests', () => {
       highPriorityBackend.priority = 10;
       highPriorityBackend.backendInfo = {
         apis: { openai: { supported: true } },
-        models: { openai: ['qwen3.5-35b-a3b'] },
+        models: { openai: ['test-model'] },
         endpoints: { openai: '/v1/chat/completions' },
         healthy: true,
         detectedAt: Date.now()
@@ -64,7 +64,7 @@ describe('Concurrent Streaming Requests', () => {
       mediumPriorityBackend.priority = 5;
       mediumPriorityBackend.backendInfo = {
         apis: { openai: { supported: true } },
-        models: { openai: ['qwen3.5-35b-a3b'] },
+        models: { openai: ['test-model'] },
         endpoints: { openai: '/v1/chat/completions' },
         healthy: true,
         detectedAt: Date.now()
@@ -75,13 +75,13 @@ describe('Concurrent Streaming Requests', () => {
       lowPriorityBackend.priority = 1;
       lowPriorityBackend.backendInfo = {
         apis: { openai: { supported: true } },
-        models: { openai: ['qwen3.5-35b-a3b'] },
+        models: { openai: ['test-model'] },
         endpoints: { openai: '/v1/chat/completions' },
         healthy: true,
         detectedAt: Date.now()
       };
 
-      const priorityBalancer = new Balancer([highPriorityBackend, mediumPriorityBackend, lowPriorityBackend], 100, 30000, true, 100);
+      const priorityBalancer = new Balancer([highPriorityBackend, mediumPriorityBackend, lowPriorityBackend], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
       // Mark high priority backend at max concurrency (busy)
       highPriorityBackend.activeRequestCount = highPriorityBackend.maxConcurrency;
@@ -96,12 +96,12 @@ describe('Concurrent Streaming Requests', () => {
         timedOut: false,
         timeout: null,
         requestData: {
-          req: { is: jest.fn().mockReturnValue(false), body: { model: 'qwen3.5-35b-a3b' } },
+          req: { is: jest.fn().mockReturnValue(false), body: { model: 'test-model' } },
           res: { headersSent: false, status: jest.fn().mockReturnThis(), json: jest.fn() },
           config: { primaryApiType: 'openai' },
-          matchedModel: 'qwen3.5-35b-a3b'
+          matchedModel: 'test-model'
         },
-        criterion: { modelString: 'qwen3.5-35b-a3b', apiType: 'openai' }
+        criterion: { modelString: 'test-model', apiType: 'openai' }
       });
 
       // Mock findCacheMatch to return null
@@ -146,7 +146,7 @@ describe('Concurrent Streaming Requests', () => {
           b.healthy = true;
           b.backendInfo = {
             apis: { openai: { supported: true } },
-            models: { openai: ['qwen3.5-35b-a3b'] },
+            models: { openai: ['test-model'] },
             endpoints: { openai: '/v1/chat/completions' },
             healthy: true,
             detectedAt: Date.now()
@@ -159,7 +159,7 @@ describe('Concurrent Streaming Requests', () => {
           b.healthy = true;
           b.backendInfo = {
             apis: { openai: { supported: true } },
-            models: { openai: ['qwen3.5-35b-a3b'] },
+            models: { openai: ['test-model'] },
             endpoints: { openai: '/v1/chat/completions' },
             healthy: true,
             detectedAt: Date.now()
@@ -172,7 +172,7 @@ describe('Concurrent Streaming Requests', () => {
           b.healthy = true;
           b.backendInfo = {
             apis: { openai: { supported: true } },
-            models: { openai: ['qwen3.5-35b-a3b'] },
+            models: { openai: ['test-model'] },
             endpoints: { openai: '/v1/chat/completions' },
             healthy: true,
             detectedAt: Date.now()
@@ -181,7 +181,7 @@ describe('Concurrent Streaming Requests', () => {
         })()
       ];
 
-      const testBalancer = new Balancer(backends, 100, 30000, true, 100);
+      const testBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
       const requestsProcessed = [];
 
@@ -193,12 +193,12 @@ describe('Concurrent Streaming Requests', () => {
         timedOut: false,
         timeout: null,
         requestData: {
-          req: { is: jest.fn().mockReturnValue(false), body: { model: 'qwen3.5-35b-a3b' } },
+          req: { is: jest.fn().mockReturnValue(false), body: { model: 'test-model' } },
           res: { headersSent: false, status: jest.fn().mockReturnThis(), json: jest.fn() },
           config: { primaryApiType: 'openai' },
-          matchedModel: 'qwen3.5-35b-a3b'
+          matchedModel: 'test-model'
         },
-        criterion: { modelString: 'qwen3.5-35b-a3b', apiType: 'openai' }
+        criterion: { modelString: 'test-model', apiType: 'openai' }
       });
 
       backends.forEach(b => b.findCacheMatch = jest.fn().mockReturnValue(null));
@@ -246,7 +246,7 @@ describe('Concurrent Streaming Requests', () => {
           requestData: {
             req: {
               is: jest.fn().mockReturnValue(false),
-              body: { model: 'qwen3.5-35b-a3b', max_tokens: 50, stream: true }
+              body: { model: 'test-model', max_tokens: 50, stream: true }
             },
             res: {
               headersSent: false,
@@ -254,9 +254,9 @@ describe('Concurrent Streaming Requests', () => {
               json: jest.fn()
             },
             config: { primaryApiType: 'openai' },
-            matchedModel: 'qwen3.5-35b-a3b'
+            matchedModel: 'test-model'
           },
-          criterion: { modelString: 'qwen3.5-35b-a3b', apiType: 'openai' }
+          criterion: { modelString: 'test-model', apiType: 'openai' }
         };
       };
 
@@ -307,12 +307,12 @@ describe('Concurrent Streaming Requests', () => {
         timedOut: false,
         timeout: null,
         requestData: {
-          req: { is: jest.fn().mockReturnValue(false), body: { model: 'qwen3.5-35b-a3b', max_tokens: 50, stream: true } },
+          req: { is: jest.fn().mockReturnValue(false), body: { model: 'test-model', max_tokens: 50, stream: true } },
           res: { headersSent: false, status: jest.fn().mockReturnThis(), json: jest.fn() },
           config: { primaryApiType: 'openai' },
-          matchedModel: 'qwen3.5-35b-a3b'
+          matchedModel: 'test-model'
         },
-        criterion: { modelString: 'qwen3.5-35b-a3b', apiType: 'openai' }
+        criterion: { modelString: 'test-model', apiType: 'openai' }
       });
 
       // Also mock backend findCacheMatch to return null (no cache matches)
@@ -360,8 +360,8 @@ describe('Concurrent Streaming Requests', () => {
         internalRequestId: 'req-X',
         timedOut: false,
         timeout: null,
-        requestData: { req: { is: jest.fn().mockReturnValue(false), body: { model: 'qwen3.5' } }, res: {}, config: {}, matchedModel: 'qwen3.5' },
-        criterion: { modelString: 'qwen3.5', apiType: 'openai' }
+        requestData: { req: { is: jest.fn().mockReturnValue(false), body: { model: 'test-model' } }, res: {}, config: {}, matchedModel: 'test-model' },
+        criterion: { modelString: 'test-model', apiType: 'openai' }
       });
 
       balancer.queue.push({
@@ -371,8 +371,8 @@ describe('Concurrent Streaming Requests', () => {
         internalRequestId: 'req-Y',
         timedOut: false,
         timeout: null,
-        requestData: { req: { is: jest.fn().mockReturnValue(false), body: { model: 'qwen3.5' } }, res: {}, config: {}, matchedModel: 'qwen3.5' },
-        criterion: { modelString: 'qwen3.5', apiType: 'openai' }
+        requestData: { req: { is: jest.fn().mockReturnValue(false), body: { model: 'test-model' } }, res: {}, config: {}, matchedModel: 'test-model' },
+        criterion: { modelString: 'test-model', apiType: 'openai' }
       });
 
       let requestsDequeued = 0;
@@ -447,7 +447,7 @@ describe('Concurrent Streaming Requests', () => {
       b1.healthy = true;
       b1.backendInfo = {
         apis: { openai: { supported: true } },
-        models: { openai: ['qwen3.5-35b-a3b'] },
+        models: { openai: ['test-model'] },
         endpoints: { openai: '/v1/chat/completions' },
         healthy: true,
         detectedAt: Date.now()
@@ -456,14 +456,14 @@ describe('Concurrent Streaming Requests', () => {
       b2.healthy = true;
       b2.backendInfo = {
         apis: { openai: { supported: true } },
-        models: { openai: ['qwen3.5-35b-a3b'] },
+        models: { openai: ['test-model'] },
         endpoints: { openai: '/v1/chat/completions' },
         healthy: true,
         detectedAt: Date.now()
       };
 
       // Create balancer
-      const testBalancer = new Balancer([b1, b2], 100, 30000, true);
+      const testBalancer = new Balancer([b1, b2], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
       // Mock backend findCacheMatch to return null (no cache matches)
       b1.findCacheMatch = jest.fn().mockReturnValue(null);
@@ -481,12 +481,12 @@ describe('Concurrent Streaming Requests', () => {
         timedOut: false,
         timeout: null,
         requestData: {
-          req: { is: jest.fn().mockReturnValue(false), body: { model: 'qwen3.5-35b-a3b' } },
+          req: { is: jest.fn().mockReturnValue(false), body: { model: 'test-model' } },
           res: {},
           config: { primaryApiType: 'openai' },
-          matchedModel: 'qwen3.5-35b-a3b'
+          matchedModel: 'test-model'
         },
-        criterion: { modelString: 'qwen3.5-35b-a3b', apiType: 'openai' }
+        criterion: { modelString: 'test-model', apiType: 'openai' }
       });
 
       requestIds.forEach(id => testBalancer.queue.push(createRequest(id)));

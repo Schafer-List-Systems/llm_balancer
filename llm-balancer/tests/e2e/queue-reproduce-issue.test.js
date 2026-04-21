@@ -33,7 +33,7 @@ describe('Queue Request Issue Reproduction', () => {
         decrementNonStreamingRequest: jest.fn()
       }
     ];
-    balancer = new Balancer(backends, { debug: { enabled: true } });
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
   });
 
   it('should process ALL eligible queued requests when a backend becomes available', async () => {

@@ -10,7 +10,7 @@ describe('Debug Test', () => {
       { url: 'http://backend1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 },
       { url: 'http://backend2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 }
     ];
-    balancer = new Balancer(backends);
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
     console.log('Before each - balancer created');
   });
 

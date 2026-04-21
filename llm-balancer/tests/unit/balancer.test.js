@@ -44,7 +44,7 @@ describe('Balancer', () => {
       createTestBackendWithPriority('http://backend2:11434', 2),
       createTestBackendWithPriority('http://backend3:11434', 1)
     ];
-    balancer = new Balancer(backends);
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 
   describe('Constructor', () => {
@@ -54,7 +54,7 @@ describe('Balancer', () => {
     });
 
     it('should initialize with custom queue size and timeout', () => {
-      const customBalancer = new Balancer(backends, 50, 15000);
+      const customBalancer = new Balancer(backends, { maxQueueSize: 50, queue: { timeout: 15000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       expect(customBalancer.maxQueueSize).toBe(50);
       expect(customBalancer.queueTimeout).toBe(15000);
     });
@@ -64,7 +64,7 @@ describe('Balancer', () => {
         createTestBackendWithPriority('http://backend1:11434', 1),
         createTestBackendWithPriority('http://backend2:11434', 2)
       ];
-      const customBalancer = new Balancer(customBackends);
+      const customBalancer = new Balancer(customBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       expect(customBalancer.queue).toBeDefined();
       expect(Array.isArray(customBalancer.queue)).toBe(true);
       expect(customBalancer.queue.length).toBe(0);
@@ -79,7 +79,7 @@ describe('Balancer', () => {
     });
 
     it('should reject request when queue is full', async () => {
-      const smallTimeoutBalancer = new Balancer(backends, 1, 100);
+      const smallTimeoutBalancer = new Balancer(backends, { maxQueueSize: 1, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       const backend1 = await smallTimeoutBalancer.queueRequest();
       expect(backend1).not.toBe(null);
 
@@ -129,7 +129,7 @@ describe('Balancer', () => {
     }, 10000);
 
     it('should handle empty backends list', () => {
-      const emptyBalancer = new Balancer([]);
+      const emptyBalancer = new Balancer([], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       const backend = emptyBalancer.getNextBackend();
       expect(backend).toBeNull();
     });
@@ -141,7 +141,7 @@ describe('Balancer', () => {
         createTestBackendWithPriority('http://backend1:11434', 1),
         createTestBackendWithPriority('http://backend2:11434', 2)
       ];
-      const priorityBalancer = new Balancer(priorityBackends);
+      const priorityBalancer = new Balancer(priorityBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       const backend = await priorityBalancer.queueRequest();
       expect(backend.url).toBe('http://backend2:11434');
@@ -152,7 +152,7 @@ describe('Balancer', () => {
         createTestBackendWithPriority('http://backend1:11434', 1),
         createTestBackendWithPriority('http://backend2:11434', 2)
       ];
-      const priorityBalancer = new Balancer(priorityBackends);
+      const priorityBalancer = new Balancer(priorityBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Backend 1 is at priority 1, backend 2 is at priority 2
       // Should get backend 2 first due to priority
@@ -167,7 +167,7 @@ describe('Balancer', () => {
       ];
       // Mark backend 1 as at max concurrency
       priorityBackends[0].activeRequestCount = 1;
-      const priorityBalancer = new Balancer(priorityBackends);
+      const priorityBalancer = new Balancer(priorityBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Backend 2 is available at priority 2
       const backend = await priorityBalancer.queueRequest();
@@ -252,7 +252,7 @@ describe('Balancer', () => {
 
   describe('Queue Timeout Handling', () => {
     it('should reject queued request after timeout', async () => {
-      const smallTimeoutBalancer = new Balancer(backends, 100, 100);
+      const smallTimeoutBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       const backend = await smallTimeoutBalancer.queueRequest();
 
       // Should get a backend since queue wasn't full
@@ -275,7 +275,7 @@ describe('Balancer', () => {
       ];
       // Mark backend 1 as at max concurrency
       mixedBackends[0].activeRequestCount = 1;
-      const mixedBalancer = new Balancer(mixedBackends);
+      const mixedBalancer = new Balancer(mixedBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Should get an available backend (backend 2 or 3)
       const backend = await mixedBalancer.queueRequest();
@@ -317,7 +317,7 @@ describe('Balancer', () => {
         })
       };
 
-      const slowBalancer = new Balancer([slowBackend], 1, 3000);
+      const slowBalancer = new Balancer([slowBackend], { maxQueueSize: 1, queue: { timeout: 3000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Request will timeout but queueRequest handles it
       const backend = await slowBalancer.queueRequest();
@@ -333,7 +333,7 @@ describe('Balancer', () => {
     }, 15000);
 
     it('should handle multiple concurrent requests with varying timeouts', async () => {
-      const concurrentBalancer = new Balancer(backends, 50, 1000);
+      const concurrentBalancer = new Balancer(backends, { maxQueueSize: 50, queue: { timeout: 1000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Queue multiple requests
       const promises = [
@@ -354,7 +354,7 @@ describe('Balancer', () => {
     }, 15000);
 
     it('should timeout waiting for available backend', async () => {
-      const timeoutBalancer = new Balancer(backends, 50, 100);
+      const timeoutBalancer = new Balancer(backends, { maxQueueSize: 50, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Mark all backends as busy
       backends.forEach(b => b.activeRequestCount = b.maxConcurrency);
@@ -371,7 +371,7 @@ describe('Balancer', () => {
         { url: 'http://backend1:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
         { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
-      const mixedBalancer = new Balancer(mixedBackends, 50, 100);
+      const mixedBalancer = new Balancer(mixedBackends, { maxQueueSize: 50, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Make backend 1 at max concurrency
       mixedBackends[0].activeRequestCount = mixedBackends[0].maxConcurrency;
@@ -402,7 +402,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle exponential backoff on retry', async () => {
-      const exponentialBalancer = new Balancer(backends, 50, 100);
+      const exponentialBalancer = new Balancer(backends, { maxQueueSize: 50, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Queue multiple requests to trigger backoff
       const promises = [];
@@ -423,7 +423,7 @@ describe('Balancer', () => {
 
   describe('Busy State Edge Cases', () => {
     it('should mark backend as at max concurrency and queue subsequent requests', async () => {
-      const concurrencyBalancer = new Balancer(backends);
+      const concurrencyBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       const backend = await concurrencyBalancer.queueRequest();
 
       // After queue assignment, activeRequestCount is 0 (processRequest hasn't run yet)
@@ -446,7 +446,7 @@ describe('Balancer', () => {
         { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
         { url: 'http://backend3:11434', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
-      const concurrencyBalancer = new Balancer(concurrencyBackends);
+      const concurrencyBalancer = new Balancer(concurrencyBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get first backend
       const backend1 = await concurrencyBalancer.queueRequest();
@@ -463,7 +463,7 @@ describe('Balancer', () => {
 
 
     it('should reset busy state after request completion', async () => {
-      const resetBalancer = new Balancer(backends);
+      const resetBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get backend
       const backend = await resetBalancer.queueRequest();
@@ -489,7 +489,7 @@ describe('Balancer', () => {
         { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
         { url: 'http://backend3:11434', priority: 3, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
-      const priorityBalancer = new Balancer(priorityBackends);
+      const priorityBalancer = new Balancer(priorityBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Request should get an available backend (priority 2 or 3)
       const backend = await priorityBalancer.queueRequest();
@@ -498,14 +498,14 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle busy state with empty backend list', () => {
-      const emptyBalancer = new Balancer([]);
+      const emptyBalancer = new Balancer([], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       expect(emptyBalancer.hasHealthyBackends()).toBe(false);
     });
   });
 
   describe('Full Queue Scenarios', () => {
     it('should handle queue reaching max capacity', async () => {
-      const fullBalancer = new Balancer(backends, 1, 30000);
+      const fullBalancer = new Balancer(backends, { maxQueueSize: 1, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get first backend
       const backend1 = await fullBalancer.queueRequest();
@@ -521,7 +521,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle multiple requests when queue is limited', async () => {
-      const smallQueueBalancer = new Balancer(backends, 1, 100);
+      const smallQueueBalancer = new Balancer(backends, { maxQueueSize: 1, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get first backend
       const backend1 = await smallQueueBalancer.queueRequest();
@@ -543,7 +543,7 @@ describe('Balancer', () => {
         { url: 'http://backend2:11434', priority: 2, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 },
         { url: 'http://backend3:11434', priority: 3, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
       ];
-      const fullQueueBalancer = new Balancer(priorityBackends, 2, 30000);
+      const fullQueueBalancer = new Balancer(priorityBackends, { maxQueueSize: 2, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get backends for different priorities
       const backend1 = await fullQueueBalancer.queueRequest();
@@ -557,7 +557,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle queue timeout when at max capacity', async () => {
-      const maxCapacityBalancer = new Balancer(backends, 1, 100);
+      const maxCapacityBalancer = new Balancer(backends, { maxQueueSize: 1, queue: { timeout: 100 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get first backend
       const backend1 = await maxCapacityBalancer.queueRequest();
@@ -583,7 +583,7 @@ describe('Balancer', () => {
 
   describe('Health Transition Edge Cases', () => {
     it('should handle rapid failover scenario', async () => {
-      const rapidBalancer = new Balancer(backends);
+      const rapidBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // First request
       const backend1 = await rapidBalancer.queueRequest();
@@ -600,7 +600,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle backend priority changes during runtime', async () => {
-      const dynamicBalancer = new Balancer(backends);
+      const dynamicBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get backend
       const backend = await dynamicBalancer.queueRequest();
@@ -619,7 +619,7 @@ describe('Balancer', () => {
     }, 30000);
 
     it('should handle health transition: healthy → unhealthy → healthy', async () => {
-      const transitionBalancer = new Balancer(backends);
+      const transitionBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get backend
       const backend = await transitionBalancer.queueRequest();
@@ -640,7 +640,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle partial degradation (some backends fail, others work)', async () => {
-      const partialBalancer = new Balancer(backends);
+      const partialBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Fail some backends
       backends[0].healthy = false;
@@ -653,7 +653,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle all backends become unhealthy', async () => {
-      const allUnhealthyBalancer = new Balancer(backends);
+      const allUnhealthyBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Make all backends unhealthy
       backends.forEach(b => b.healthy = false);
@@ -664,7 +664,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should reject request when all backends are unavailable', async () => {
-      const recoveryBalancer = new Balancer(backends);
+      const recoveryBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Mark all backends as busy and unhealthy
       backends.forEach(b => {
@@ -690,7 +690,7 @@ describe('Balancer', () => {
       for (let i = 0; i < 100; i++) {
         manyBackends.push(createTestBackendWithPriority(`http://backend${i}:11434`, i % 3 + 1));
       }
-      const manyBalancer = new Balancer(manyBackends);
+      const manyBalancer = new Balancer(manyBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Request from each priority tier
       for (let i = 1; i <= 3; i++) {
@@ -707,7 +707,7 @@ describe('Balancer', () => {
         createTestBackendWithPriority('http://backend2:11434', 2),
         createTestBackendWithPriority('http://backend3:11434', 1)
       ];
-      const statsBalancer = new Balancer(freshBackends);
+      const statsBalancer = new Balancer(freshBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       console.log('Starting requests...');
       // Make multiple requests
@@ -736,7 +736,7 @@ describe('Balancer', () => {
     }, 30000);
 
     it('should handle backend statistics reset', async () => {
-      const statsBalancer = new Balancer(backends);
+      const statsBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Make requests
       const backend = await statsBalancer.queueRequest();
@@ -758,14 +758,14 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle empty backends list gracefully', () => {
-      const emptyBalancer = new Balancer([]);
+      const emptyBalancer = new Balancer([], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       expect(emptyBalancer.getNextBackend()).toBeNull();
       expect(emptyBalancer.hasHealthyBackends()).toBe(false);
     });
 
     it('should handle single backend', async () => {
       const singleBackend = createTestBackendWithPriority('http://single:11434', 1);
-      const singleBalancer = new Balancer([singleBackend]);
+      const singleBalancer = new Balancer([singleBackend], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       const backend = await singleBalancer.queueRequest();
       expect(backend).not.toBe(null);
@@ -775,7 +775,7 @@ describe('Balancer', () => {
 
   describe('Error Handling Edge Cases', () => {
     it('should handle network errors during requests', async () => {
-      const errorBalancer = new Balancer(backends);
+      const errorBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Mark as unhealthy (simulating network error)
       backends.forEach(b => b.healthy = false);
@@ -786,7 +786,7 @@ describe('Balancer', () => {
     }, 5000);
 
     it('should handle invalid response from backend', async () => {
-      const invalidBalancer = new Balancer(backends);
+      const invalidBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Simulate error
       const backend = await invalidBalancer.queueRequest();
@@ -803,7 +803,7 @@ describe('Balancer', () => {
     it('should handle invalid URL format', () => {
       const invalidUrlBalancer = new Balancer([
         { url: 'invalid-url', priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
-      ]);
+      ], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // The current implementation accepts any string as URL, even invalid formats
       const backend = invalidUrlBalancer.getNextBackend();
@@ -813,7 +813,7 @@ describe('Balancer', () => {
     it('should handle null URL', () => {
       const nullUrlBalancer = new Balancer([
         { url: null, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
-      ]);
+      ], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // The current implementation accepts null URLs
       const backend = nullUrlBalancer.getNextBackend();
@@ -823,7 +823,7 @@ describe('Balancer', () => {
     it('should handle undefined URL', () => {
       const undefinedUrlBalancer = new Balancer([
         { url: undefined, priority: 1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
-      ]);
+      ], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // The current implementation accepts undefined URLs
       const backend = undefinedUrlBalancer.getNextBackend();
@@ -845,7 +845,7 @@ describe('Balancer', () => {
     it('should handle negative priorities', async () => {
       const negativeBalancer = new Balancer([
         { url: 'http://backend1:11434', priority: -1, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
-      ]);
+      ], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       const backend = await negativeBalancer.queueRequest();
       expect(backend).not.toBe(null);
@@ -854,7 +854,7 @@ describe('Balancer', () => {
     it('should handle very high priorities', async () => {
       const highPriorityBalancer = new Balancer([
         { url: 'http://backend1:11434', priority: 999, healthy: true, activeRequestCount: 0, maxConcurrency: 1, requestCount: 0, errorCount: 0 }
-      ]);
+      ], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       const backend = await highPriorityBalancer.queueRequest();
       expect(backend).not.toBe(null);
@@ -884,7 +884,7 @@ describe('Balancer', () => {
         createTestBackendWithPriority('http://backend1:11434', 1, true, 1),
         createTestBackendWithPriority('http://backend2:11434', 1, true, 1)
       ];
-      const testBalancer = new Balancer(testBackends);
+      const testBalancer = new Balancer(testBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Get first backend from queue (simulating what happens in index.js)
       // Due to priority-based selection with equal priorities, backend1 is selected first (lower array index wins tie-breaker)
@@ -925,7 +925,7 @@ describe('Balancer', () => {
       const testBackends = [
         createTestBackendWithPriority('http://backend1:11434', 1, true, 1)
       ];
-      const testBalancer = new Balancer(testBackends);
+      const testBalancer = new Balancer(testBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // First request gets immediate backend (count is 0 after assignment)
       const firstBackend = await testBalancer.queueRequest();
@@ -965,7 +965,7 @@ describe('Balancer', () => {
         createTestBackendWithPriority('http://backend1:11434', 1, true, 2),
         createTestBackendWithPriority('http://backend2:11434', 1, true, 2)
       ];
-      const testBalancer = new Balancer(testBackends);
+      const testBalancer = new Balancer(testBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Simulate rapid arrival of more requests than capacity (4 requests for 2 backends)
       const promises = [];
@@ -1007,7 +1007,7 @@ describe('Balancer', () => {
       const testBackends = [
         createTestBackendWithPriority('http://backend1:11434', 1, true, 2)
       ];
-      const testBalancer = new Balancer(testBackends);
+      const testBalancer = new Balancer(testBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Cycle through multiple assign/release cycles
       for (let cycle = 0; cycle < 5; cycle++) {
@@ -1034,7 +1034,7 @@ describe('Balancer', () => {
       const testBackends = [
         createTestBackendWithPriority('http://backend1:11434', 1, true, 2)
       ];
-      const testBalancer = new Balancer(testBackends);
+      const testBalancer = new Balancer(testBackends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Make multiple requests (simulating completed lifecycle)
       for (let i = 0; i < 3; i++) {

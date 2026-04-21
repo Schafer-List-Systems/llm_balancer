@@ -15,7 +15,7 @@ describe('triggerQueueProcessing', () => {
     mockBackend = new Backend('http://mock-backend:11434', 2);
     mockBackend.state = 'healthy';
     mockBackend.supportedModels = ['test-model', 'unknown-model'];
-    balancer = new Balancer([mockBackend], 10, 300000, true, 100);
+    balancer = new Balancer([mockBackend], { maxQueueSize: 10, queue: { timeout: 300000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
 
     // Mock the selector to return appropriate status based on model
     balancer.selector.selectBackendWithCache = jest.fn().mockImplementation((backends, criterion, promptBody) => {

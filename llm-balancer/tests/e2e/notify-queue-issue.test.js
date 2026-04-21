@@ -10,7 +10,7 @@ describe('Notify Backend Available Queue Issue - Integration', () => {
       { url: 'http://mock1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 },
       { url: 'http://mock2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 }
     ];
-    balancer = new Balancer(backends);
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 
   it('should process queued requests when backend becomes available', async () => {

@@ -184,7 +184,6 @@ router.post('/single/speed', async (req, res) => {
     const defaultOptions = {
       tokens: 5000,
       maxTokens: 10,
-      model: 'qwen/qwen3.5-35b-a3b',
       retries: 3
     };
     const mergedOptions = { ...defaultOptions, ...options };
@@ -228,7 +227,6 @@ router.post('/streaming', async (req, res) => {
     const defaultOptions = {
       tokens: 2000,
       maxTokens: 50,
-      model: 'qwen/qwen3.5-35b-a3b',
       retries: 3
     };
     const mergedOptions = { ...defaultOptions, ...options };
@@ -267,7 +265,6 @@ router.post('/prompt-caching', async (req, res) => {
       numPrompts: 4,
       tokens: 5000,
       maxTokens: 10,
-      model: 'qwen/qwen3.5-35b-a3b',
       shortQuestion: 'What is the main topic?'
     };
     const mergedOptions = { ...defaultOptions, ...options };

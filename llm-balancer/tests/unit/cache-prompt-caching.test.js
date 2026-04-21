@@ -16,13 +16,13 @@ describe('CachePrompt Caching After Request Completion', () => {
     backend1.healthy = true;
     backend1.backendInfo = {
       apis: { openai: { supported: true } },
-      models: { openai: ['qwen/qwen3.5-35b-a3b'] }
+      models: { openai: ['qwen/test-model'] }
     };
     backend1.maxConcurrency = 1;
     backend1.activeRequestCount = 0;
 
     // Create balancer with the backend
-    balancer = new Balancer([backend1]);
+    balancer = new Balancer([backend1], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 
   afterEach(() => {
@@ -32,11 +32,11 @@ describe('CachePrompt Caching After Request Completion', () => {
   it('should cache prompt after request completion when matchedModel is provided', async () => {
     // Arrange: Request body to be cached
     const requestBody = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 100
     });
-    const matchedModel = 'qwen/qwen3.5-35b-a3b';
+    const matchedModel = 'qwen/test-model';
 
     // Act: Simulate the flow that should cache the prompt
     // This is what happens in request-processor.js after the response is received
@@ -50,17 +50,17 @@ describe('CachePrompt Caching After Request Completion', () => {
 
     // Verify the cached prompt contains the correct model
     const cachedPrompt = stats.cachedPrompts[0];
-    expect(cachedPrompt.model).toBe('qwen/qwen3.5-35b-a3b');
+    expect(cachedPrompt.model).toBe('qwen/test-model');
   });
 
   it('should show cache hit on subsequent request with same prompt', async () => {
     // Arrange: First request caches the prompt
     const requestBody1 = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Hello, how are you?' }],
       max_tokens: 100
     });
-    const matchedModel = 'qwen/qwen3.5-35b-a3b';
+    const matchedModel = 'qwen/test-model';
 
     backend1.cachePrompt(requestBody1, matchedModel);
 
@@ -84,7 +84,7 @@ describe('CachePrompt Caching After Request Completion', () => {
   it('should not cache when matchedModel is null', async () => {
     // Arrange
     const requestBody = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Test' }],
       max_tokens: 100
     });
@@ -112,13 +112,13 @@ describe('CachePrompt Caching After Request Completion', () => {
 
     // Simulate request completion and caching
     const requestBody = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 100
     });
 
     // This is the critical part - cachePrompt should be called here
-    backend1.cachePrompt(requestBody, 'qwen/qwen3.5-35b-a3b');
+    backend1.cachePrompt(requestBody, 'qwen/test-model');
 
     // Assert: Cache should have entry
     const stats = backend1.getPromptCacheStats();
@@ -128,8 +128,8 @@ describe('CachePrompt Caching After Request Completion', () => {
   it('should track cache stats correctly through multiple requests', async () => {
     // Arrange
     const requests = [
-      { model: 'qwen/qwen3.5-35b-a3b', prompt: 'Hello' },
-      { model: 'qwen/qwen3.5-35b-a3b', prompt: 'Different' }
+      { model: 'qwen/test-model', prompt: 'Hello' },
+      { model: 'qwen/test-model', prompt: 'Different' }
     ];
 
     // Act: Simulate requests being cached
@@ -148,11 +148,11 @@ describe('CachePrompt Caching After Request Completion', () => {
 
     // Now search for first prompt - should be a hit
     const firstRequest = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 100
     });
-    backend1.findCacheMatch(firstRequest, 'qwen/qwen3.5-35b-a3b');
+    backend1.findCacheMatch(firstRequest, 'qwen/test-model');
 
     // Verify stats updated
     const updatedStats = backend1.getPromptCacheStats();
@@ -165,7 +165,7 @@ describe('CachePrompt Caching After Request Completion', () => {
 
     // Arrange
     const requestBody = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Test message' }],
       max_tokens: 100
     });
@@ -190,7 +190,7 @@ describe('CachePrompt Caching After Request Completion', () => {
       req: {},
       res: {},
       config: {},
-      requestModel: 'qwen/qwen3.5-35b-a3b',  // The model extracted from request body
+      requestModel: 'qwen/test-model',  // The model extracted from request body
       matchedModel: null  // This is null in production!
     };
 
@@ -199,11 +199,11 @@ describe('CachePrompt Caching After Request Completion', () => {
     const modelForProcessing = requestModel || matchedModel;
 
     // Assert: Should have the model
-    expect(modelForProcessing).toBe('qwen/qwen3.5-35b-a3b');
+    expect(modelForProcessing).toBe('qwen/test-model');
 
     // Now cache using the extracted model
     const requestBody = JSON.stringify({
-      model: 'qwen/qwen3.5-35b-a3b',
+      model: 'qwen/test-model',
       messages: [{ role: 'user', content: 'Test' }],
       max_tokens: 100
     });

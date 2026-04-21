@@ -16,7 +16,7 @@ describe('notifyBackendAvailable', () => {
       (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 2; b.healthy = true; b.activeRequestCount = 0; return b; })(),
       (() => { const b = new Backend('http://backend3:11434', 1); b.priority = 1; b.healthy = true; b.activeRequestCount = 0; return b; })()
     ];
-    balancer = new Balancer(backends);
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 
   describe('Basic Functionality', () => {
@@ -27,7 +27,7 @@ describe('notifyBackendAvailable', () => {
     });
 
     it('should handle undefined queue gracefully', () => {
-      const b = new Balancer([]);
+      const b = new Balancer([], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
       b.queue = undefined;
       expect(() => {
         b.notifyBackendAvailable();
@@ -42,8 +42,7 @@ describe('notifyBackendAvailable', () => {
           (() => { const b = new Backend('http://backend1:11434', 2); b.priority = 1; b.healthy = true; return b; })(),
           (() => { const b = new Backend('http://backend2:11434', 2); b.priority = 2; b.healthy = true; return b; })()
         ],
-        100,
-        30000
+        { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false, requestHistorySize: 100 } }
       );
 
       // Mark all backends at max concurrency to force queueing
@@ -82,8 +81,7 @@ describe('notifyBackendAvailable', () => {
           (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = true; return b; })(),
           (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 2; b.healthy = true; return b; })()
         ],
-        100,
-        30000
+        { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false, requestHistorySize: 100 } }
       );
 
       // Mark all backends at max concurrency first
@@ -121,8 +119,7 @@ describe('notifyBackendAvailable', () => {
           (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = true; return b; })(),
           (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 2; b.healthy = true; return b; })()
         ],
-        100,
-        100  // Very short timeout
+        { maxQueueSize: 100, queue: { timeout: 100 }, debug: { enabled: false, requestHistorySize: 100 } }
       );
 
       // Mark all backends at max concurrency to force queueing
@@ -150,8 +147,7 @@ describe('notifyBackendAvailable', () => {
           (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = true; return b; })(),
           (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 2; b.healthy = true; return b; })()
         ],
-        100,
-        30000
+        { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false, requestHistorySize: 100 } }
       );
 
       // Mark all backends at max concurrency to force queueing
@@ -239,8 +235,7 @@ describe('notifyBackendAvailable', () => {
           (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = true; return b; })(),
           (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 2; b.healthy = true; return b; })()
         ],
-        100,
-        30000
+        { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false, requestHistorySize: 100 } }
       );
 
       // Mark all backends at max concurrency to force queueing
@@ -275,8 +270,7 @@ describe('notifyBackendAvailable', () => {
           (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = true; return b; })(),
           (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 2; b.healthy = true; return b; })()
         ],
-        100,
-        30000
+        { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false, requestHistorySize: 100 } }
       );
 
       // Mark all backends at max concurrency to force queueing
@@ -312,7 +306,7 @@ describe('notifyBackendAvailable', () => {
         (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = true; return b; })(),
         (() => { const b = new Backend('http://backend2:11434', 1); b.priority = 5; b.healthy = true; return b; })()
       ];
-      const priorityBalancer = new Balancer(backends);
+      const priorityBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // Mark lower priority backend at max concurrency first
       backends[0].activeRequestCount = backends[0].maxConcurrency;
@@ -335,7 +329,7 @@ describe('notifyBackendAvailable', () => {
       const backends = [
         (() => { const b = new Backend('http://backend1:11434', 1); b.priority = 1; b.healthy = false; return b; })()
       ];
-      const unhealthyBalancer = new Balancer(backends);
+      const unhealthyBalancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
       // No healthy backends at all - queueRequest should reject immediately
       await expect(unhealthyBalancer.queueRequest()).rejects.toThrow('No healthy backends available');

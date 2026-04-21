@@ -43,10 +43,10 @@ describe('Debug Mode', () => {
     ];
 
     // Create balancer with debug disabled (default)
-    balancerDisabled = new Balancer(backends, 100, 30000, false);
+    balancerDisabled = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 
     // Create balancer with debug enabled
-    balancerEnabled = new Balancer(backends, 100, 30000, true, 50);
+    balancerEnabled = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 50 });
   });
 
   describe('Debug Mode Initialization', () => {
@@ -213,7 +213,7 @@ describe('Debug Mode', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty backend list when debug enabled', () => {
-      const emptyBalancer = new Balancer([], 100, 30000, true);
+      const emptyBalancer = new Balancer([], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
       const stats = emptyBalancer.getDebugStats();
       expect(stats.enabled).toBe(true);
       expect(stats.backendStats).toEqual([]);
@@ -228,7 +228,7 @@ describe('Debug Mode', () => {
         getPerformanceStats: () => null,
         getPromptCacheStats: () => null
       };
-      const balancer = new Balancer([mockBackend], 100, 30000, true);
+      const balancer = new Balancer([mockBackend], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: true }, debugRequestHistorySize: 100 });
       expect(() => balancer.getDebugStats()).not.toThrow();
     });
   });

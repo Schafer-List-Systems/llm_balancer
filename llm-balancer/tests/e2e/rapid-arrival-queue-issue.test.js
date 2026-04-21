@@ -33,7 +33,7 @@ describe('Rapid Request Arrival Queue Issue', () => {
         decrementNonStreamingRequest: jest.fn()
       }
     ];
-    balancer = new Balancer(backends);
+    balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 
   it('should handle rapid arrival when backends become available', async () => {

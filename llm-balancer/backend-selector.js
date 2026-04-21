@@ -11,13 +11,6 @@
  * Default configuration values for backend selector
  * These are applied to ensure all config values exist when config is not provided
  */
-const DEFAULTS = {
-  prompt: {
-    cache: {
-      minHitThreshold: 15000 // Minimum token count to enforce cache-hit preference
-    }
-  }
-};
 
 /**
  * ModelMatcher class - handles model matching logic
@@ -142,11 +135,12 @@ class ModelMatcher {
  */
 class BackendSelector {
   constructor(config) {
+    if (!config) throw new Error('BackendSelector requires config');
     // Selection strategies - can be configured per request type if needed
     this.strategy = 'priority'; // 'priority', 'round-robin', etc. (future extension)
 
     // Store config for access to cache hit threshold
-    this.config = config || {};
+    this.config = config;
   }
 
   /**
@@ -366,7 +360,7 @@ class BackendSelector {
         }
       }
 
-      const minCacheHitThreshold = this.config?.prompt?.cache?.minHitThreshold ?? DEFAULTS.prompt.cache.minHitThreshold;
+      const minCacheHitThreshold = this.config.prompt.cache.minHitThreshold;
       const shouldEnforceCacheHit = thresholdTokens !== undefined && thresholdTokens >= minCacheHitThreshold;
 
       if (!shouldEnforceCacheHit) {
