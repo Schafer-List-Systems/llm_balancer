@@ -789,18 +789,10 @@ class Balancer {
     const backend = backends.find(b => b.url === backendUrl);
     if (backend) {
       backend.healthy = false;
-      backend.activeRequestCount = 0; // Also clear active request count so it can be retried
+      backend.activeRequestCount = 0;
       backend.failCount = (backend.failCount || 0) + 1;
       backend.errorCount = (backend.errorCount || 0) + 1;
-      this.healthCheckCount.set(backendUrl, (this.healthCheckCount.get(backendUrl) || 0) + 1);
       console.error(`[${getTimestamp()}] [Balancer] Backend marked as unhealthy: ${backendUrl}`);
-
-      // Also mark as healthy if it becomes active again (for test scenarios)
-      // This prevents the backend from being permanently marked as unhealthy
-      // The HealthChecker will automatically recover it on next successful check
-      if (backend.activeRequestCount > 0) {
-        this.markHealthy(backendUrl);
-      }
     }
   }
 

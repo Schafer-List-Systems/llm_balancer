@@ -83,6 +83,7 @@ class HealthChecker {
     // This prevents request stacking and network contention that causes timeouts
     const staggerDelay = this.config.healthCheck.staggerDelay || 500;
     for (const backend of this.backends) {
+      if (backend.active === false) continue; // Skip health checks for inactive backends
       await this.checkBackendWithRetry(backend);
       await new Promise(resolve => setTimeout(resolve, staggerDelay));
     }
@@ -124,13 +125,13 @@ class HealthChecker {
         console.log(`[${getTimestamp()}] [HealthChecker] Backend RECOVERED: ${url} (${backend.getApiTypes().join(', ')}) - models:`, result.models || []);
       }
       backend.healthy = true;
-      backend.failCount = 0;
+      backend.healthCheckFailCount = 0;
     } else {
       if (process.env.NODE_ENV !== 'test') {
         console.warn(`[${getTimestamp()}] [HealthChecker] Backend unhealthy: ${url} (${result.error || 'unknown error'})`);
       }
       backend.healthy = false;
-      backend.failCount = (backend.failCount || 0) + 1;
+      backend.healthCheckFailCount = (backend.healthCheckFailCount || 0) + 1;
     }
   }
 
@@ -170,6 +171,7 @@ class HealthChecker {
       activeRequestCount: b.activeRequestCount,
       maxConcurrency: b.maxConcurrency,
       failCount: b.failCount || 0,
+      healthCheckFailCount: b.healthCheckFailCount || 0,
       timeoutCount: b.timeoutCount || 0,
       lastCheck: b.lastCheckTime || null,
       lastCheckDuration: b.lastCheckDuration || null

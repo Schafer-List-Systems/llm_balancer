@@ -1252,6 +1252,16 @@ document.addEventListener('DOMContentLoaded', () => {
           ${renderBackendField('priority', backend.priority, index)}
           ${renderBackendField('maxConcurrency', backend.maxConcurrency, index)}
           ${renderBackendField('maxInputTokens', backend.maxInputTokens, index)}
+          <div>
+            <label style="font-size: 0.75rem; color: var(--text-secondary);">Active</label>
+            <label style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; margin-top: 0.25rem;">
+              <input type="checkbox" class="config-field-input" id="backend-${index}-active"
+                ${backend.active !== false ? 'checked' : ''}
+                onchange="window.updateBackendField(${index}, 'active', this.checked)"
+                style="width: 1.25rem; height: 1.25rem; cursor: pointer;">
+              <span style="font-size: 0.875rem; color: var(--text-primary);">Yes</span>
+            </label>
+          </div>
         </div>
       </div>
     `).join('');
