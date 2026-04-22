@@ -338,7 +338,7 @@ class BackendSelector {
       }
 
       const cacheMatch = backend.findCacheMatch(promptBody, modelString, null);
-      if (cacheMatch && cacheMatch.similarity >= 0.8) {
+      if (cacheMatch) {
         allCacheMatches.push({
           backend,
           similarity: cacheMatch.similarity,

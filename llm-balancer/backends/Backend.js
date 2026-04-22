@@ -67,7 +67,7 @@ class Backend {
     const config = require('../config.js').loadConfig();
     this.promptCache = new PromptCache(
       config.prompt.cache.maxSize,
-      config.prompt.cache.similarityThreshold
+      config.prompt.cache.prefixMinLength
     );
   }
 

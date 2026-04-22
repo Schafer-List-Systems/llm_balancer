@@ -54,10 +54,11 @@ describe('CachePrompt Caching After Request Completion', () => {
   });
 
   it('should show cache hit on subsequent request with same prompt', async () => {
-    // Arrange: First request caches the prompt
+    // Use long enough prompt to pass the 50-token prefixMinLength threshold
+    const longPrompt = 'a '.repeat(55) + 'Hello, how are you?';
     const requestBody1 = JSON.stringify({
       model: 'qwen/test-model',
-      messages: [{ role: 'user', content: 'Hello, how are you?' }],
+      messages: [{ role: 'user', content: longPrompt }],
       max_tokens: 100
     });
     const matchedModel = 'qwen/test-model';
@@ -72,8 +73,8 @@ describe('CachePrompt Caching After Request Completion', () => {
 
     // Assert: Should find cache hit
     expect(cacheMatch).not.toBeNull();
-    expect(cacheMatch.matchType).toBe('similarity');
-    expect(cacheMatch.similarity).toBeCloseTo(1.0, 0);
+    expect(cacheMatch.matchType).toBe('prefix');
+    expect(cacheMatch.similarity).toBeCloseTo(1.0, 2);
 
     // Verify stats show a hit
     const stats = backend1.getPromptCacheStats();
@@ -126,10 +127,10 @@ describe('CachePrompt Caching After Request Completion', () => {
   });
 
   it('should track cache stats correctly through multiple requests', async () => {
-    // Arrange
+    // Use long enough prompts to pass the 50-token prefixMinLength threshold
     const requests = [
-      { model: 'qwen/test-model', prompt: 'Hello' },
-      { model: 'qwen/test-model', prompt: 'Different' }
+      { model: 'qwen/test-model', prompt: 'a '.repeat(55) + 'Hello there long enough text' },
+      { model: 'qwen/test-model', prompt: 'a '.repeat(55) + 'Different long enough text content here' }
     ];
 
     // Act: Simulate requests being cached
@@ -149,7 +150,7 @@ describe('CachePrompt Caching After Request Completion', () => {
     // Now search for first prompt - should be a hit
     const firstRequest = JSON.stringify({
       model: 'qwen/test-model',
-      messages: [{ role: 'user', content: 'Hello' }],
+      messages: [{ role: 'user', content: requests[0].prompt }],
       max_tokens: 100
     });
     backend1.findCacheMatch(firstRequest, 'qwen/test-model');

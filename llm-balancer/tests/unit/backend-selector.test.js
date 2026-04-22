@@ -685,10 +685,10 @@ describe('BackendSelector', () => {
       expect(result.backend.url).toBe('http://high-prio:11434'); // Falls back to standard selection
     });
 
-    it('should ignore cache matches below 80% similarity threshold', () => {
+    it('should accept any cache match that meets prefixMinLength (findBestMatch already enforces)', () => {
       const backends = [
         createMockBackendWithCache('http://low-prio:11434', true, 1, ['llama3'], {
-          'write a story': { model: 'llama3', similarity: 0.75 } // Below threshold
+          'write a story': { model: 'llama3', similarity: 0.25 } // Valid prefix match (50 tokens on long prompt)
         }),
         createMockBackendWithCache('http://high-prio:11434', true, 5, ['llama3'], {})
       ];
@@ -699,7 +699,7 @@ describe('BackendSelector', () => {
         'write a story'
       );
 
-      expect(result.backend.url).toBe('http://high-prio:11434'); // Cache match ignored (below threshold)
+      expect(result.backend.url).toBe('http://low-prio:11434'); // Cache match accepted (prefixMinLength enforced by findBestMatch)
     });
 
     it('should select by cache hit similarity when backend has capacity but others dont', () => {

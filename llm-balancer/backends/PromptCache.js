@@ -1,61 +1,40 @@
 /**
- * PromptCache - LRU cache with fingerprint-based similarity matching
+ * PromptCache - LRU cache with token-prefix matching
  *
  * Architecture:
  * - Maintains LRU list where entries[0] = most recently accessed
- * - Uses FNV-1a 64-bit hash fingerprints for efficient token-level comparison
+ * - Uses tiktoken tokenization for exact token-level comparison
  * - Priority 1: ID-based exact lookup (no computation)
- * - Priority 2: Fallback to fingerprint cosine similarity
+ * - Priority 2: Token-by-token prefix matching for cache hits
  */
 
-// Maximum tokens to include in fingerprint for similarity comparison
-// Configurable via MAX_FINGERPRINT_TOKENS environment variable, defaults to 200
-const MAX_FINGERPRINT_TOKENS = parseInt(process.env.MAX_FINGERPRINT_TOKENS) || 200;
-// Fixed fingerprint array size (64 elements) for efficient cosine similarity computation
-const MAX_FINGERPRINT_SIZE = 64;
-
-/**
- * FNV-1a 64-bit hash function - excellent for string hashing
- * Uses prime 2^64 - 2^32 + 99539007241331 (0x100000001b3)
- * Offset basis: 14695981039346656037 (0xcbf29ce484222325)
- */
-function fnv1a64(str) {
-  let hash = 0xcbf29ce484222325;
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i);
-    hash = Math.imul(hash, 0x100000001b3);
-  }
-  return hash >>> 0;
-}
+const { getModelEncoder } = require('../utils/token-utils');
 
 /**
  * PromptCacheEntry - Individual cached prompt entry
- * Supports both string format (legacy) and object format (with metadata)
  */
 class PromptCacheEntry {
-  constructor(prompt, model, fingerprint, lastAccessed, id = null) {
-    // Handle both string format (legacy) and object format (with metadata)
-    if (typeof prompt === 'object' && prompt !== null) {
-      this.prompt = prompt; // Object format: { model, streaming, prompt, timestamp, ... }
-      this.model = prompt.model || model; // Use object's model if available
+  constructor(prompt, model, tokens, lastAccessed, id = null) {
+    if (typeof prompt === 'object' && prompt !== null && !Array.isArray(prompt)) {
+      this.prompt = prompt;
+      this.model = prompt.model || model;
     } else {
-      this.prompt = prompt; // String format (legacy)
+      this.prompt = prompt;
       this.model = model;
     }
 
-    this.fingerprint = fingerprint; // Fixed-size hash array (64 elements)
-    this.lastAccessed = lastAccessed || Date.now(); // Timestamp for LRU ordering
-    this.id = id;                // Optional backend response ID (future)
-    this.hitCount = 0;           // Number of times this was cached
+    this.tokens = tokens;       // Tokenized token array
+    this.lastAccessed = lastAccessed || Date.now();
+    this.id = id;
+    this.hitCount = 0;
   }
 
   /**
-   * Get formatted prompt data for debugging/output
-   * Returns structured object with metadata if available
+   * Get debug data for this cache entry (used by getPromptCacheStats)
+   * @returns {object} Debug information about the entry
    */
   getDebugData() {
     if (typeof this.prompt === 'object' && this.prompt !== null && !Array.isArray(this.prompt)) {
-      // Object format - return with metadata
       return {
         model: this.prompt.model || this.model,
         streaming: this.prompt.streaming || false,
@@ -66,7 +45,6 @@ class PromptCacheEntry {
       };
     }
 
-    // String format (legacy) - return as object with simplified structure
     return {
       model: this.model,
       streaming: false,
@@ -79,7 +57,7 @@ class PromptCacheEntry {
 }
 
 /**
- * PromptCache - LRU cache with fingerprint-based similarity matching
+ * PromptCache - LRU cache with token-prefix matching
  *
  * @class
  */
@@ -87,59 +65,49 @@ class PromptCache {
   /**
    * Create a new PromptCache
    * @param {number} maxSize - Maximum number of prompts to cache
-   * @param {number} similarityThreshold - Minimum similarity for cache match (0-1)
+   * @param {number} minPrefixLength - Minimum consecutive matching tokens to consider a cache hit
    */
-  constructor(maxSize, similarityThreshold) {
+  constructor(maxSize, minPrefixLength) {
     this.maxSize = maxSize;
-    this.similarityThreshold = similarityThreshold;
+    this.minPrefixLength = minPrefixLength;
     this.entries = [];        // LRU list (index 0 = most recent)
     this.byId = new Map();    // ID -> entry mapping for fast lookup
+    this._encoder = null;     // tiktoken encoder (lazy init)
     this.stats = {
       hits: 0,
       misses: 0,
       evictions: 0,
       idMatches: 0,
-      similarityMatches: 0
+      prefixMatches: 0
     };
   }
 
   /**
-   * Compute token-level fingerprint for a prompt+model composite key
-   * - Normalizes: lowercase, collapse whitespace
-   * - Tokenizes: split on word boundaries
-   * - Hashes: FNV-1a 64-bit per token
-   * - Truncates: first MAX_FINGERPRINT_TOKENS tokens
-   * - Pads: to fixed MAX_FINGERPRINT_SIZE-element array
-   *
-   * @param {string} text - Prompt text to fingerprint
-   * @returns {number[]} Fixed-size hash array (64 elements)
+   * Tokenize text using tiktoken (cl100k_base encoding)
+   * @param {string} text - Text to tokenize
+   * @returns {string[]} Token array
    */
-  fingerprint(text) {
-    const normalized = text.toLowerCase().trim().replace(/\s+/g, ' ');
-    const tokens = normalized.match(/\w+/g) || [];
-    const hashes = tokens.slice(0, MAX_FINGERPRINT_TOKENS).map(t => fnv1a64(t));
-    while (hashes.length < MAX_FINGERPRINT_SIZE) hashes.push(0);
-    return hashes.slice(0, MAX_FINGERPRINT_SIZE);
+  tokenize(text) {
+    if (!text || typeof text !== 'string') return [];
+    if (!this._encoder) {
+      this._encoder = getModelEncoder('cl100k_base');
+    }
+    return this._encoder.encode(text);
   }
 
   /**
-   * Compute cosine similarity between two 64-element hash arrays
-   * Returns value in range [0, 1] where 1 = identical
-   *
-   * @param {number[]} fp1 - First fingerprint array
-   * @param {number[]} fp2 - Second fingerprint array
-   * @returns {number} Cosine similarity (0-1)
+   * Find the length of the matching token prefix between two token arrays
+   * @param {string[]} a - First token array
+   * @param {string[]} b - Second token array
+   * @returns {number} Number of consecutive matching tokens from the start
    */
-  cosineSimilarity(fp1, fp2) {
-    let dot = 0, mag1 = 0, mag2 = 0;
-    for (let i = 0; i < MAX_FINGERPRINT_SIZE; i++) {
-      const v1 = fp1[i], v2 = fp2[i];
-      dot += v1 * v2;
-      mag1 += v1 * v1;
-      mag2 += v2 * v2;
+  prefixLength(a, b) {
+    let len = 0;
+    const max = Math.min(a.length, b.length);
+    while (len < max && a[len] === b[len]) {
+      len++;
     }
-    const denom = Math.sqrt(mag1) * Math.sqrt(mag2);
-    return denom === 0 ? 0 : dot / denom;
+    return len;
   }
 
   /**
@@ -159,8 +127,8 @@ class PromptCache {
    * Find best matching cached prompt for given text+model+id
    *
    * Priority lookup:
-   * 1. If ID provided: exact match by ID (no similarity computation)
-   * 2. If no ID: compute similarity on fingerprints
+   * 1. If ID provided: exact match by ID (no computation)
+   * 2. If no ID: tokenize query and find best prefix match
    *
    * Returns { entry, similarity, matchType } or null
    * On hit: moves entry to front of LRU list
@@ -171,14 +139,13 @@ class PromptCache {
    * @returns {{ entry: PromptCacheEntry, similarity: number, matchType: string }|null}
    */
   findBestMatch(prompt, model, id = null) {
-    const debugInfo = id ? `ID:${id.substring(0,8)}...` : `similarity:${model}`;
+    const debugInfo = id ? `ID:${id.substring(0,8)}...` : `prefix-match:${model}`;
     console.debug(`[PromptCache] Lookup starting - ${debugInfo} (entries: ${this.entries.length})`);
 
     // Priority 1: ID-based lookup (no computation needed)
     if (id) {
       const entry = this.byId.get(id);
       if (entry && entry.model === model) {
-        // Move to front (LRU update)
         const idx = this.entries.indexOf(entry);
         if (idx > 0) {
           this.entries.splice(idx, 1);
@@ -196,26 +163,26 @@ class PromptCache {
       return null;
     }
 
-    // Priority 2: Fallback to similarity-based matching
-    const fp = this.fingerprint(prompt + '|' + model);
-    console.debug(`[PromptCache] Fingerprint computed - model:${model}, entries to check:${this.entries.length}`);
+    // Priority 2: Token-prefix matching
+    const queryTokens = this.tokenize(prompt + '|' + model);
 
     let bestEntry = null;
-    let bestSim = -1;
+    let bestPrefixLen = -1;
+    let bestIdx = Infinity;
 
-    for (const entry of this.entries) {
+    for (let idx = 0; idx < this.entries.length; idx++) {
+      const entry = this.entries[idx];
       if (entry.model !== model) continue;
-      const sim = this.cosineSimilarity(fp, entry.fingerprint);
-      console.debug(`[PromptCache] Similarity check - model:${entry.model}, similarity:${sim.toFixed(4)}, threshold:${this.similarityThreshold}`);
-      if (sim > bestSim && sim >= this.similarityThreshold) {
-        bestSim = sim;
+      const prefixLen = this.prefixLength(queryTokens, entry.tokens);
+      if (prefixLen >= this.minPrefixLength && (prefixLen > bestPrefixLen || (prefixLen === bestPrefixLen && idx < bestIdx))) {
+        bestPrefixLen = prefixLen;
         bestEntry = entry;
-        console.debug(`[PromptCache] New best match found - similarity:${bestSim.toFixed(4)}`);
+        bestIdx = idx;
+        console.debug(`[PromptCache] New best prefix match - model:${model}, prefixLen:${prefixLen}`);
       }
     }
 
     if (bestEntry) {
-      // Move to front (LRU update)
       const idx = this.entries.indexOf(bestEntry);
       if (idx > 0) {
         this.entries.splice(idx, 1);
@@ -224,14 +191,16 @@ class PromptCache {
       bestEntry.lastAccessed = Date.now();
       bestEntry.hitCount++;
       this.stats.hits++;
-      this.stats.similarityMatches++;
-      console.debug(`[PromptCache] HIT (similarity-match) - model:${model}, similarity:${bestSim.toFixed(4)}, hitCount:${bestEntry.hitCount}`);
-    } else {
-      this.stats.misses++;
-      console.debug(`[PromptCache] MISS (no-similarity-match) - model:${model}, bestSim:${bestSim.toFixed(4)}`);
+      this.stats.prefixMatches++;
+
+      const similarity = bestPrefixLen / bestEntry.tokens.length;
+      console.debug(`[PromptCache] HIT (prefix-match) - model:${model}, prefixLen:${bestPrefixLen}, similarity:${similarity.toFixed(3)}, hitCount:${bestEntry.hitCount}`);
+      return { entry: bestEntry, similarity, matchType: 'prefix' };
     }
 
-    return bestEntry ? { entry: bestEntry, similarity: bestSim, matchType: 'similarity' } : null;
+    this.stats.misses++;
+    console.debug(`[PromptCache] MISS (no-prefix-match) - model:${model}`);
+    return null;
   }
 
   /**
@@ -239,7 +208,7 @@ class PromptCache {
    *
    * Priority:
    * 1. If ID provided: check if ID exists (exact match) or create new entry
-   * 2. If no ID: check for near-exact match by similarity (>0.99), otherwise add new
+   * 2. If no ID: check for full-prefix match (>99% of cached prompt), otherwise add new
    *
    * @param {string} prompt - Full prompt body string
    * @param {string} model - Model name
@@ -253,22 +222,24 @@ class PromptCache {
       const entry = this.byId.get(id);
       console.debug(`[PromptCache] ID exists - updating entry (hitCount:${entry.hitCount})`);
       entry.prompt = prompt;
+      entry.tokens = this.tokenize(prompt + '|' + model);
       entry.id = id;
       this.moveToFront(entry);
       return;
     }
 
-    // Priority 2: Check for near-exact match by similarity (extension case)
-    const fp = this.fingerprint(prompt + '|' + model);
+    // Priority 2: Check for near-exact prefix match (prompt extension, >99% overlap)
+    // BPE tokenization boundary shifts mean exact 100% prefix match is rarely achievable
+    // when appending different suffix text. >99% means most KV cache is still useful.
+    const newTokens = this.tokenize(prompt + '|' + model);
 
-    // Look for very high similarity match (>0.99)
     for (const entry of this.entries) {
       if (entry.model !== model) continue;
-      const sim = this.cosineSimilarity(fp, entry.fingerprint);
-      if (sim > 0.99) {
-        console.debug(`[PromptCache] Near-exact match found (similarity:${sim.toFixed(4)}) - extending entry`);
-        // Extend existing entry (prompt caching continuation)
+      const prefixLen = this.prefixLength(newTokens, entry.tokens);
+      if (prefixLen >= entry.tokens.length * 0.99) {
+        console.debug(`[PromptCache] Near-exact match found (prefixLen:${prefixLen}/${entry.tokens.length}) - extending entry`);
         entry.prompt = prompt;
+        entry.tokens = newTokens;
         if (id) entry.id = id;
         this.moveToFront(entry);
         return;
@@ -277,7 +248,7 @@ class PromptCache {
 
     // New entry - add to front, evict LRU if at capacity
     console.debug(`[PromptCache] Adding new entry - model:${model}`);
-    const entry = new PromptCacheEntry(prompt, model, fp, Date.now(), id);
+    const entry = new PromptCacheEntry(prompt, model, newTokens, Date.now(), id);
 
     if (this.entries.length >= this.maxSize) {
       const evicted = this.entries.pop();
@@ -293,7 +264,7 @@ class PromptCache {
 
   /**
    * Get current cache statistics
-   * @returns {{ hits: number, misses: number, evictions: number, idMatches: number, similarityMatches: number, size: number, maxSize: number }}
+   * @returns {{ hits: number, misses: number, evictions: number, idMatches: number, prefixMatches: number, size: number, maxSize: number }}
    */
   getStats() {
     return {
@@ -316,10 +287,10 @@ class PromptCache {
       misses: 0,
       evictions: 0,
       idMatches: 0,
-      similarityMatches: 0
+      prefixMatches: 0
     };
     console.debug(`[PromptCache] Cache cleared successfully`);
   }
 }
 
-module.exports = { PromptCache, PromptCacheEntry, fnv1a64 };
+module.exports = { PromptCache, PromptCacheEntry };

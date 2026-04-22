@@ -10,8 +10,8 @@ const BackendPool = require('../../backend-pool');
 describe('PromptCache.clear()', () => {
   it('should clear all entries from the cache', () => {
     const cache = new PromptCache(100, 0.8);
-    // Use distinct prompts that won't match via near-exact similarity
-    cache.addOrUpdate('the quick brown fox jumps over the lazy dog', 'model1');
+    // Use distinct prompts that won't match via full-prefix extension
+    cache.addOrUpdate('unique first token zxx quick brown fox jumps over the lazy dog', 'model1');
     cache.addOrUpdate('abcdefghijklmnopqrstuvwxyz xyz123', 'model1');
     cache.addOrUpdate('different prompt with model2', 'model2');
 
@@ -25,8 +25,8 @@ describe('PromptCache.clear()', () => {
   });
 
   it('should clear the byId map', () => {
-    const cache = new PromptCache(100, 0.8);
-    // Use truly distinct prompts to avoid near-exact match extending
+    const cache = new PromptCache(100, 50);
+    // Use truly distinct prompts to avoid prefix match extending
     cache.addOrUpdate('first prompt very distinct xyz', 'model1', 'id1');
     cache.addOrUpdate('second prompt very distinct abc', 'model1', 'id2');
 
@@ -42,12 +42,12 @@ describe('PromptCache.clear()', () => {
   });
 
   it('should reset all statistics to zero', () => {
-    const cache = new PromptCache(100, 0.8);
+    const cache = new PromptCache(100, 50);
 
     // Add some entries to trigger stats changes
     cache.addOrUpdate('prompt 1', 'model1', 'id1');
     cache.findBestMatch('prompt 1', 'model1', 'id1');
-    cache.findBestMatch('different prompt', 'model1');
+    cache.findBestMatch('totally different unique text here not matching anything', 'model1');
 
     const statsBefore = cache.getStats();
     expect(statsBefore.hits).toBeGreaterThan(0);
@@ -59,16 +59,16 @@ describe('PromptCache.clear()', () => {
     expect(statsAfter.misses).toBe(0);
     expect(statsAfter.evictions).toBe(0);
     expect(statsAfter.idMatches).toBe(0);
-    expect(statsAfter.similarityMatches).toBe(0);
+    expect(statsAfter.prefixMatches).toBe(0);
   });
 
   it('should preserve configuration after clear', () => {
-    const cache = new PromptCache(50, 0.9);
+    const cache = new PromptCache(50, 50);
 
     cache.clear();
 
     expect(cache.maxSize).toBe(50);
-    expect(cache.similarityThreshold).toBe(0.9);
+    expect(cache.minPrefixLength).toBe(50);
   });
 });
 
@@ -103,10 +103,12 @@ describe('Backend.resetPromptCache()', () => {
   it('should clear entries and stats', () => {
     const backend = new Backend('http://localhost:11434');
 
-    // Add some cached prompts
-    backend.cachePrompt('prompt 1', 'model1');
-    backend.cachePrompt('prompt 2', 'model1');
-    backend.findCacheMatch('prompt 1', 'model1');
+    // Add some cached prompts (must be >= 50 tokens for prefix matching to work)
+    const longPrompt1 = 'a '.repeat(55) + ' cached prompt one text';
+    const longPrompt2 = 'a '.repeat(55) + ' cached prompt two text here';
+    backend.cachePrompt(longPrompt1, 'model1');
+    backend.cachePrompt(longPrompt2, 'model1');
+    backend.findCacheMatch(longPrompt1, 'model1');
 
     const statsBefore = backend.getPromptCacheStats();
     expect(statsBefore.size).toBeGreaterThan(0);
