@@ -886,6 +886,11 @@ body.dark-mode body {
   transition: all 0.3s ease;
 }
 
+/* LED State: Inactive (Gray) */
+.backend-led.inactive {
+  background-color: #6b7280;
+}
+
 /* LED State: Unhealthy (Red) */
 .backend-led.unhealthy {
   background-color: #ef4444;

@@ -504,7 +504,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let ledState = 'idle';
         let ledTitle = `${backend.name || 'Backend'} - Idle`;
 
-        if (!backend.healthy) {
+        if (!backend.active) {
+          ledState = 'inactive';
+          ledTitle = `${backend.name || 'Backend'} - Inactive`;
+        } else if (!backend.healthy) {
           ledState = 'unhealthy';
           ledTitle = `${backend.name || 'Backend'} - Unhealthy`;
         } else if ((backend.activeStreamingRequests || 0) > 0) {
@@ -515,7 +518,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ledTitle = `${backend.name || 'Backend'} - Non-Streaming`;
         }
 
-        led.classList.remove('unhealthy', 'idle', 'streaming', 'non-streaming', 'green-glowing');
+        led.classList.remove('unhealthy', 'idle', 'streaming', 'non-streaming', 'green-glowing', 'inactive');
         led.classList.add(ledState);
         led.title = ledTitle;
       }
