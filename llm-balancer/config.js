@@ -200,7 +200,7 @@ function buildConfigFromEnv(env) {
     prompt: {
       cache: {
         maxSize: env.MAX_PROMPT_CACHE_SIZE ? parseInt(env.MAX_PROMPT_CACHE_SIZE) : DEFAULTS.prompt.cache.maxSize,
-        similarityThreshold: env.PROMPT_CACHE_SIMILARITY_THRESHOLD ? parseFloat(env.PROMPT_CACHE_SIMILARITY_THRESHOLD) : DEFAULTS.prompt.cache.similarityThreshold,
+        prefixMinLength: env.PROMPT_CACHE_PREFIX_MIN_LENGTH ? parseInt(env.PROMPT_CACHE_PREFIX_MIN_LENGTH) : DEFAULTS.prompt.cache.prefixMinLength,
         minHitThreshold: env.MIN_PROMPT_CACHE_HIT_TOKENS ? parseInt(env.MIN_PROMPT_CACHE_HIT_TOKENS) : DEFAULTS.prompt.cache.minHitThreshold
       }
     },

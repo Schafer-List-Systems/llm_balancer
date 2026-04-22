@@ -181,7 +181,7 @@ describe('loadConfig() integration', () => {
 
     expect(config.prompt).toHaveProperty('cache');
     expect(config.prompt.cache).toHaveProperty('maxSize');
-    expect(config.prompt.cache).toHaveProperty('similarityThreshold');
+    expect(config.prompt.cache).toHaveProperty('prefixMinLength');
     expect(config.prompt.cache).toHaveProperty('minHitThreshold');
   });
 });

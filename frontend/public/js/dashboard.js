@@ -1108,7 +1108,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ${renderConfigTableRow('debug.enabled', config.debug?.enabled, 'Debug Enabled', 'Enable debug logging', null, 'boolean')}
       ${renderConfigTableRow('debug.requestHistorySize', config.debug?.requestHistorySize, 'Request History Size', 'Requests to retain in history')}
       ${renderConfigTableRow('prompt.cache.maxSize', config.prompt?.cache?.maxSize, 'Prompt Cache Max Size', 'Max cached prompts to retain')}
-      ${renderConfigTableRow('prompt.cache.similarityThreshold', config.prompt?.cache?.similarityThreshold, 'Prompt Cache Similarity Threshold', 'Similarity threshold (0-1)', (v) => parseFloat(v).toFixed(2))}
+      ${renderConfigTableRow('prompt.cache.prefixMinLength', config.prompt?.cache?.prefixMinLength, 'Prefix Min Length', 'Minimum consecutive matching tokens for a cache hit')}
       ${renderConfigTableRow('prompt.cache.minHitThreshold', config.prompt?.cache?.minHitThreshold, 'Prompt Cache Min Hit Threshold', 'Min tokens for cache consideration')}
     `;
   }
