@@ -322,6 +322,25 @@ function countRequestTokens(requestBody) {
  */
 function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
   const requestId = req.internalRequestId || 'N/A';
+  let released = false;
+  let headersAlreadySent = false;
+
+  function releaseOnce() {
+    if (released) return;
+    released = true;
+    releaseBackend(balancer, backend, 'streaming');
+    onRequestComplete();
+  }
+
+  // Release backend if client disconnects
+  if (typeof req.on === 'function') {
+    req.on('close', () => {
+      if (!released) {
+        console.log(`[${getTimestamp()}] [Gateway][${requestId}] Client disconnected, releasing backend`);
+        releaseOnce();
+      }
+    });
+  }
 
   // Count tokens in request body for stats
   const requestTokens = countRequestTokens(requestBody);
@@ -346,8 +365,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request error to ${backend.url}:`, err.message);
     balancer.markFailed(backend.url);
     // Ensure backend is released on error
-    releaseBackend(balancer, backend, 'streaming');
-    onRequestComplete();
+    releaseOnce();
     // Only send response if not already sent
     if (!res.headersSent) {
       res.status(502).json({
@@ -363,14 +381,18 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
-    releaseBackend(balancer, backend, 'streaming');
-    onRequestComplete();
+    releaseOnce();
     // Send error response to client
-    res.status(504).json({
-      error: 'Gateway Timeout',
-      message: 'Backend request timed out',
-      backend: backend.url
-    });
+    if (!res.headersSent) {
+      res.status(504).json({
+        error: 'Gateway Timeout',
+        message: 'Backend request timed out',
+        backend: backend.url
+      });
+    } else {
+      // Headers already sent (backend piped partial response) — close the stream
+      res.end();
+    }
   });
 
   // Record when request is sent to backend
@@ -382,6 +404,16 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
   proxyReq.end(requestBodyToForward);
 
   proxyReq.on('response', (proxyRes) => {
+    // Handle proxy response stream errors (e.g., backend drops connection mid-stream)
+    proxyRes.on('error', (err) => {
+      console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy response error from ${backend.url}: ${err.message}`);
+      balancer.markFailed(backend.url);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Bad Gateway', message: 'Proxy response error', backend: backend.url });
+      }
+      releaseOnce();
+    });
+
     // Record when headers are received from backend
     const headersReceivedTime = Date.now();
     const timeToFirstHeader = headersReceivedTime - requestSentTime;
@@ -408,7 +440,6 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
     if (contentType?.includes('stream')) {
       let data = '';
       const chunks = [];  // Collect all chunks for parsing
-      let completionTokenCount = 0;  // Track total completion tokens incrementally
 
       proxyRes.on('data', chunk => {
         chunkCount++;
@@ -421,51 +452,11 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         // Accumulate data for token extraction
         data += Buffer.isBuffer(chunk) ? chunk.toString() : chunk;
         chunks.push(chunk);
-        // Immediately pipe to client response (true streaming)
+        // Pipe directly to client — no per-chunk processing to avoid blocking the pipe
         res.write(chunk);
-
-        // Count tokens from any delta field in the response
-        // Generalize: collect all string values under delta keys (except 'role')
-        try {
-          // Parse SSE format: "data: {...}"
-          const lines = chunk.toString().split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data:')) {
-              const jsonStr = line.substring(5).trim();
-              if (jsonStr === '[DONE]') continue;
-              try {
-                const msg = JSON.parse(jsonStr);
-                // Extract delta from either OpenAI format or content_block_delta format
-                const delta = msg.choices?.[0]?.delta || msg.delta || null;
-                if (delta) {
-                  // Collect all string content from delta fields (e.g., 'thinking', 'content', etc.)
-                  // Exclude non-text fields like 'type' which is metadata, not generated content
-                  let accumulatedContent = '';
-                  const textFieldsToSkip = ['role', 'type'];
-                  for (const key in delta) {
-                    if (!textFieldsToSkip.includes(key) &&
-                        delta[key] !== undefined &&
-                        delta[key] !== null &&
-                        typeof delta[key] === 'string') {
-                      accumulatedContent += delta[key];
-                    }
-                  }
-                  if (accumulatedContent) {
-                    const chunkTokens = countTokens(accumulatedContent);
-                    completionTokenCount += chunkTokens;
-                  }
-                }
-              } catch (e) {
-                // Not a JSON line, skip
-              }
-            }
-          }
-        } catch (e) {
-          // Failed to parse chunk, skip token counting for this chunk
-        }
-        // Debug: Log final chunk count for troubleshooting
+        // Debug: Log chunk count for troubleshooting
         if (chunkCount % 10 === 0) {
-          console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Chunk ${chunkCount}, so far ${completionTokenCount} completion tokens counted`);
+          console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Chunk ${chunkCount} received`);
         }
       });
 
@@ -481,6 +472,41 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
         const networkLatencyMs = timeToFirstHeader / 2;
 
         console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Streaming Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, firstChunk=${firstChunkTimestamp}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, timeFromFirstChunk=${timeFromFirstChunk}ms, totalTime=${totalTime}ms, chunkCount=${chunkCount}, networkLatency=${networkLatencyMs}ms`);
+
+        // Count completion tokens from the accumulated data (fallback if backend doesn't provide usage)
+        let completionTokenCount = 0;
+        try {
+          const lines = data.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const jsonStr = line.substring(5).trim();
+              if (jsonStr === '[DONE]') continue;
+              try {
+                const msg = JSON.parse(jsonStr);
+                const delta = msg.choices?.[0]?.delta || msg.delta || null;
+                if (delta) {
+                  let accumulatedContent = '';
+                  const textFieldsToSkip = ['role', 'type'];
+                  for (const key in delta) {
+                    if (!textFieldsToSkip.includes(key) &&
+                        delta[key] !== undefined &&
+                        delta[key] !== null &&
+                        typeof delta[key] === 'string') {
+                      accumulatedContent += delta[key];
+                    }
+                  }
+                  if (accumulatedContent) {
+                    completionTokenCount += Math.round(accumulatedContent.length * 0.75);
+                  }
+                }
+              } catch (e) {
+                // Not a JSON line, skip
+              }
+            }
+          }
+        } catch (e) {
+          // Failed to parse, completionTokenCount stays 0
+        }
 
         // Parse streaming response to extract token counts from final usage object
         // Note: vLLM streaming format doesn't include usage in chunks, only [DONE] at end
@@ -607,8 +633,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           res.end();
         }
 
-        releaseBackend(balancer, backend, 'streaming');
-        onRequestComplete();
+        releaseOnce();
 
         // Cache the completed request for KV cache reuse
         if (matchedModel) {
@@ -659,8 +684,7 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
           }
         }
 
-        releaseBackend(balancer, backend, 'streaming');
-        onRequestComplete();
+        releaseOnce();
       });
     }
   });
@@ -672,6 +696,24 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
  */
 function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onRequestComplete, config, headers, matchedModel = null) {
   const requestId = req.internalRequestId || 'N/A';
+  let released = false;
+
+  function releaseOnce() {
+    if (released) return;
+    released = true;
+    releaseBackend(balancer, backend, 'non-streaming');
+    onRequestComplete();
+  }
+
+  // Release backend if client disconnects
+  if (typeof req.on === 'function') {
+    req.on('close', () => {
+      if (!released) {
+        console.log(`[${getTimestamp()}] [Gateway][${requestId}] Client disconnected, releasing backend`);
+        releaseOnce();
+      }
+    });
+  }
 
   // Count tokens in request body for stats
   const requestTokens = countRequestTokens(requestBody);
@@ -696,8 +738,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request timeout to ${backend.url} after ${requestTimeout}ms`);
     proxyReq.destroy();
     // Ensure backend is released even on timeout
-    releaseBackend(balancer, backend, 'non-streaming');
-    onRequestComplete();
+    releaseOnce();
     // Send error response to client
     res.status(504).json({
       error: 'Gateway Timeout',
@@ -711,8 +752,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
     console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy request error to ${backend.url}:`, err.message);
     balancer.markFailed(backend.url);
     // Ensure backend is released on error
-    releaseBackend(balancer, backend, 'non-streaming');
-    onRequestComplete();
+    releaseOnce();
     // Only send response if not already sent
     if (!res.headersSent) {
       res.status(502).json({
@@ -727,6 +767,16 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
   const requestSentTime = Date.now();
 
   proxyReq.on('response', (proxyRes) => {
+    // Handle proxy response stream errors (e.g., backend drops connection mid-stream)
+    proxyRes.on('error', (err) => {
+      console.error(`[${getTimestamp()}] [Gateway][${requestId}] Proxy response error from ${backend.url}: ${err.message}`);
+      balancer.markFailed(backend.url);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Bad Gateway', message: 'Proxy response error', backend: backend.url });
+      }
+      releaseOnce();
+    });
+
     // Record when headers are received from backend
     const headersReceivedTime = Date.now();
     const timeToFirstHeader = headersReceivedTime - requestSentTime;
@@ -747,9 +797,13 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
       const totalTime = fullResponseTime - requestSentTime;
       const responseTimeMs = fullResponseTime - startTime;
       console.debug(`[${getTimestamp()}] [Gateway][${requestId}] Timing: requestSent=${requestSentTime}, headersReceived=${headersReceivedTime}, fullResponse=${fullResponseTime}, timeToFirstHeader=${timeToFirstHeader}ms, timeFromHeaders=${timeFromHeaders}ms, totalTime=${totalTime}ms, responseTimeMs=${responseTimeMs}, dataLength=${data.length}`);
-      const parsedResponse = JSON.parse(data);
-      responseBody = parsedResponse;
-      const tokenCounts = extractTokenCounts(responseBody);
+      let tokenCounts = null;
+      try {
+        const parsedResponse = JSON.parse(data);
+        tokenCounts = extractTokenCounts(parsedResponse);
+      } catch (e) {
+        console.warn(`[${getTimestamp()}] [Gateway][${requestId}] Failed to parse non-streaming response as JSON: ${e.message}`);
+      }
 
       if (tokenCounts) {
         // For non-streaming mode: the backend is a black box
@@ -801,8 +855,7 @@ function handleNonStreamingRequest(balancer, backend, req, res, requestBody, onR
         }
       }
 
-      releaseBackend(balancer, backend, 'non-streaming');
-      onRequestComplete();
+      releaseOnce();
 
       // Cache the completed request for KV cache reuse
       // Extract prompt body (messages only) for better cache hit detection
