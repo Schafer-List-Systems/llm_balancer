@@ -449,6 +449,13 @@ class Balancer {
 
         // Trigger the actual request processing
         this.triggerRequestProcessing(request, result.backend, null);
+
+        // Resolve the queued request's Promise with the selected backend
+        // This unblocks the Express route's await (e.g., queueRequestWithRequestData)
+        if (request.resolve) {
+          request.resolve(result.backend);
+        }
+
         // Continue processing other queued requests that have available backends
         // Don't return - let the loop continue to find more eligible requests
         continue;
