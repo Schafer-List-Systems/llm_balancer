@@ -134,10 +134,9 @@ app.all('/v1/chat/completions*', async (req, res) => {
       });
     }
 
-    // result is the backend instance (backward compatible)
-    const backend = result;
-
-    forwardRequest(req, res, backend, requestModel);
+    // Queue processing already called processRequest() via triggerRequestProcessing.
+    // The Promise resolution here only signals that the backend was selected.
+    // Do NOT call forwardRequest() again — it would process the same request twice.
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -184,7 +183,8 @@ app.all('/v1/messages*', async (req, res) => {
       });
     }
 
-    forwardRequest(req, res, backend, matchedModel);
+    // Queue processing already called processRequest() via triggerRequestProcessing.
+    // Do NOT call forwardRequest() again to avoid double-processing.
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -225,10 +225,11 @@ app.all('/api/*', async (req, res) => {
     }
 
     // Get backend using normal selection with model matching
-    const result = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
-    backend = result.backend;
-    matchedModel = result.actualModel;
+    const directResult = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
+    backend = directResult.backend;
+    matchedModel = directResult.actualModel;
 
+    let queued = false;
     if (!backend) {
       // Create selection criterion for queued request
       // This captures what backends can serve this request
@@ -237,11 +238,11 @@ app.all('/api/*', async (req, res) => {
         apiType: config.primaryApiType || 'ollama'
       };
 
-      const queuedRequest = await balancer.queueRequestWithRequestData({
+      backend = await balancer.queueRequestWithRequestData({
         req, res, config, matchedModel,
         criterion  // NEW: include selection criterion
       });
-      backend = queuedRequest;
+      queued = true;
     }
 
     if (!backend) {
@@ -253,7 +254,11 @@ app.all('/api/*', async (req, res) => {
       });
     }
 
-    forwardRequest(req, res, backend, matchedModel);
+    // If we used the queue path, processRequest was already called by the queue.
+    // If we took the direct path, we need to forward now.
+    if (!queued) {
+      forwardRequest(req, res, backend, matchedModel);
+    }
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -300,6 +305,7 @@ app.all('/models*', async (req, res) => {
       console.warn('[Gateway] Failed to count tokens, skipping maxInputTokens filter:', e.message);
     }
 
+    let queued = false;
     if (models) {
       // Get backend using normal selection with model matching
       const result = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
@@ -307,11 +313,12 @@ app.all('/models*', async (req, res) => {
       matchedModel = result.actualModel;
 
       if (!backend) {
-        const queuedRequest = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
-        backend = queuedRequest;
+        backend = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
+        queued = true;
       }
     } else {
       backend = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
+      queued = true;
     }
 
     if (!backend) {
@@ -323,7 +330,11 @@ app.all('/models*', async (req, res) => {
       });
     }
 
-    forwardRequest(req, res, backend, matchedModel);
+    // If we used the queue path, processRequest was already called by the queue.
+    // If we took the direct path, we need to forward now.
+    if (!queued) {
+      forwardRequest(req, res, backend, matchedModel);
+    }
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
