@@ -75,6 +75,7 @@ describe('PromptCache.clear()', () => {
 describe('Backend.resetPromptCache()', () => {
   it('should reset cache for backend with initialized cache', () => {
     const backend = new Backend('http://localhost:11434');
+    backend.promptCache.minPrefixLength = 10;
     const initialStats = backend.getPromptCacheStats();
     expect(initialStats).not.toBeNull();
 
@@ -102,8 +103,9 @@ describe('Backend.resetPromptCache()', () => {
 
   it('should clear entries and stats', () => {
     const backend = new Backend('http://localhost:11434');
+    backend.promptCache.minPrefixLength = 10;
 
-    // Add some cached prompts (must be >= 50 tokens for prefix matching to work)
+    // Add some cached prompts
     const longPrompt1 = 'a '.repeat(55) + ' cached prompt one text';
     const longPrompt2 = 'a '.repeat(55) + ' cached prompt two text here';
     backend.cachePrompt(longPrompt1, 'model1');

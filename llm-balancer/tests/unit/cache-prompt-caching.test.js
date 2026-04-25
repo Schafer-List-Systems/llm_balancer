@@ -20,6 +20,8 @@ describe('CachePrompt Caching After Request Completion', () => {
     };
     backend1.maxConcurrency = 1;
     backend1.activeRequestCount = 0;
+    // Override production config threshold so tests work with short prompts
+    backend1.promptCache.minPrefixLength = 10;
 
     // Create balancer with the backend
     balancer = new Balancer([backend1], { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
