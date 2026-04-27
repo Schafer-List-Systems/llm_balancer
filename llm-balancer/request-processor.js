@@ -637,7 +637,25 @@ function handleStreamingRequest(balancer, backend, req, res, requestBody, onRequ
 
         // Cache the completed request for KV cache reuse
         if (matchedModel) {
-          backend.cachePrompt(requestBody, matchedModel);
+          // Extract messages/prompt body for consistent cache key
+          let cacheBody = requestBody;
+          if (typeof requestBody === 'string') {
+            try {
+              const bodyObj = JSON.parse(requestBody);
+              if (bodyObj.messages) {
+                cacheBody = JSON.stringify(bodyObj.messages);
+              } else if (bodyObj.prompt) {
+                cacheBody = bodyObj.prompt;
+              }
+            } catch (e) { /* keep original */ }
+          } else if (typeof requestBody === 'object') {
+            if (requestBody.messages) {
+              cacheBody = JSON.stringify(requestBody.messages);
+            } else if (requestBody.prompt) {
+              cacheBody = requestBody.prompt;
+            }
+          }
+          backend.cachePrompt(cacheBody, matchedModel);
         }
       });
     } else {
