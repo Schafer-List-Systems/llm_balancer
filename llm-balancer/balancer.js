@@ -420,11 +420,10 @@ class Balancer {
       const model = request.criterion?.modelString || 'unknown';
 
       if (result.status === 'found') {
-        // Backend found and available
-        if (request.timeout) {
-          clearTimeout(request.timeout);
-          request.timeout = null;
-        }
+        // Increment activeRequestCount at SELECTION time to act as a lock.
+        // This prevents a race where two queue iterations both see a backend
+        // as available before the first one's processRequest increments.
+        result.backend.incrementRequest();
 
         // Remove from queue and resolve
         queue.splice(i, 1);
@@ -545,30 +544,24 @@ class Balancer {
    * @param {Object} requestData - Optional requestData (can be null for simple queueRequest calls)
    */
   triggerRequestProcessing(request, backend, requestData = null) {
-    // Handle both cases:
-    // 1. Direct backend assignment: requestData is in backend.pendingRequestData
-    // 2. Queue processing: requestData is in request.requestData or passed as parameter
-    if (backend.pendingRequestData) {
-      requestData = backend.pendingRequestData;
-      delete backend.pendingRequestData;
-    } else if (!requestData && request.requestData) {
-      requestData = request.requestData;
-    }
-
-    // If no requestData and no request data, just resolve with backend
-    if (!requestData && (!request.req || !request.res)) {
-      // Simple queue request - just resolve with backend
+    // For queue requests (have requestData), only resolve the Promise.
+    // Express routes handle actual request processing via forwardRequest().
+    if (request.requestData) {
+      // Attach internal request ID so all downstream logging uses it
+      if (request.requestData.req) {
+        request.requestData.req.internalRequestId = request.internalRequestId;
+      }
       if (request.resolve) {
         request.resolve(backend);
       }
       return;
     }
 
-    if (!requestData) {
-      console.error(`[${this._getTimestamp()}] [Balancer] No requestData found for request processing`);
-      if (request.reject) {
-        request.reject(new Error('No requestData found'));
-      }
+    // For direct backend assignments (legacy path), process immediately
+    if (backend.pendingRequestData) {
+      requestData = backend.pendingRequestData;
+      delete backend.pendingRequestData;
+    } else if (!requestData) {
       return;
     }
 
@@ -581,9 +574,6 @@ class Balancer {
     const { processRequest, releaseBackend } = require('./request-processor');
 
     try {
-      // Note: activeRequestCount is incremented in processRequest, not here
-      // This ensures the count is only incremented once per request
-
       // Use requestModel if available (from index.js), otherwise matchedModel for legacy compatibility
       const modelForProcessing = requestModel || matchedModel;
       processRequest(this, backend, req, res, () => {

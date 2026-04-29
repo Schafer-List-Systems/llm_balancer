@@ -171,71 +171,35 @@ class Backend {
   }
 
   /**
-   * Increment streaming request count
+   * Increment active request count (unified for streaming and non-streaming)
+   * Called at selection time to claim a concurrency slot
    * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
    */
-  incrementStreamingRequest(notifyCallback) {
+  incrementRequest(notifyCallback) {
     this.activeRequestCount++;
     this.activeStreamingRequests++;
-    console.log(`[Backend] ${this.url}: incrementStreamingRequest → activeRequestCount=${this.activeRequestCount}, maxConcurrency=${this.maxConcurrency}, activeStreamingRequests=${this.activeStreamingRequests}`);
-    if (this.activeRequestCount > this.maxConcurrency) {
-      console.error(`[Backend] ${this.url}: WARNING activeRequestCount (${this.activeRequestCount}) exceeds maxConcurrency (${this.maxConcurrency})!`);
-    }
-    // Only notify when transitioning TO max concurrency (not exceeding it)
-    if (this.activeRequestCount === (this.maxConcurrency || 1) && notifyCallback) {
-      notifyCallback();
-    }
-  }
-
-  /**
-   * Decrement streaming request count
-   * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
-   */
-  decrementStreamingRequest(notifyCallback) {
-    if (this.activeStreamingRequests > 0) {
-      this.activeStreamingRequests--;
-      this.activeRequestCount--;
-      console.log(`[Backend] ${this.url}: decrementStreamingRequest → activeRequestCount=${this.activeRequestCount}, maxConcurrency=${this.maxConcurrency}, activeStreamingRequests=${this.activeStreamingRequests}`);
-      if (this.activeRequestCount < 0) {
-        console.error(`[Backend] ${this.url}: WARNING activeRequestCount dropped below 0 (${this.activeRequestCount})!`);
-      }
-      // Notify when transitioning from max to below max
-      if (this.activeRequestCount < (this.maxConcurrency || 1)) {
-        if (notifyCallback) notifyCallback();
-      }
-    }
-  }
-
-  /**
-   * Increment non-streaming request count
-   * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
-   */
-  incrementNonStreamingRequest(notifyCallback) {
-    this.activeRequestCount++;
     this.activeNonStreamingRequests++;
-    console.log(`[Backend] ${this.url}: incrementNonStreamingRequest → activeRequestCount=${this.activeRequestCount}, maxConcurrency=${this.maxConcurrency}, activeNonStreamingRequests=${this.activeNonStreamingRequests}`);
     if (this.activeRequestCount > this.maxConcurrency) {
       console.error(`[Backend] ${this.url}: WARNING activeRequestCount (${this.activeRequestCount}) exceeds maxConcurrency (${this.maxConcurrency})!`);
     }
-    // Only notify when transitioning TO max concurrency (not exceeding it)
     if (this.activeRequestCount === (this.maxConcurrency || 1) && notifyCallback) {
       notifyCallback();
     }
   }
 
   /**
-   * Decrement non-streaming request count
+   * Decrement active request count (unified for streaming and non-streaming)
+   * Called when a request completes
    * @param {Function} notifyCallback - Callback to notify when transitioning from max concurrency
    */
-  decrementNonStreamingRequest(notifyCallback) {
-    if (this.activeNonStreamingRequests > 0) {
-      this.activeNonStreamingRequests--;
+  decrementRequest(notifyCallback) {
+    if (this.activeRequestCount > 0) {
       this.activeRequestCount--;
-      console.log(`[Backend] ${this.url}: decrementNonStreamingRequest → activeRequestCount=${this.activeRequestCount}, maxConcurrency=${this.maxConcurrency}, activeNonStreamingRequests=${this.activeNonStreamingRequests}`);
+      this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+      this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
       if (this.activeRequestCount < 0) {
         console.error(`[Backend] ${this.url}: WARNING activeRequestCount dropped below 0 (${this.activeRequestCount})!`);
       }
-      // Notify when transitioning from max to below max
       if (this.activeRequestCount < (this.maxConcurrency || 1)) {
         if (notifyCallback) notifyCallback();
       }

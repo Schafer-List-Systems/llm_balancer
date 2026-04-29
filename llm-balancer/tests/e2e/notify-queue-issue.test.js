@@ -1,15 +1,22 @@
 const Balancer = require('../../balancer');
+const Backend = require('../../backends/Backend');
 
 describe('Notify Backend Available Queue Issue - Integration', () => {
   let backends;
   let balancer;
 
   beforeEach(() => {
-    // Use mock backends for testing - no real backend required
+    // Use real Backend instances for testing
     backends = [
-      { url: 'http://mock1:11434', priority: 1, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 },
-      { url: 'http://mock2:11434', priority: 2, healthy: true, busy: false, requestCount: 0, errorCount: 0, maxConcurrency: 1 }
+      new Backend('http://mock1:11434', 1),
+      new Backend('http://mock2:11434', 1)
     ];
+    backends[0].priority = 1;
+    backends[1].priority = 2;
+    backends[0].healthy = true;
+    backends[1].healthy = true;
+    backends[0].backendInfo = { apis: { openai: { supported: true } }, models: { openai: ['test-model'] }, endpoints: { openai: '/v1/chat/completions' }, healthy: true, detectedAt: Date.now() };
+    backends[1].backendInfo = { apis: { openai: { supported: true } }, models: { openai: ['test-model'] }, endpoints: { openai: '/v1/chat/completions' }, healthy: true, detectedAt: Date.now() };
     balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
   });
 

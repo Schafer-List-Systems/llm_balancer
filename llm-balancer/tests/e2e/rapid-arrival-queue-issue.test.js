@@ -14,10 +14,11 @@ describe('Rapid Request Arrival Queue Issue', () => {
         requestCount: 0,
         errorCount: 0,
         maxConcurrency: 1,
-        incrementStreamingRequest: jest.fn(),
-        decrementStreamingRequest: jest.fn(),
-        incrementNonStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        activeRequestCount: 0,
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        incrementRequest: jest.fn(),
+        decrementRequest: jest.fn()
       },
       {
         url: 'http://backend2:11434',
@@ -27,10 +28,11 @@ describe('Rapid Request Arrival Queue Issue', () => {
         requestCount: 0,
         errorCount: 0,
         maxConcurrency: 1,
-        incrementStreamingRequest: jest.fn(),
-        decrementStreamingRequest: jest.fn(),
-        incrementNonStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        activeRequestCount: 0,
+        activeStreamingRequests: 0,
+        activeNonStreamingRequests: 0,
+        incrementRequest: jest.fn(),
+        decrementRequest: jest.fn()
       }
     ];
     balancer = new Balancer(backends, { maxQueueSize: 100, queue: { timeout: 30000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });

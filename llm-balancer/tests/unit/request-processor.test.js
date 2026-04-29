@@ -92,19 +92,11 @@ describe('Request Processor', () => {
         activeStreamingRequests: 2,  // Needed for releaseBackend to work
         activeNonStreamingRequests: 0,
         maxConcurrency: 2,
-        decrementStreamingRequest: function(callback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
+        decrementRequest: function(callback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && callback) {
-              callback();
-            }
-          }
-        },
-        decrementNonStreamingRequest: function(callback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
-            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && callback) {
               callback();
             }
@@ -131,19 +123,11 @@ describe('Request Processor', () => {
         activeStreamingRequests: 0,
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: function(callback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
+        decrementRequest: function(callback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && callback) {
-              callback();
-            }
-          }
-        },
-        decrementNonStreamingRequest: function(callback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
-            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && callback) {
               callback();
             }
@@ -169,19 +153,11 @@ describe('Request Processor', () => {
         activeStreamingRequests: 1,
         activeNonStreamingRequests: 0,
         maxConcurrency: 2,
-        decrementStreamingRequest: function(callback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
+        decrementRequest: function(callback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && callback) {
-              callback();
-            }
-          }
-        },
-        decrementNonStreamingRequest: function(callback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
-            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && callback) {
               callback();
             }
@@ -281,37 +257,23 @@ describe('Request Processor', () => {
         url: 'http://localhost:3000',
         busy: false,
         priority: 5,
-        activeRequestCount: 0,
-        activeStreamingRequests: 0,
-        activeNonStreamingRequests: 0,
+        activeRequestCount: 1,
+        activeStreamingRequests: 1,
+        activeNonStreamingRequests: 1,
         maxConcurrency: 10,
-        incrementStreamingRequest: function(notifyCallback) {
+        incrementRequest: function(notifyCallback) {
           this.activeRequestCount++;
           this.activeStreamingRequests++;
-          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
-            notifyCallback();
-          }
-        },
-        decrementStreamingRequest: function(notifyCallback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
-            this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
-              notifyCallback();
-            }
-          }
-        },
-        incrementNonStreamingRequest: function(notifyCallback) {
-          this.activeRequestCount++;
           this.activeNonStreamingRequests++;
           if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
             notifyCallback();
           }
         },
-        decrementNonStreamingRequest: function(notifyCallback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
+        decrementRequest: function(notifyCallback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
               notifyCallback();
             }
@@ -350,7 +312,8 @@ describe('Request Processor', () => {
     it('should mark backend as busy before processing', () => {
       requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, jest.fn(), mockConfig);
 
-      // After processRequest, activeRequestCount is incremented by 1 (not set to maxConcurrency)
+      // activeRequestCount is already 1 (incremented at SELECTION time in queue)
+      // processRequest no longer increments it
       expect(mockBackend.activeRequestCount).toBe(1);
     });
 
@@ -360,7 +323,7 @@ describe('Request Processor', () => {
       const onComplete = jest.fn();
       requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete, mockConfig);
 
-      // After processRequest, activeRequestCount is incremented by 1
+      // activeRequestCount is already 1 (incremented at SELECTION time)
       expect(mockBackend.activeRequestCount).toBe(1);
     });
 
@@ -371,7 +334,7 @@ describe('Request Processor', () => {
       const onComplete = jest.fn();
       requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete, mockConfig);
 
-      // After processRequest, activeRequestCount is incremented by 1
+      // activeRequestCount is already 1 (incremented at SELECTION time)
       expect(mockBackend.activeRequestCount).toBe(1);
     });
 
@@ -383,36 +346,22 @@ describe('Request Processor', () => {
         busy: false,
         priority: 5,
         activeRequestCount: 1,
-        activeStreamingRequests: 0,
+        activeStreamingRequests: 1,
         activeNonStreamingRequests: 1,
         maxConcurrency: 10,
-        incrementStreamingRequest: function(notifyCallback) {
+        incrementRequest: function(notifyCallback) {
           this.activeRequestCount++;
           this.activeStreamingRequests++;
-          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
-            notifyCallback();
-          }
-        },
-        decrementStreamingRequest: function(notifyCallback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
-            this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
-              notifyCallback();
-            }
-          }
-        },
-        incrementNonStreamingRequest: function(notifyCallback) {
-          this.activeRequestCount++;
           this.activeNonStreamingRequests++;
           if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
             notifyCallback();
           }
         },
-        decrementNonStreamingRequest: function(notifyCallback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
+        decrementRequest: function(notifyCallback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
               notifyCallback();
             }
@@ -422,8 +371,8 @@ describe('Request Processor', () => {
 
       requestProcessor.processRequest(mockBalancer, testBackend, mockReq, mockRes, jest.fn(), mockConfig);
 
-      // activeRequestCount should be incremented to 2
-      expect(testBackend.activeRequestCount).toBe(2);
+      // activeRequestCount is already 1 (incremented at SELECTION time, not here)
+      expect(testBackend.activeRequestCount).toBe(1);
     });
 
     it('should handle error scenarios', () => {
@@ -474,37 +423,23 @@ describe('Request Processor', () => {
         url: 'http://localhost:3000',
         busy: false,
         priority: 5,
-        activeRequestCount: 0,
-        activeStreamingRequests: 0,
-        activeNonStreamingRequests: 0,
+        activeRequestCount: 1,
+        activeStreamingRequests: 1,
+        activeNonStreamingRequests: 1,
         maxConcurrency: 10,
-        incrementStreamingRequest: function(notifyCallback) {
+        incrementRequest: function(notifyCallback) {
           this.activeRequestCount++;
           this.activeStreamingRequests++;
-          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
-            notifyCallback();
-          }
-        },
-        decrementStreamingRequest: function(notifyCallback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
-            this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
-              notifyCallback();
-            }
-          }
-        },
-        incrementNonStreamingRequest: function(notifyCallback) {
-          this.activeRequestCount++;
           this.activeNonStreamingRequests++;
           if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
             notifyCallback();
           }
         },
-        decrementNonStreamingRequest: function(notifyCallback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
+        decrementRequest: function(notifyCallback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
               notifyCallback();
             }
@@ -539,7 +474,8 @@ describe('Request Processor', () => {
     });
 
     it('should increment activeRequestCount when starting request', () => {
-      requestProcessor.processRequest(mockBalancer, mockBackend, mockReq, mockRes, onComplete, mockConfig);
+      // activeRequestCount is already 1 (incremented at SELECTION time in queue)
+      // processRequest no longer increments the counter
       expect(mockBackend.activeRequestCount).toBe(1);
     });
 
@@ -552,19 +488,11 @@ describe('Request Processor', () => {
         activeStreamingRequests: 5,  // Match activeRequestCount for streaming
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: function(callback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
+        decrementRequest: function(callback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && callback) {
-              callback();
-            }
-          }
-        },
-        decrementNonStreamingRequest: function(callback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
-            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && callback) {
               callback();
             }
@@ -589,19 +517,11 @@ describe('Request Processor', () => {
         activeStreamingRequests: 10,  // At max concurrency
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: function(callback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
+        decrementRequest: function(callback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
-            if (this.activeRequestCount < this.maxConcurrency && callback) {
-              callback();
-            }
-          }
-        },
-        decrementNonStreamingRequest: function(callback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
-            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             if (this.activeRequestCount < this.maxConcurrency && callback) {
               callback();
             }
@@ -627,17 +547,11 @@ describe('Request Processor', () => {
         activeStreamingRequests: 2,  // Already below max
         activeNonStreamingRequests: 0,
         maxConcurrency: 10,
-        decrementStreamingRequest: function(callback) {
-          if (this.activeStreamingRequests > 0) {
-            this.activeStreamingRequests--;
+        decrementRequest: function(callback) {
+          if (this.activeRequestCount > 0) {
             this.activeRequestCount--;
-            // No callback since still below max concurrency
-          }
-        },
-        decrementNonStreamingRequest: function(callback) {
-          if (this.activeNonStreamingRequests > 0) {
-            this.activeNonStreamingRequests--;
-            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
             // No callback since still below max concurrency
           }
         }

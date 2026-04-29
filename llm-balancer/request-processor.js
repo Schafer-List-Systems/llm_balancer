@@ -204,18 +204,13 @@ function sendRequestBody(proxyReq, body) {
 }
 
 /**
- * Release a backend back to the pool
+ * Release a backend back to the pool (unified, mode-agnostic)
  * @param {Object} balancer - Balancer instance
  * @param {Object} backend - Backend to release
- * @param {string} mode - Request mode: 'streaming' or 'non-streaming'
+ * @param {string} _mode - Deprecated: request mode (kept for backward compat)
  */
-function releaseBackend(balancer, backend, mode = 'streaming') {
-  // Use mode-specific release method
-  if (mode === 'streaming') {
-    backend.decrementStreamingRequest(() => balancer.notifyBackendAvailable());
-  } else {
-    backend.decrementNonStreamingRequest(() => balancer.notifyBackendAvailable());
-  }
+function releaseBackend(balancer, backend, _mode = null) {
+  backend.decrementRequest(() => balancer.notifyBackendAvailable());
 }
 
 /**
@@ -254,16 +249,10 @@ function processRequest(balancer, backend, req, res, onRequestComplete, config, 
   const isStreaming = (originalBody && typeof originalBody === 'object' && originalBody.stream === true) ||
                       (typeof originalBody === 'string' && originalBody.includes('"stream":true'));
 
-  // Increment active request count using mode-specific method
-  if (isStreaming) {
-    backend.incrementStreamingRequest(() => balancer.notifyBackendAvailable());
-  } else {
-    backend.incrementNonStreamingRequest(() => balancer.notifyBackendAvailable());
-  }
-
   // Also increment the processed request counter here
-  // This ensures the counter is tracked when the request actually starts processing
   // In the new architecture, Backend tracks its own requestCount (separation of concerns)
+  // activeRequestCount is incremented at SELECTION time (not here), so the counter
+  // acts as a lock that prevents another selection for this backend.
   backend.requestCount = (backend.requestCount || 0) + 1;
 
   // Replace model field if matchedModel is provided

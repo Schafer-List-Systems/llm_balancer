@@ -269,36 +269,27 @@ describe('BackendSelector - Cache Hit with Busy Backend', () => {
        */
       const Balancer = require('../../balancer');
 
-      // Create backends with cache (using mock backend pattern)
-      const backend1 = {
-        url: 'http://cache-backend:11434',
-        healthy: true,
-        priority: 1,
-        activeRequestCount: 0,
-        maxConcurrency: 1,
-        getApiTypes: () => ['openai'],
-        getModels: () => ['test-model'],
-        /**
-         * Mock cache matching
-         */
-        findCacheMatch: (prompt, model) => {
-          if (prompt === 'test prompt' && model === 'test-model') {
-            return { entry: {}, similarity: 0.95, matchType: 'similarity' };
-          }
-          return null;
+      // Create backends with cache (using real Backend instances)
+      const Backend = require('../../backends/Backend');
+      const backend1 = new Backend('http://cache-backend:11434', 1);
+      backend1.priority = 1;
+      backend1.healthy = true;
+      backend1.backendInfo = { apis: { openai: { supported: true } }, models: { openai: ['test-model'] }, endpoints: { openai: '/v1/chat/completions' }, healthy: true, detectedAt: Date.now() };
+      /**
+       * Mock cache matching
+       */
+      backend1.findCacheMatch = (prompt, model) => {
+        if (prompt === 'test prompt' && model === 'test-model') {
+          return { entry: {}, similarity: 0.95, matchType: 'similarity' };
         }
+        return null;
       };
 
-      const backend2 = {
-        url: 'http://other-backend:11434',
-        healthy: true,
-        priority: 2,
-        activeRequestCount: 0,
-        maxConcurrency: 1,
-        getApiTypes: () => ['openai'],
-        getModels: () => ['test-model'],
-        findCacheMatch: () => null // No cache
-      };
+      const backend2 = new Backend('http://other-backend:11434', 1);
+      backend2.priority = 2;
+      backend2.healthy = true;
+      backend2.backendInfo = { apis: { openai: { supported: true } }, models: { openai: ['test-model'] }, endpoints: { openai: '/v1/chat/completions' }, healthy: true, detectedAt: Date.now() };
+      backend2.findCacheMatch = () => null; // No cache
 
       const balancer = new Balancer([backend1, backend2], { maxQueueSize: 10, queue: { timeout: 5000 }, debug: { enabled: false }, debugRequestHistorySize: 100 });
 

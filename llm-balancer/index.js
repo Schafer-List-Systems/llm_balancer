@@ -134,9 +134,10 @@ app.all('/v1/chat/completions*', async (req, res) => {
       });
     }
 
-    // Queue processing already called processRequest() via triggerRequestProcessing.
-    // The Promise resolution here only signals that the backend was selected.
-    // Do NOT call forwardRequest() again — it would process the same request twice.
+    // Queue processing resolved the Promise with the selected backend.
+    // Process the request now.
+    const backend = result;
+    forwardRequest(req, res, backend, requestModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -183,8 +184,9 @@ app.all('/v1/messages*', async (req, res) => {
       });
     }
 
-    // Queue processing already called processRequest() via triggerRequestProcessing.
-    // Do NOT call forwardRequest() again to avoid double-processing.
+    // Queue processing resolved the Promise with the selected backend.
+    // Process the request now.
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -225,14 +227,17 @@ app.all('/api/*', async (req, res) => {
     }
 
     // Get backend using normal selection with model matching
-    const directResult = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
-    backend = directResult.backend;
-    matchedModel = directResult.actualModel;
+    const result = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
+    backend = result.backend;
+    matchedModel = result.actualModel;
 
-    let queued = false;
+    if (backend) {
+      // Increment activeRequestCount at SELECTION time (queue paths already do this)
+      backend.incrementRequest();
+    }
+
     if (!backend) {
-      // Create selection criterion for queued request
-      // This captures what backends can serve this request
+      // Fallback: go through queue for cache-aware selection
       const criterion = {
         modelString: matchedModel,
         apiType: config.primaryApiType || 'ollama'
@@ -240,9 +245,8 @@ app.all('/api/*', async (req, res) => {
 
       backend = await balancer.queueRequestWithRequestData({
         req, res, config, matchedModel,
-        criterion  // NEW: include selection criterion
+        criterion
       });
-      queued = true;
     }
 
     if (!backend) {
@@ -254,11 +258,7 @@ app.all('/api/*', async (req, res) => {
       });
     }
 
-    // If we used the queue path, processRequest was already called by the queue.
-    // If we took the direct path, we need to forward now.
-    if (!queued) {
-      forwardRequest(req, res, backend, matchedModel);
-    }
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({
@@ -305,20 +305,22 @@ app.all('/models*', async (req, res) => {
       console.warn('[Gateway] Failed to count tokens, skipping maxInputTokens filter:', e.message);
     }
 
-    let queued = false;
     if (models) {
       // Get backend using normal selection with model matching
       const result = balancer.getNextBackendForModelWithMatch(models, { promptTokens });
       backend = result.backend;
       matchedModel = result.actualModel;
 
+      if (backend) {
+        // Increment activeRequestCount at SELECTION time (queue paths already do this)
+        backend.incrementRequest();
+      }
+
       if (!backend) {
         backend = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
-        queued = true;
       }
     } else {
       backend = await balancer.queueRequestWithRequestData({ req, res, config, matchedModel });
-      queued = true;
     }
 
     if (!backend) {
@@ -330,11 +332,7 @@ app.all('/models*', async (req, res) => {
       });
     }
 
-    // If we used the queue path, processRequest was already called by the queue.
-    // If we took the direct path, we need to forward now.
-    if (!queued) {
-      forwardRequest(req, res, backend, matchedModel);
-    }
+    forwardRequest(req, res, backend, matchedModel);
   } catch (error) {
     console.error(`[${getTimestamp()}] [Gateway] Queue request failed:`, error.message);
     res.status(503).json({

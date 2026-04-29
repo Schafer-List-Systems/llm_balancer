@@ -92,10 +92,24 @@ describe('handleStreamingRequest - Connection Handling', () => {
       updateStreamingStatsFromChunks: jest.fn(),
       cachePrompt: jest.fn(),
       getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
-      incrementStreamingRequest: jest.fn(),
-      decrementStreamingRequest: jest.fn(),
-      incrementNonStreamingRequest: jest.fn(),
-      decrementNonStreamingRequest: jest.fn()
+      incrementRequest: function(notifyCallback) {
+        this.activeRequestCount++;
+        this.activeStreamingRequests++;
+        this.activeNonStreamingRequests++;
+        if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+          notifyCallback();
+        }
+      },
+      decrementRequest: function(notifyCallback) {
+        if (this.activeRequestCount > 0) {
+          this.activeRequestCount--;
+          this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+          this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
+          if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        }
+      }
     };
 
     // Create mock Express response
@@ -224,10 +238,24 @@ describe('handleStreamingRequest - Connection Handling', () => {
       updateStreamingStatsFromChunks: jest.fn(),
       cachePrompt: jest.fn(),
       getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
-      incrementStreamingRequest: jest.fn(),
-      decrementStreamingRequest: jest.fn(),
-      incrementNonStreamingRequest: jest.fn(),
-      decrementNonStreamingRequest: jest.fn()
+      incrementRequest: function(notifyCallback) {
+        this.activeRequestCount++;
+        this.activeStreamingRequests++;
+        this.activeNonStreamingRequests++;
+        if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+          notifyCallback();
+        }
+      },
+      decrementRequest: function(notifyCallback) {
+        if (this.activeRequestCount > 0) {
+          this.activeRequestCount--;
+          this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+          this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
+          if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        }
+      }
     };
 
     const mockRes = {
@@ -390,10 +418,24 @@ describe('handleStreamingRequest - Token Counting from All Delta Fields', () => 
       updateStreamingStatsFromChunks: jest.fn(),
       cachePrompt: jest.fn(),
       getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
-      incrementStreamingRequest: jest.fn(),
-      decrementStreamingRequest: jest.fn(),
-      incrementNonStreamingRequest: jest.fn(),
-      decrementNonStreamingRequest: jest.fn()
+      incrementRequest: function(notifyCallback) {
+        this.activeRequestCount++;
+        this.activeStreamingRequests++;
+        this.activeNonStreamingRequests++;
+        if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+          notifyCallback();
+        }
+      },
+      decrementRequest: function(notifyCallback) {
+        if (this.activeRequestCount > 0) {
+          this.activeRequestCount--;
+          this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+          this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
+          if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        }
+      }
     };
 
     const mockRes = {
@@ -540,10 +582,24 @@ describe('handleStreamingRequest - Token Counting from All Delta Fields', () => 
         updateStreamingStatsFromChunks: jest.fn(),
         cachePrompt: jest.fn(),
         getPromptCacheStats: jest.fn().mockReturnValue({ hits: 0, misses: 1 }),
-        incrementStreamingRequest: jest.fn(),
-        decrementStreamingRequest: jest.fn(),
-        incrementNonStreamingRequest: jest.fn(),
-        decrementNonStreamingRequest: jest.fn()
+        incrementRequest: function(notifyCallback) {
+          this.activeRequestCount++;
+          this.activeStreamingRequests++;
+          this.activeNonStreamingRequests++;
+          if (this.activeRequestCount >= this.maxConcurrency && notifyCallback) {
+            notifyCallback();
+          }
+        },
+        decrementRequest: function(notifyCallback) {
+          if (this.activeRequestCount > 0) {
+            this.activeRequestCount--;
+            this.activeStreamingRequests = Math.max(0, this.activeStreamingRequests - 1);
+            this.activeNonStreamingRequests = Math.max(0, this.activeNonStreamingRequests - 1);
+            if (this.activeRequestCount < this.maxConcurrency && notifyCallback) {
+              notifyCallback();
+            }
+          }
+        }
       };
 
       const mockRes = {

@@ -222,12 +222,13 @@ describe('Concurrent Streaming Requests', () => {
 
       testBalancer.triggerRequestProcessing = originalTriggerProcessing;
 
-      // Verify: All 3 requests processed to highest priority backend
-      // (since triggerRequestProcessing is mocked, activeRequestCount is never incremented)
+      // Verify: Counter-as-lock prevents double-selection of same backend
+      // With maxConcurrency=1 per backend, first request picks h (increments to 1),
+      // second sees h at capacity and picks m, third picks l.
       expect(requestsProcessed.length).toBe(3);
       expect(requestsProcessed[0].backendUrl).toBe('http://h:11434');   // priority 10 - highest
-      expect(requestsProcessed[1].backendUrl).toBe('http://h:11434');   // priority 10 - still available
-      expect(requestsProcessed[2].backendUrl).toBe('http://h:11434');   // priority 10 - still available
+      expect(requestsProcessed[1].backendUrl).toBe('http://m:11434');   // h at capacity, next priority
+      expect(requestsProcessed[2].backendUrl).toBe('http://l:11434');   // h and m at capacity
     });
 
     test('should process multiple queued requests when backends are available', async () => {
@@ -399,43 +400,44 @@ describe('Concurrent Streaming Requests', () => {
       backend.healthy = true;
 
       // First streaming request
-      backend.incrementStreamingRequest(() => {});
+      backend.incrementRequest(() => {});
       expect(backend.activeRequestCount).toBe(1);
       expect(backend.activeStreamingRequests).toBe(1);
-      expect(backend.activeNonStreamingRequests).toBe(0);
+      expect(backend.activeNonStreamingRequests).toBe(1);
 
       // Second streaming request (should hit max concurrency)
       let notified = false;
-      backend.incrementStreamingRequest(() => { notified = true; });
+      backend.incrementRequest(() => { notified = true; });
       expect(backend.activeRequestCount).toBe(2);
       expect(backend.activeStreamingRequests).toBe(2);
+      expect(backend.activeNonStreamingRequests).toBe(2);
       expect(notified).toBe(true);
 
       // Third request should NOT be able to start (at max concurrency)
       let notified2 = false;
-      backend.incrementStreamingRequest(() => { notified2 = true; });
+      backend.incrementRequest(() => { notified2 = true; });
       expect(backend.activeRequestCount).toBe(3);
-      expect(backend.activeStreamingRequests).toBe(3);
       // Notification already fired at count 2, so notified2 is still false
       expect(notified2).toBe(false);
     });
 
-    test('streaming and non-streaming requests share the same activeRequestCount', () => {
+    test('incrementRequest increments all counters equally', () => {
       const backend = new Backend('http://test:11434', 2);
       backend.healthy = true;
 
-      // Start one streaming request
-      backend.incrementStreamingRequest(() => {});
+      // First request (streaming)
+      backend.incrementRequest(() => {});
       expect(backend.activeRequestCount).toBe(1);
-
-      // Start one non-streaming request
-      backend.incrementNonStreamingRequest(() => {});
-      // Both should share the same counter
-      expect(backend.activeRequestCount).toBe(2);
       expect(backend.activeStreamingRequests).toBe(1);
       expect(backend.activeNonStreamingRequests).toBe(1);
 
-      // Should be at max concurrency now
+      // Second request (non-streaming - but same method since unified)
+      backend.incrementRequest(() => {});
+      expect(backend.activeRequestCount).toBe(2);
+      expect(backend.activeStreamingRequests).toBe(2);
+      expect(backend.activeNonStreamingRequests).toBe(2);
+
+      // At max concurrency now
       expect(backend.activeRequestCount).toBe(2);
     });
   });

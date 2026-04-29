@@ -23,12 +23,10 @@ describe('Client disconnect handling', () => {
       url: 'http://localhost:3000',
       activeRequestCount: 1,
       activeStreamingRequests: 1,
-      activeNonStreamingRequests: 0,
+      activeNonStreamingRequests: 1,
       maxConcurrency: 10,
-      incrementStreamingRequest: jest.fn(),
-      decrementStreamingRequest: jest.fn(),
-      incrementNonStreamingRequest: jest.fn(),
-      decrementNonStreamingRequest: jest.fn(),
+      incrementRequest: jest.fn(),
+      decrementRequest: jest.fn(),
     };
 
     let closeHandler = null;
@@ -66,7 +64,7 @@ describe('Client disconnect handling', () => {
     setTimeout(() => {
       try {
         expect(released).toBe(true);
-        expect(backend.decrementStreamingRequest).toHaveBeenCalled();
+        expect(backend.decrementRequest).toHaveBeenCalled();
       } catch (e) {
         console.log('FAIL client disconnect: released=' + released);
       }
@@ -76,42 +74,40 @@ describe('Client disconnect handling', () => {
 });
 
 describe('Counter safety', () => {
-  it('decrementStreamingRequest should not make counters negative on double-release', () => {
+  it('decrementRequest should not make counters negative on double-release', () => {
     const backend = new Backend('http://localhost:3000', 10);
     backend.activeRequestCount = 0;
-    backend.activeStreamingRequests = 0;
 
-    expect(() => { backend.decrementStreamingRequest(() => {}); }).not.toThrow();
+    expect(() => { backend.decrementRequest(() => {}); }).not.toThrow();
     expect(backend.activeRequestCount).toBeGreaterThanOrEqual(0);
     expect(backend.activeStreamingRequests).toBeGreaterThanOrEqual(0);
   });
 
-  it('decrementNonStreamingRequest should not make counters negative on double-release', () => {
+  it('decrementRequest should not make counters negative on double-release (no streaming)', () => {
     const backend = new Backend('http://localhost:3000', 10);
     backend.activeRequestCount = 0;
-    backend.activeNonStreamingRequests = 0;
 
-    expect(() => { backend.decrementNonStreamingRequest(() => {}); }).not.toThrow();
+    expect(() => { backend.decrementRequest(() => {}); }).not.toThrow();
     expect(backend.activeRequestCount).toBeGreaterThanOrEqual(0);
     expect(backend.activeNonStreamingRequests).toBeGreaterThanOrEqual(0);
   });
 
-  it('decrementStreamingRequest should clamp at 0 when over-decremented', () => {
+  it('decrementRequest should clamp at 0 when over-decremented', () => {
     const backend = new Backend('http://localhost:3000', 10);
-    backend.decrementStreamingRequest(() => {});
+    backend.decrementRequest(() => {});
     const first = backend.activeRequestCount;
-    backend.decrementStreamingRequest(() => {});
+    backend.decrementRequest(() => {});
     const second = backend.activeRequestCount;
 
     expect(second).toBeLessThanOrEqual(first);
     expect(second).toBeGreaterThanOrEqual(0);
   });
 
-  it('decrementNonStreamingRequest should clamp at 0 when over-decremented', () => {
+  it('decrementRequest should clamp at 0 when over-decremented (no increment)', () => {
     const backend = new Backend('http://localhost:3000', 10);
-    backend.decrementNonStreamingRequest(() => {});
+    backend.decrementRequest(() => {});
     const first = backend.activeRequestCount;
-    backend.decrementNonStreamingRequest(() => {});
+    backend.decrementRequest(() => {});
     const second = backend.activeRequestCount;
 
     expect(second).toBeLessThanOrEqual(first);
