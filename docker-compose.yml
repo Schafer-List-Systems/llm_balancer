@@ -27,6 +27,8 @@ services:
     restart: unless-stopped
     ports:
       - "3080:3080"
+    environment:
+      - BACKEND_PORT=3001
     depends_on:
       llm-balancer:
         condition: service_healthy

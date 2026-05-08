@@ -9,7 +9,11 @@ const app = express();
 app.get('/config.js', (req, res) => {
   const host = req.headers.host;           // e.g. "192.168.12.20:3080" or "localhost:3080"
   const hostPart = host.split(':')[0];      // strip port
-  const backendUrl = `http://${hostPart}:3001`;
+  const backendPort = config.backendPort;
+  if (!backendPort) {
+    throw new Error('BACKEND_PORT is not configured');
+  }
+  const backendUrl = `http://${hostPart}:${backendPort}`;
   res.type('application/javascript').send(`window.API_BASE_URL = '${backendUrl}';`);
 });
 
