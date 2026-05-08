@@ -661,7 +661,7 @@ class ApiClient {
 }
 
 // Use API base URL from config
-const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:3001';
+const apiBaseUrl = window.API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:3001';
 const refreshInterval = parseInt(process.env.REFRESH_INTERVAL) || 5000;
 
 const apiClient = new ApiClient(apiBaseUrl, refreshInterval);
